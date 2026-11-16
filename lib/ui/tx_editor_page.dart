@@ -18,6 +18,7 @@ import '../util/sound_fx.dart';
 import 'category_icon.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
+import 'receipt_scan_review.dart';
 import 'theme.dart';
 
 class TxEditorPage extends StatefulWidget {
@@ -38,7 +39,7 @@ class TxEditorPage extends StatefulWidget {
 
 class _TxEditorPageState extends State<TxEditorPage> {
   late String _kind;
-  late DateTime _date;
+  DateTime? _date;
   int _amount = 0;
   String? _categoryId;
   String? _accountId;
@@ -50,6 +51,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
   String? _categoryError;
   bool _saving = false;
   bool _scanning = false;
+  bool _manualKindChosen = false;
+  bool _hasScanDraft = false;
 
   bool get _isEditing => widget.transaction != null;
   bool get _isTransfer => _kind == 'transfer';
@@ -59,6 +62,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
     super.initState();
     final transaction = widget.transaction;
     _kind = transaction?.kind ?? widget.initialKind;
+    _manualKindChosen = transaction != null || widget.initialKind != 'expense';
     _amount = transaction?.amount.abs() ?? 0;
     _categoryId = transaction?.categoryId;
     _accountId = transaction?.accountId;
@@ -85,7 +89,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
         : store.expenseCategories;
     final accounts = store.activeAccounts;
     var changed = false;
-    if (!_isTransfer &&
+    if (!_hasScanDraft &&
+        !_isTransfer &&
         (_categoryId == null ||
             !categories.any((category) => category.id == _categoryId))) {
       _categoryId = categories.isEmpty ? null : categories.first.id;
@@ -132,6 +137,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   void _changeKind(String kind) {
+    _manualKindChosen = true;
     if (_kind == kind) return;
     setState(() {
       _kind = kind;
@@ -144,7 +150,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
         final categories = kind == 'income'
             ? store.incomeCategories
             : store.expenseCategories;
-        _categoryId = categories.isEmpty ? null : categories.first.id;
+        _categoryId = _hasScanDraft || categories.isEmpty
+            ? null
+            : categories.first.id;
       }
     });
     _ensureSelections();
@@ -153,9 +161,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
-      firstDate: today().subtract(const Duration(days: 3650)),
-      lastDate: today().add(const Duration(days: 3650)),
+      initialDate: _date ?? today(),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100, 12, 31),
       helpText: 'Pilih tanggal',
       cancelText: 'Batal',
       confirmText: 'Pilih',
@@ -236,7 +244,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   bool get _canSave {
-    if (_amount <= 0) return false;
+    if (_amount <= 0 || _date == null || _scanning) return false;
     if (_isTransfer) {
       return _accountId != null &&
           _toAccountId != null &&
@@ -259,7 +267,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
         categoryId: _isTransfer ? null : _categoryId,
         accountId: _accountId!,
         toAccountId: _isTransfer ? _toAccountId : null,
-        date: dateKey(_date),
+        date: dateKey(_date!),
         note: note.isEmpty ? null : note,
         detail: _detail,
         createdAt:
@@ -279,8 +287,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
         SoundFx.play(delta > 0 ? settings.soundUp : settings.soundDown);
       }
       if (mounted) Navigator.of(context).pop(transaction.date);
-    } catch (error, stack) {
-      debugPrint('Simpan transaksi gagal: $error\n$stack');
+    } catch (_) {
+      debugPrint('Simpan transaksi gagal.');
       if (!mounted) return;
       setState(() => _saving = false);
       _toast('Gagal menyimpan. Coba lagi.');
@@ -314,6 +322,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   Future<void> _scanReceipt() async {
+    if (_scanning || _saving) return;
     final settings = context.read<SettingsStore>();
     final store = context.read<MoneyStore>();
     if (!settings.aiReady) {
@@ -357,7 +366,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       );
       if (!mounted) return;
       if (result.transaksi.isEmpty) {
-        _toast('Nominal tidak terbaca. Coba foto yang lebih jelas.');
+        _toast('Tidak ada data terbaca. Draf tidak diubah.');
         return;
       }
 
@@ -374,7 +383,18 @@ class _TxEditorPageState extends State<TxEditorPage> {
         );
       }
       if (chosen == null || !mounted) return;
-      _applyScan(store, chosen);
+      final reviewed = await showModalBottomSheet<ScanReviewChoice>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        barrierColor: const Color(0x5214120E),
+        isScrollControlled: true,
+        builder: (_) => ScanReviewSheet(
+          scan: chosen!,
+          manualKind: _manualKindChosen ? _kind : null,
+        ),
+      );
+      if (reviewed == null || !mounted) return;
+      _applyScan(store, reviewed);
     } on ReceiptScanException catch (error) {
       _toast(error.message);
     } catch (error) {
@@ -384,42 +404,25 @@ class _TxEditorPageState extends State<TxEditorPage> {
     }
   }
 
-  void _applyScan(MoneyStore store, ScanTransaction scan) {
-    final newKind = scan.arah == 'masuk' ? 'income' : 'expense';
+  void _applyScan(MoneyStore store, ScanReviewChoice reviewed) {
+    final scan = reviewed.scan;
+    final newKind = reviewed.kind;
     final pool = newKind == 'income'
         ? store.incomeCategories
         : store.expenseCategories;
-    String? categoryId;
-    final wanted = scan.kategori?.toLowerCase().trim();
-    if (wanted != null && wanted.isNotEmpty) {
-      for (final category in pool) {
-        if (category.name.toLowerCase().trim() == wanted) {
-          categoryId = category.id;
-          break;
-        }
-      }
-    }
-    if (categoryId == null) {
-      final fallbackId = newKind == 'income' ? 'cat-inc-lain' : 'cat-exp-lain';
-      for (final category in pool) {
-        if (category.id == fallbackId) {
-          categoryId = category.id;
-          break;
-        }
-      }
-      categoryId ??= pool.isEmpty ? null : pool.last.id;
-    }
-
     setState(() {
       _kind = newKind;
-      _amount = scan.nominal > 999999999999 ? 999999999999 : scan.nominal;
-      _categoryId = categoryId;
-      if (scan.tanggal != null) _date = scan.tanggal!;
+      _manualKindChosen = true;
+      _hasScanDraft = true;
+      _amount = scan.nominal ?? 0;
+      _categoryId = scan.categoryIdFor(newKind, pool);
+      _date = scan.tanggal;
       _noteController.text = _summaryForScan(scan);
-      _detail = _formatDetail(scan.barang);
+      _detail = scan.detailText(numberText);
       _creatingCategory = false;
     });
-    _toast('Terisi dari pindai — periksa sebelum menyimpan.');
+    _ensureSelections();
+    _toast('Draf pindai perlu diperiksa. Simpan hanya setelah cocok.');
   }
 
   String _summaryForScan(ScanTransaction scan) {
@@ -434,18 +437,6 @@ class _TxEditorPageState extends State<TxEditorPage> {
     }
     if (catatan != null && catatan.isNotEmpty) return catatan;
     return 'Hasil pindai';
-  }
-
-  String? _formatDetail(List<ScanItem> items) {
-    if (items.isEmpty) return null;
-    final lines = <String>[];
-    for (final item in items) {
-      final name = item.jelas?.trim().isNotEmpty == true
-          ? item.jelas!.trim()
-          : item.asli;
-      lines.add('${item.qty}× $name — ${numberText(item.harga)}');
-    }
-    return lines.join('\n');
   }
 
   void _showItems() {
@@ -518,7 +509,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                         color: EsokColors.ink,
                       ),
                     ),
-                    if (!_isTransfer)
+                    if (!_saving)
                       Positioned(
                         right: 8,
                         child: _scanning
@@ -557,6 +548,15 @@ class _TxEditorPageState extends State<TxEditorPage> {
                   onChanged: _changeKind,
                 ),
               ),
+              if (_hasScanDraft)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Text(
+                    'Draf pindai perlu diperiksa. Kategori adalah saran; '
+                    'lengkapi tanggal dan nominal yang kosong sebelum Simpan.',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
               const SizedBox(height: 14),
               if (!_isTransfer) ...[
                 if (roomy)
@@ -656,7 +656,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
                       ),
                     ),
                     Text(
-                      'Rp ${numberText(_amount)}',
+                      _hasScanDraft && _amount == 0
+                          ? 'Isi nominal'
+                          : 'Rp ${numberText(_amount)}',
                       style: TextStyle(
                         fontSize: 25,
                         fontWeight: FontWeight.w600,
@@ -715,14 +717,17 @@ class _TxEditorPageState extends State<TxEditorPage> {
                             size: 15,
                             color: EsokColors.ink,
                           ),
-                          if (_date != today() &&
+                          if (_date == null) ...[
+                            const SizedBox(width: 6),
+                            const Text('Pilih tanggal'),
+                          ] else if (_date != today() &&
                               _date !=
                                   today().subtract(
                                     const Duration(days: 1),
                                   )) ...[
                             const SizedBox(width: 6),
                             Text(
-                              shortDateTitle(_date),
+                              shortDateTitle(_date!),
                               style: TextStyle(
                                 fontSize: 11.5,
                                 color: EsokColors.ink,
@@ -1630,7 +1635,10 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
                                   [
                                     if (scan.tanggal != null)
                                       shortDateTitle(scan.tanggal!),
-                                    incoming ? 'Masuk' : 'Keluar',
+                                    if (scan.tanggal == null) 'Tanggal belum terbaca',
+                                    scan.arah == null
+                                        ? 'Arah perlu diperiksa'
+                                        : incoming ? 'Masuk' : 'Keluar',
                                     if (scan.kategori != null) scan.kategori!,
                                   ].join(' · '),
                                   maxLines: 1,
@@ -1645,7 +1653,10 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '${incoming ? '+' : '−'}${numberText(scan.nominal)}',
+                            scan.nominal == null
+                                ? 'Nominal belum terbaca'
+                                : '${scan.arah == null ? '' : incoming ? '+' : '−'}'
+                                      '${numberText(scan.nominal!)}',
                             style: TextStyle(
                               fontSize: 13,
                               color: incoming
