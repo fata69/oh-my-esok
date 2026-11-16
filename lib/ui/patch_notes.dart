@@ -29,6 +29,17 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.1',
+      date: '16 Nov 2026',
+      notes: [
+        'Oh My Esok: tema monokrom terang dan gelap dengan navigasi mengambang.',
+        'Tutup Hari merangkum catatan dan arus kas, lalu membantu menjadwalkan ulang catatan yang belum selesai.',
+        'Pindai struk mempertahankan teks barang dan menampilkan hasil untuk diperiksa sebelum diterapkan ke draf.',
+        'Pembaruan APK dari GitHub, dengan pemeriksaan integritas dan konfirmasi Android.',
+        'Dipasang berdampingan dengan Esok; cadangan JSON dan pemulihan diperkuat.',
+      ],
+    ),
+    (
       version: '1.9.4',
       date: '16 Nov 2026',
       notes: [

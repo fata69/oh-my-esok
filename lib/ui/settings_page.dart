@@ -11,6 +11,7 @@ import '../notify/notifier.dart';
 import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../widget/widget_sync.dart';
+import '../update/update_page.dart';
 import 'data_page.dart';
 import 'manage_accounts.dart';
 import 'manage_categories.dart';
@@ -479,8 +480,16 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const _SectionLabel('Tentang'),
             _SettingsRow(
-              title: 'Versi',
-              trailing: _Trailing(_version),
+              title: 'Pembaruan aplikasi',
+              subtitle: 'Versi $_version',
+              trailing: const _Trailing('Periksa ›'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
+              ),
+            ),
+            const _SettingsRow(
+              title: 'Oh My Esok',
+              subtitle: 'Dikembangkan dari Esok oleh notSeraphimXD',
             ),
             _SettingsRow(
               title: 'Lisensi font',
