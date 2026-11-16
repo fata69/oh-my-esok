@@ -37,7 +37,7 @@ jobs:
       - run: flutter test --reporter expanded
       - name: Install Android platform
         if: github.event_name != 'pull_request' && github.repository == 'fata69/oh-my-esok'
-        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
       - name: Restore signing key
         if: github.event_name != 'pull_request' && github.repository == 'fata69/oh-my-esok'
         env:
