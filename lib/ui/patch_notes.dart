@@ -29,6 +29,15 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.2',
+      date: '16 Nov 2026',
+      notes: [
+        'Tab Uang langsung mengikuti tema Terang atau Gelap.',
+        'Judul tab konsisten, navigasi lebih dekat ke bawah, dan aksen teal dipakai seperlunya.',
+        'Kolom Catatan transaksi tetap bisa diketik saat keyboard terbuka.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.1',
       date: '16 Nov 2026',
       notes: [
