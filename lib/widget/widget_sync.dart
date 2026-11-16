@@ -18,7 +18,7 @@ class WidgetSync {
   // Kotlin classes keep their upstream namespace; the installed app ID differs.
   static const androidProvider = 'com.habib.jadwal.TaskWidgetProvider';
 
-  static Future<void> push() async {
+  static Future<void> push({bool reportErrors = false}) async {
     try {
       final db = await AppDatabase.open();
       final dao = TaskDao(db);
@@ -132,16 +132,23 @@ class WidgetSync {
       );
     } catch (error, stack) {
       debugPrint('WidgetSync.push failed: $error\n$stack');
+      if (reportErrors) rethrow;
     }
   }
 
-  static Future<bool> drainPendingToggles(TaskStore store) async {
+  static Future<bool> drainPendingToggles(
+    TaskStore store, {
+    bool reportErrors = false,
+  }) async {
     try {
       final raw = await HomeWidget.getWidgetData<String>('pending_toggles');
       if (raw == null || raw.isEmpty) return false;
 
       final decoded = jsonDecode(raw);
-      if (decoded is! Map) return false;
+      if (decoded is! Map) {
+        if (reportErrors) throw const FormatException('Invalid widget queue');
+        return false;
+      }
 
       var changed = false;
       for (final entry in decoded.entries) {
@@ -154,6 +161,7 @@ class WidgetSync {
       return changed;
     } catch (error, stack) {
       debugPrint('WidgetSync.drainPendingToggles failed: $error\n$stack');
+      if (reportErrors) rethrow;
       return false;
     }
   }

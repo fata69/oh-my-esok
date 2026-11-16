@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 
 import '../data/task.dart';
 import '../notify/notifier.dart';
+import '../state/day_review.dart';
+import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../state/task_store.dart';
 import '../util/format.dart';
@@ -17,6 +19,7 @@ import '../widget/widget_sync.dart';
 import 'calendar_sheet.dart';
 import 'chevron.dart';
 import 'day_money_section.dart';
+import 'day_review_sheet.dart';
 import 'floating_add_button.dart';
 import 'patch_notes.dart';
 import 'task_editor.dart';
@@ -38,6 +41,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   late final PageController _controller;
   StreamSubscription<Uri?>? _widgetClicks;
+  bool _dayReviewOpen = false;
 
   @override
   void initState() {
@@ -67,7 +71,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
+    if (state != AppLifecycleState.resumed || _dayReviewOpen) return;
     final store = context.read<TaskStore>();
     WidgetSync.drainPendingToggles(store).then((changed) async {
       if (changed) await WidgetSync.push();
@@ -104,6 +108,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     if (picked != null) {
       await _jumpTo(picked);
+    }
+  }
+
+  Future<void> _openDayReview(DateTime date) async {
+    if (_dayReviewOpen) return;
+    final tasks = context.read<TaskStore>();
+    final service = DayReviewService(
+      tasks: tasks,
+      transactionsForDate: context.read<MoneyStore>().transactionsForDate,
+      reconcileWidget: () async {
+        await WidgetSync.drainPendingToggles(tasks, reportErrors: true);
+      },
+      rescheduleReminder: TaskNotifier.instance.reschedule,
+      pushWidget: () => WidgetSync.push(reportErrors: true),
+    );
+    _dayReviewOpen = true;
+    try {
+      await showDayReviewSheet(context, date: date, service: service);
+    } finally {
+      _dayReviewOpen = false;
     }
   }
 
@@ -355,6 +379,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     onToggle: _toggle,
                     onOpen: (task) => _openEditor(task: task),
                     onAdd: () => _openEditor(date: date),
+                    onCloseDay: () => _openDayReview(date),
                     onJumpToday: () => _jumpTo(today()),
                     onJumpNext: () =>
                         _jumpTo(date.add(const Duration(days: 1))),
@@ -493,6 +518,7 @@ class _DayPane extends StatefulWidget {
     required this.onToggle,
     required this.onOpen,
     required this.onAdd,
+    required this.onCloseDay,
     required this.onJumpToday,
     required this.onJumpNext,
     this.onOpenMoney,
@@ -504,6 +530,7 @@ class _DayPane extends StatefulWidget {
   final Future<void> Function(Task) onToggle;
   final ValueChanged<Task> onOpen;
   final VoidCallback onAdd;
+  final VoidCallback onCloseDay;
   final VoidCallback onJumpToday;
   final VoidCallback onJumpNext;
   final VoidCallback? onOpenMoney;
@@ -561,6 +588,18 @@ class _DayPaneState extends State<_DayPane> {
             EsokFloatingAddButton.scrollBottomOf(context),
           ),
           children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: widget.onCloseDay,
+                style: TextButton.styleFrom(
+                  foregroundColor: EsokColors.ink,
+                  minimumSize: const Size(48, 48),
+                ),
+                icon: const Icon(Icons.fact_check_outlined, size: 18),
+                label: const Text('Tutup hari'),
+              ),
+            ),
             if (tasks.isEmpty) _EmptyState(onAdd: widget.onAdd),
             for (var index = 0; index < tasks.length; index++)
               _TaskRow(

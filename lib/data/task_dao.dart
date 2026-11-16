@@ -65,6 +65,33 @@ class TaskDao {
     );
   }
 
+  /// Move only the date of an incomplete task that is still on [from].
+  /// The conditional write and returned snapshot share a transaction so a
+  /// stale review never overwrites newer text, time or completion status.
+  Future<Task?> rescheduleIncomplete({
+    required String id,
+    required String from,
+    required String to,
+  }) {
+    return _db.transaction((txn) async {
+      final changed = await txn.update(
+        'tasks',
+        {'scheduled_date': to},
+        where: 'id = ? AND scheduled_date = ? AND is_done = 0',
+        whereArgs: [id, from],
+      );
+      if (changed == 0) return null;
+
+      final rows = await txn.query(
+        'tasks',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      return Task.fromMap(rows.single);
+    });
+  }
+
   Future<void> setDone(String id, bool done) async {
     await _db.update(
       'tasks',

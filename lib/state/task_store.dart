@@ -114,6 +114,22 @@ class TaskStore extends ChangeNotifier {
     await loadMonth(_selectedDate);
   }
 
+  /// Return the committed row before refreshing caches or platform effects.
+  /// A later refresh failure must not be reported as a failed database write.
+  /// The review service refreshes this store without changing selectedDate.
+  Future<Task?> rescheduleIncomplete({
+    required String id,
+    required DateTime from,
+    required DateTime to,
+  }) {
+    final source = dateKey(from);
+    final target = dateKey(to);
+    if (source == target) {
+      throw ArgumentError('Tanggal tujuan harus berbeda.');
+    }
+    return _dao.rescheduleIncomplete(id: id, from: source, to: target);
+  }
+
   Future<void> delete(String id) async {
     await _dao.delete(id);
     await refresh();
