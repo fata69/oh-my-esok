@@ -23,7 +23,13 @@ belongs to upstream; never install a candidate over it.
 The GitHub candidate workflow performs the same steps and stores an artifact.
 A successful build is a candidate, not QA approval and not an automatic release.
 If hosted Actions cannot run, execute the same commands locally and record
-their versions and results in the QA report.
+their versions and results in the QA report. On Windows, with the project SDK
+and signing environment loaded, run `./scripts/build-android.ps1` from a clean
+checkout. It runs the checks, builds, and stages the APK in `dist/`.
+
+When hosted Actions is temporarily disabled, keep the workflow file. Restore
+the repository's Actions setting and enable the workflow after billing is fixed,
+then verify a hosted run before depending on it for release builds.
 
 ## QA and publication
 
