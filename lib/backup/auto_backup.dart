@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'backup_recovery.dart';
 import 'backup_service.dart';
 
 /// Cadangan otomatis ke `Download/Oh My Esok/oh-my-esok-backup.json`.
@@ -19,6 +20,7 @@ class AutoBackup {
   static const _timeKey = 'backup_at';
 
   static String? lastError;
+  static final recovery = BackupRecovery();
 
   static Future<DateTime?> lastBackupAt() async {
     final prefs = await SharedPreferences.getInstance();
@@ -28,17 +30,22 @@ class AutoBackup {
   }
 
   static Future<bool> runIfChanged({bool force = false}) async {
+    if (recovery.blocksBackup) {
+      lastError = 'Cadangan ditunda selama pemulihan.';
+      return false;
+    }
     lastError = null;
     try {
       final data = await BackupService.collect();
-      final json = const JsonEncoder.withIndent(
-        '  ',
-      ).convert(BackupService.toJsonMap(data));
+      final json = const JsonEncoder.withIndent('  ')
+          .convert(BackupService.toJsonMap(data));
       final checksum = _checksum(json);
 
       final prefs = await SharedPreferences.getInstance();
       if (!force && prefs.getString(_checksumKey) == checksum) return false;
 
+      // Collection/preferences await native calls. Recheck before any write.
+      if (recovery.blocksBackup) return false;
       final ok =
           await _channel.invokeMethod<bool>('writeBackup', {
             'name': fileName,
@@ -72,28 +79,24 @@ class AutoBackup {
     }
   }
 
-  /// Membaca cadangan terakhir. `null` bila belum pernah ada.
-  static Future<String?> read() async {
+  static Future<({BackupData? data, bool unreadable})> readForRecovery() async {
+    const args = {'name': fileName};
     try {
-      return await _channel.invokeMethod<String>('readBackup', {
-        'name': fileName,
-      });
-    } catch (error) {
-      debugPrint('AutoBackup.read gagal: $error');
-      return null;
-    }
-  }
-
-  static Future<BackupData?> readParsed() async {
-    final raw = await read();
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      return await BackupService.parseJsonBytes(
+      final raw = await _channel.invokeMethod<String>('readBackup', args);
+      if (raw == null) {
+        // The native reader may return null for an existing unreadable file.
+        final modified = await _channel.invokeMethod<int>(
+          'backupModifiedAt',
+          args,
+        );
+        return (data: null, unreadable: modified != null);
+      }
+      final data = await BackupService.parseJsonBytes(
         Uint8List.fromList(utf8.encode(raw)),
       );
-    } catch (error) {
-      debugPrint('AutoBackup.readParsed gagal: $error');
-      return null;
+      return (data: data.isEmpty ? null : data, unreadable: false);
+    } catch (_) {
+      return (data: null, unreadable: true);
     }
   }
 

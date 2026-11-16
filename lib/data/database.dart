@@ -35,9 +35,7 @@ class AppDatabase {
           await seedDefaults(db);
         }
         if (oldVersion >= 2 && oldVersion < 5) {
-          await db.execute(
-            'ALTER TABLE transactions ADD COLUMN detail TEXT',
-          );
+          await db.execute('ALTER TABLE transactions ADD COLUMN detail TEXT');
         }
       },
     );
@@ -103,7 +101,7 @@ CREATE TABLE transactions (
     await db.execute('CREATE INDEX idx_tx_cat ON transactions(category_id)');
   }
 
-  static Future<void> seedDefaults(Database db) async {
+  static Future<void> seedDefaults(DatabaseExecutor db) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final batch = db.batch();
 

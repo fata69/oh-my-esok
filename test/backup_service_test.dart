@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jadwal/backup/backup_service.dart';
+import 'package:jadwal/data/money_transaction.dart';
 
 const _detail = '[{"name":"Beras","qty":2,"price":15000}]';
 const _account = <String, Object?>{
@@ -22,6 +23,23 @@ const _category = <String, Object?>{
   'archived': false,
   'createdAt': 1794787200000,
   'iconId': 'makan',
+};
+
+final _otherAccount = <String, Object?>{
+  ..._account,
+  'id': 'acc-bank',
+  'name': 'Bank',
+  'type': 'bank',
+  'archived': true,
+};
+const _task = <String, Object?>{
+  'id': 'task-1',
+  'title': 'Contoh pengingat',
+  'date': '2028-02-29',
+  'time': '09:00',
+  'notes': null,
+  'isDone': false,
+  'createdAt': 1794787200000,
 };
 
 Map<String, Object?> _transaction(String id, {String? detail}) => {
@@ -133,6 +151,130 @@ void main() {
     expect(data.isEmpty, isFalse);
     expect(data.accounts.single.id, 'acc-tunai');
     expect(data.categories.single.id, 'cat-exp-makan');
+  });
+
+  test('impossible task dates and times fail before overwrite', () async {
+    for (final row in [
+      {..._task, 'date': 'bukan-tanggal'},
+      {..._task, 'date': '2026-02-29'},
+      {..._task, 'date': '2026-13-01'},
+      {..._task, 'time': '24:00'},
+      {..._task, 'time': '09:60'},
+    ]) {
+      await expectLater(_parse(_backup(tasks: [row])), throwsFormatException);
+    }
+    final accepted = await _parse(
+      _backup(
+        tasks: [
+          _task,
+          {..._task, 'id': 'no-time', 'time': null},
+        ],
+      ),
+    );
+    expect(accepted.tasks.first.scheduledDateTime, DateTime(2028, 2, 29, 9));
+    expect(accepted.tasks.last.scheduledDateTime, isNull);
+  });
+
+  test('invalid transaction dates and times fail before overwrite', () async {
+    for (final entry in [
+      MapEntry('date', 'bukan-tanggal'),
+      MapEntry('time', '25:00'),
+    ]) {
+      await expectLater(
+        _parse(
+          _backup(
+            accounts: [_account],
+            categories: [_category],
+            transactions: [_transaction('txn')..[entry.key] = entry.value],
+          ),
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test(
+    'an archived destination and nullable category work in a v5 transfer',
+    () async {
+      final transfer = _transaction('transfer')
+        ..['kind'] = 'transfer'
+        ..['categoryId'] = null
+        ..['toAccountId'] = 'acc-bank';
+      final data = await _parse(
+        _backup(
+          accounts: [_account, _otherAccount],
+          categories: [_category],
+          transactions: [transfer, _transaction('same-source')],
+        ),
+      );
+      expect(data.transactions.first.toAccountId, 'acc-bank');
+      expect(data.accounts.last.archived, isTrue);
+    },
+  );
+
+  test('a transfer must refer to two different accounts in the file', () async {
+    for (final destination in [null, '', 'missing-account', 'acc-tunai']) {
+      final transfer = _transaction('transfer')
+        ..['kind'] = 'transfer'
+        ..['categoryId'] = null
+        ..['toAccountId'] = destination;
+      await expectLater(
+        _parse(
+          _backup(
+            accounts: [_account, _otherAccount],
+            transactions: [transfer],
+          ),
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('unresolved and duplicate references are rejected', () async {
+    final row = _transaction('txn');
+    for (final json in [
+      _backup(categories: [_category], transactions: [row]),
+      _backup(accounts: [_account], transactions: [row]),
+      _backup(
+        accounts: [_account, _account],
+        categories: [_category],
+        transactions: [row],
+      ),
+      _backup(
+        accounts: [_account],
+        categories: [_category],
+        transactions: [row, row],
+      ),
+      _backup(
+        accounts: [_account],
+        categories: [
+          {..._category, 'kind': 'income'},
+        ],
+        transactions: [row],
+      ),
+    ]) {
+      await expectLater(_parse(json), throwsFormatException);
+    }
+  });
+
+  test('replaceAll validates typed data before accessing SQLite', () async {
+    final valid = await _parse(_backup(accounts: [_account]));
+    final invalid = BackupData(
+      tasks: valid.tasks,
+      categories: valid.categories,
+      accounts: valid.accounts,
+      transactions: const [
+        MoneyTransaction(
+          id: 'transfer',
+          amount: 1000,
+          kind: 'transfer',
+          accountId: 'acc-tunai',
+          date: '2026-11-16',
+          createdAt: 1794787200000,
+        ),
+      ],
+    );
+    await expectLater(BackupService.replaceAll(invalid), throwsFormatException);
   });
 
   test('an explicitly empty Esok backup cannot replace local data', () async {

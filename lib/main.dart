@@ -47,8 +47,15 @@ Future<void> main() async {
 
   final empty = await _isDatabaseEmpty(database);
   BackupData? restoreCandidate;
+  var unreadableBackup = false;
   if (empty) {
-    restoreCandidate = await AutoBackup.readParsed();
+    AutoBackup.recovery.awaitDecision();
+    final backup = await AutoBackup.readForRecovery();
+    restoreCandidate = backup.data;
+    unreadableBackup = backup.unreadable;
+    if (restoreCandidate == null && !unreadableBackup) {
+      AutoBackup.recovery.startFresh();
+    }
   }
 
   try {
@@ -90,6 +97,7 @@ Future<void> main() async {
       moneyStore: moneyStore,
       settings: settings,
       restoreCandidate: restoreCandidate,
+      unreadableBackup: unreadableBackup,
     ),
   );
 

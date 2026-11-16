@@ -183,7 +183,7 @@ class BackupService {
       throw const FormatException('Jumlah data cadangan tidak valid.');
     }
 
-    return BackupData(
+    final data = BackupData(
       tasks: _parseRows(
         decoded,
         'tasks',
@@ -228,7 +228,7 @@ class BackupService {
         'transactions',
         (json) => MoneyTransaction.fromJson({
           'id': json['id'],
-          'amount': (json['amount'] as num).toInt(),
+          'amount': json['amount'] as int,
           'kind': json['kind'] as String,
           'categoryId': json['categoryId'] ?? json['category_id'],
           'accountId': (json['accountId'] ?? json['account_id']) as String,
@@ -241,6 +241,89 @@ class BackupService {
         }),
       ),
     );
+    validate(data);
+    return data;
+  }
+
+  // Run for parsed files and typed callers before opening or changing SQLite.
+  static void validate(BackupData data) {
+    Set<String> uniqueIds(Iterable<String> values) {
+      final ids = <String>{};
+      for (final id in values) {
+        if (id.isEmpty || id != id.trim() || !ids.add(id)) {
+          throw const FormatException('ID cadangan kosong, rusak, atau ganda.');
+        }
+      }
+      return ids;
+    }
+
+    uniqueIds(data.tasks.map((task) => task.id));
+    uniqueIds(data.transactions.map((transaction) => transaction.id));
+    final accountIds = uniqueIds(data.accounts.map((account) => account.id));
+    uniqueIds(data.categories.map((category) => category.id));
+    final categories = {
+      for (final category in data.categories) category.id: category,
+    };
+    for (final task in data.tasks) {
+      _validateDateAndTime(task.scheduledDate, task.scheduledTime);
+    }
+    for (final transaction in data.transactions) {
+      _validateDateAndTime(transaction.date, transaction.time);
+      if (!const [
+        'expense',
+        'income',
+        'transfer',
+        'adjustment',
+      ].contains(transaction.kind)) {
+        throw const FormatException('Jenis transaksi cadangan tidak valid.');
+      }
+      if (!accountIds.contains(transaction.accountId)) {
+        throw const FormatException('Sumber dana transaksi tidak ditemukan.');
+      }
+      final destination = transaction.toAccountId;
+      if (transaction.isTransfer) {
+        if (destination == null ||
+            !accountIds.contains(destination) ||
+            destination == transaction.accountId) {
+          throw const FormatException('Tujuan pindah dana tidak valid.');
+        }
+      } else if (destination != null) {
+        throw const FormatException('Tujuan dana hanya berlaku untuk pindah.');
+      }
+      final categoryId = transaction.categoryId;
+      if (categoryId != null) {
+        final category = categories[categoryId];
+        if (category == null ||
+            ((transaction.isExpense || transaction.isIncome) &&
+                category.kind != transaction.kind)) {
+          throw const FormatException('Kategori transaksi tidak valid.');
+        }
+      }
+    }
+  }
+
+  static void _validateDateAndTime(String day, String? time) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(day);
+    if (match == null) {
+      throw const FormatException('Tanggal cadangan tidak valid.');
+    }
+    final year = int.parse(match[1]!);
+    final month = int.parse(match[2]!);
+    final number = int.parse(match[3]!);
+    final date = DateTime.utc(year, month, number);
+    if (year < 1 ||
+        month < 1 ||
+        month > 12 ||
+        date.year != year ||
+        date.month != month ||
+        date.day != number) {
+      throw const FormatException('Tanggal cadangan tidak valid.');
+    }
+    if (time != null &&
+        time.isNotEmpty &&
+        !RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(time)) {
+      throw const FormatException('Jam cadangan tidak valid.');
+    }
   }
 
   static List<T> _parseRows<T>(
@@ -262,16 +345,10 @@ class BackupService {
     }
 
     final rows = <T>[];
-    final ids = <String>{};
     for (var index = 0; index < raw.length; index++) {
       final entry = raw[index];
       final message = 'Baris ${index + 1} pada bagian "$key" tidak valid.';
       if (entry is! Map<String, dynamic>) throw FormatException(message);
-      final id = entry['id'];
-      if (id is! String || id.trim().isEmpty) throw FormatException(message);
-      if (!ids.add(id)) {
-        throw FormatException('Ada ID ganda pada bagian "$key".');
-      }
       try {
         rows.add(parse(entry));
       } on TypeError {
@@ -290,6 +367,7 @@ class BackupService {
   }
 
   static Future<void> replaceAll(BackupData data) async {
+    validate(data);
     if (data.isEmpty) {
       throw const FormatException(
         'Cadangan kosong. Data saat ini tidak diubah.',
@@ -330,10 +408,10 @@ class BackupService {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+      if (data.categories.isEmpty || data.accounts.isEmpty) {
+        await AppDatabase.seedDefaults(txn);
+      }
     });
-    if (data.categories.isEmpty || data.accounts.isEmpty) {
-      await AppDatabase.seedDefaults(db);
-    }
   }
 
   static Future<void> clearAll() async {

@@ -8,7 +8,9 @@ import 'package:flutter_localizations/flutter_localizations.dart'
 import 'package:provider/provider.dart';
 
 import 'backup/auto_backup.dart';
+import 'backup/backup_recovery.dart';
 import 'backup/backup_service.dart';
+import 'notify/notifier.dart';
 import 'state/money_store.dart';
 import 'state/settings_store.dart';
 import 'state/task_store.dart';
@@ -23,12 +25,14 @@ class EsokApp extends StatelessWidget {
     required this.moneyStore,
     required this.settings,
     this.restoreCandidate,
+    this.unreadableBackup = false,
   });
 
   final TaskStore store;
   final MoneyStore moneyStore;
   final SettingsStore settings;
   final BackupData? restoreCandidate;
+  final bool unreadableBackup;
 
   @override
   Widget build(BuildContext context) {
@@ -54,10 +58,10 @@ class EsokApp extends StatelessWidget {
               GlobalCupertinoLocalizations.delegate,
             ],
             home: _BackupOnPause(
-              child: restoreCandidate == null
+              child: restoreCandidate == null && !unreadableBackup
                   ? const EsokShell()
                   : _RestoreGate(
-                      candidate: restoreCandidate!,
+                      candidate: restoreCandidate,
                       child: const EsokShell(),
                     ),
             ),
@@ -93,7 +97,8 @@ class _BackupOnPauseState extends State<_BackupOnPause>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.paused &&
+        !AutoBackup.recovery.blocksBackup) {
       unawaited(AutoBackup.runIfChanged());
     }
   }
@@ -105,7 +110,7 @@ class _BackupOnPauseState extends State<_BackupOnPause>
 class _RestoreGate extends StatefulWidget {
   const _RestoreGate({required this.candidate, required this.child});
 
-  final BackupData candidate;
+  final BackupData? candidate;
   final Widget child;
 
   @override
@@ -122,27 +127,78 @@ class _RestoreGateState extends State<_RestoreGate> {
   }
 
   Future<void> _ask() async {
-    if (_asked || !mounted || widget.candidate.isEmpty) return;
+    if (_asked || !mounted) return;
     _asked = true;
 
     final candidate = widget.candidate;
-    final restore = await showModalBottomSheet<bool>(
+    final taskStore = context.read<TaskStore>();
+    final moneyStore = context.read<MoneyStore>();
+    var restoring = false;
+    String? error;
+    var warnings = <RecoveryWarning>[];
+    final restored = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       isDismissible: false,
+      enableDrag: false,
       isScrollControlled: true,
-      builder: (_) => _RestoreSheet(candidate: candidate),
+      builder: (_) => PopScope(
+        canPop: false,
+        child: StatefulBuilder(
+          builder: (sheetContext, setSheetState) => _RestoreSheet(
+            candidate: candidate,
+            restoring: restoring,
+            error: error,
+            onRestore: candidate == null || restoring
+                ? null
+                : () async {
+                    setSheetState(() {
+                      restoring = true;
+                      error = null;
+                    });
+                    try {
+                      warnings = await AutoBackup.recovery.restore(
+                        replace: () => BackupService.replaceAll(candidate),
+                        refreshStores: () async {
+                          await Future.wait([
+                            taskStore.refresh(),
+                            moneyStore.refresh(),
+                          ]);
+                        },
+                        rescheduleReminders: () => TaskNotifier.instance
+                            .rescheduleAll(candidate.tasks),
+                        syncWidgets: WidgetSync.push,
+                      );
+                    } catch (_) {
+                      if (!sheetContext.mounted) return;
+                      setSheetState(() {
+                        restoring = false;
+                        error =
+                            'Pemulihan gagal. Berkas cadangan dipertahankan.';
+                      });
+                      return;
+                    }
+                    if (sheetContext.mounted) {
+                      Navigator.of(sheetContext).pop(true);
+                    }
+                  },
+          ),
+        ),
+      ),
     );
-    if (restore != true || !mounted) return;
-
-    final taskStore = context.read<TaskStore>();
-    final moneyStore = context.read<MoneyStore>();
-    await BackupService.replaceAll(candidate);
-    await taskStore.refresh();
-    await moneyStore.refresh();
-    await WidgetSync.push();
-    await AutoBackup.runIfChanged(force: true);
+    if (!mounted) return;
+    if (restored == false) AutoBackup.recovery.startFresh();
+    if (restored == true && warnings.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Data dipulihkan. Sebagian pengingat atau tampilan belum '
+            'tersinkron; coba buka ulang aplikasi.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -150,14 +206,22 @@ class _RestoreGateState extends State<_RestoreGate> {
 }
 
 class _RestoreSheet extends StatelessWidget {
-  const _RestoreSheet({required this.candidate});
+  const _RestoreSheet({
+    required this.candidate,
+    required this.restoring,
+    required this.error,
+    required this.onRestore,
+  });
 
-  final BackupData candidate;
+  final BackupData? candidate;
+  final bool restoring;
+  final String? error;
+  final VoidCallback? onRestore;
 
   @override
   Widget build(BuildContext context) {
-    final tasks = candidate.tasks.length;
-    final transactions = candidate.transactions.length;
+    final tasks = candidate?.tasks.length ?? 0;
+    final transactions = candidate?.transactions.length ?? 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -183,7 +247,9 @@ class _RestoreSheet extends StatelessWidget {
               ),
             ),
             Text(
-              'Cadangan ditemukan',
+              candidate == null
+                  ? 'Cadangan tidak terbaca'
+                  : 'Cadangan ditemukan',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
@@ -192,7 +258,10 @@ class _RestoreSheet extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              tasks == 0 && transactions == 0
+              candidate == null
+                  ? 'Simpan salinan berkas lama sebelum mulai baru. '
+                        'Cadangan otomatis berikutnya dapat menggantinya.'
+                  : tasks == 0 && transactions == 0
                   ? 'Cadangan hanya berisi kategori atau sumber dana. '
                         'Pulihkan dan ganti kategori serta sumber dana yang ada?'
                   : 'Ada $tasks catatan dan $transactions transaksi dari '
@@ -203,30 +272,38 @@ class _RestoreSheet extends StatelessWidget {
                 color: EsokColors.muted,
               ),
             ),
+            if (error != null) ...[
+              const SizedBox(height: 8),
+              Text(error!, style: TextStyle(color: EsokColors.lateInk)),
+            ],
             const SizedBox(height: 18),
-            SizedBox(
-              height: 46,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                style: FilledButton.styleFrom(
-                  backgroundColor: EsokColors.accent,
-                  foregroundColor: EsokColors.onAccent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11),
+            if (candidate != null) ...[
+              SizedBox(
+                height: 46,
+                child: FilledButton(
+                  onPressed: onRestore,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: EsokColors.accent,
+                    foregroundColor: EsokColors.onAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  textStyle: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  child: Text(restoring ? 'Memulihkan…' : 'Pulihkan'),
                 ),
-                child: const Text('Pulihkan'),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               height: 46,
               child: OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: restoring
+                    ? null
+                    : () => Navigator.of(context).pop(false),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: EsokColors.ink,
                   side: BorderSide(color: EsokColors.lineStrong),
