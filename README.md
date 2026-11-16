@@ -40,14 +40,15 @@ Jangan mencopot Esok untuk memasang fork ini. Data Esok dipindahkan lewat JSON.
 flutter pub get --enforce-lockfile
 flutter analyze
 flutter test
-flutter build apk --release
+flutter build apk --debug
 ```
 
-Build release memerlukan empat variabel lingkungan: `OH_MY_ESOK_KEYSTORE`
-(path absolut ke berkas keystore), `OH_MY_ESOK_STORE_PASSWORD`,
-`OH_MY_ESOK_KEY_ALIAS`, dan `OH_MY_ESOK_KEY_PASSWORD`. Rahasia dan keystore
-tidak disimpan di repo. Build release berhenti bila konfigurasi signing tidak
-lengkap; build debug tetap menggunakan konfigurasi pengembangan Android.
+Untuk kandidat resmi, ikuti [panduan rilis](docs/RELEASING.md) dan gunakan
+`scripts/build-android.ps1` pada host tepercaya. Skrip menghapus variabel signing
+dari lingkungan kompilasi, membangun APK unsigned, lalu menandatangani dengan
+Android `apksigner`. Simpan kunci di luar GitHub dan repo. Gradle hanya
+menghasilkan APK release unsigned dengan `OH_MY_ESOK_UNSIGNED_BUILD=true`;
+gunakan skrip untuk menghasilkan APK kandidat yang ditandatangani.
 
 Cadangan sistem Android dan transfer data otomatis dinonaktifkan untuk data
 aplikasi, termasuk preferensi API key. Cadangan JSON tetap tersedia dan tidak

@@ -1,5 +1,3 @@
-import java.io.File
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -7,30 +5,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val releaseSigningEnvironment = listOf(
-    "OH_MY_ESOK_KEYSTORE",
-    "OH_MY_ESOK_STORE_PASSWORD",
-    "OH_MY_ESOK_KEY_ALIAS",
-    "OH_MY_ESOK_KEY_PASSWORD",
-).associateWith { providers.environmentVariable(it).orNull?.takeIf(String::isNotBlank) }
-val hasReleaseSigning = releaseSigningEnvironment.values.all { it != null }
+val unsignedReleaseBuild = providers.environmentVariable("OH_MY_ESOK_UNSIGNED_BUILD").orNull == "true"
 
-val validateForkReleaseSigning = tasks.register("validateForkReleaseSigning") {
+val requireUnsignedRelease = tasks.register("requireUnsignedRelease") {
     doLast {
-        val missing = releaseSigningEnvironment.filterValues { it == null }.keys
-        check(missing.isEmpty()) {
-            "Release signing requires these environment variables: ${missing.joinToString()}. " +
-                "Oh My Esok release builds never use the debug key."
-        }
-        val keystore = File(releaseSigningEnvironment.getValue("OH_MY_ESOK_KEYSTORE")!!)
-        check(keystore.isAbsolute && keystore.isFile) {
-            "OH_MY_ESOK_KEYSTORE must point to an existing absolute keystore path."
+        check(unsignedReleaseBuild) {
+            "Use scripts/build-android.ps1 for a signed candidate, or explicitly opt in to " +
+                "unsigned output with OH_MY_ESOK_UNSIGNED_BUILD=true and no signing credentials."
         }
     }
 }
 
 tasks.configureEach {
-    if (name == "preReleaseBuild") dependsOn(validateForkReleaseSigning)
+    if (name == "preReleaseBuild") dependsOn(requireUnsignedRelease)
 }
 
 android {
@@ -52,20 +39,10 @@ android {
         versionName = flutter.versionName
     }
 
-    signingConfigs {
-        create("forkRelease") {
-            if (hasReleaseSigning) {
-                storeFile = file(releaseSigningEnvironment.getValue("OH_MY_ESOK_KEYSTORE")!!)
-                storePassword = releaseSigningEnvironment.getValue("OH_MY_ESOK_STORE_PASSWORD")
-                keyAlias = releaseSigningEnvironment.getValue("OH_MY_ESOK_KEY_ALIAS")
-                keyPassword = releaseSigningEnvironment.getValue("OH_MY_ESOK_KEY_PASSWORD")
-            }
-        }
-    }
-
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("forkRelease")
+            // Production signing is done by apksigner after Flutter/Gradle exits.
+            signingConfig = null
         }
     }
 

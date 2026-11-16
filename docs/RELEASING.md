@@ -8,28 +8,46 @@ belongs to upstream; never install a candidate over it.
 
 1. Integrate reviewed changes on a release branch and record the full commit.
 2. Use Flutter 3.50.0 / Dart 3.14, Java 17, Android platform 37.0 and the checked-in
-   Gradle wrapper. Run `flutter pub get --enforce-lockfile`, `flutter analyze`,
-   and `flutter test` before `flutter build apk --release`.
-3. Supply `OH_MY_ESOK_KEYSTORE`, `OH_MY_ESOK_STORE_PASSWORD`,
-   `OH_MY_ESOK_KEY_ALIAS`, and `OH_MY_ESOK_KEY_PASSWORD` through the process
-   environment. Never commit keys or secrets. Debug certificates are rejected
-   by the release metadata script.
-4. Run `scripts/release_metadata.py` with the APK, output directory, and paths
-   to the Android `aapt` and `apksigner` executables and the source commit captured
-   before building. It rejects artifacts missing a universal ABI and creates the
-   APK, `ota-android.json`, `SHA256SUMS`, public certificate details, and the
-   source commit. Metadata is derived from the final signed APK.
+   Gradle wrapper. Public GitHub workflows run dependency resolution, analysis
+   and tests with read-only repository permission and no signing credentials.
+   They do not sign APKs, create tags, upload release assets or publish releases.
+   A green source check is not the separate `QA / Android` acceptance status.
+3. On the trusted Windows signing host, use PowerShell 7+, activate the project
+   toolchain (including Android Build Tools 36.0.0 and Java 17), and supply
+   `OH_MY_ESOK_KEYSTORE`, `OH_MY_ESOK_STORE_PASSWORD`, `OH_MY_ESOK_KEY_ALIAS`,
+   and `OH_MY_ESOK_KEY_PASSWORD` through the process environment. Keep the
+   keystore and its protected backup outside the repository, SDK caches and
+   build directories. Never print or commit the values.
+4. Run `./scripts/build-android.ps1` from a clean reviewed checkout. It consumes
+   and removes those four variables before invoking any child process. It runs
+   `pub get --enforce-lockfile`, analysis and tests, then compiles with
+   `OH_MY_ESOK_UNSIGNED_BUILD=true`. Gradle has no release keystore
+   configuration and refuses a release build without this opt-in. The script
+   requests ARMv7, ARM64 and x86-64 in a single APK, without ABI splits.
+5. The script checks that the fresh `app-release.apk` is unsigned and checks
+   its ZIP alignment before signing. It launches the Android `apksigner` JAR
+   directly with the project JDK. The passwords go only into that child's
+   environment via `--ks-pass env:...` and `--key-pass env:...`. They are
+   absent from the command line, the parent environment, and later tools.
+   The original signing variables remain cleared on success or failure.
+6. The script verifies ZIP alignment again on the signed APK. The metadata
+   script verifies its signature, rejects debug certificates and missing
+   universal ABIs, and writes `dist/oh-my-esok-universal.apk`,
+   `ota-android.json`, `SHA256SUMS`, public certificate details and the source
+   commit. Use these files only after a successful run; a failed run may leave
+   earlier assets in `dist/`. Compare the signer SHA-256 with the last accepted
+   candidate. Never rebuild or re-sign after QA approval.
 
-The GitHub candidate workflow performs the same steps and stores an artifact.
-A successful build is a candidate, not QA approval and not an automatic release.
-If hosted Actions cannot run, execute the same commands locally and record
-their versions and results in the QA report. On Windows, with the project SDK
-and signing environment loaded, run `./scripts/build-android.ps1` from a clean
-checkout. It runs the checks, builds, and stages the APK in `dist/`.
+Keep production signing secrets out of GitHub repository, organization and
+environment settings. This workflow does not use GitHub environments or hosted
+signing.
 
-When hosted Actions is temporarily disabled, keep the workflow file. Restore
-the repository's Actions setting and enable the workflow after billing is fixed,
-then verify a hosted run before depending on it for release builds.
+Removing environment variables is a process-inheritance boundary, not a sandbox
+against hostile code running under the same Windows account. Inspect source,
+workflow and dependency changes before building on the signing host. Test
+untrusted PR code in a disposable, unprivileged environment without access to
+the signing account, vault, key files or shared writable caches. See
+[SECURITY.md](../SECURITY.md) for the complete trust boundary.
 
 ## QA and publication
 

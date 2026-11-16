@@ -1,9 +1,9 @@
-name: Android candidate
+name: Verify Android source
 
 on:
   pull_request:
   push:
-    branches: [main, 'release/**']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,10 +15,13 @@ concurrency:
 
 jobs:
   verify:
+    name: Source checks
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -27,44 +30,14 @@ jobs:
         with:
           flutter-version: '3.50.0'
           channel: stable
-          cache: true
+          # Untrusted PR code never shares a toolchain cache with a signing job.
+          cache: false
       - name: Toolchain versions
         run: |
           flutter --version
           java -version
       - run: flutter pub get --enforce-lockfile
-      - run: flutter analyze
-      - run: flutter test --reporter expanded
-      - name: Install Android platform
-        if: github.event_name != 'pull_request' && github.repository == 'fata69/oh-my-esok'
-        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
-      - name: Restore signing key
-        if: github.event_name != 'pull_request' && github.repository == 'fata69/oh-my-esok'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.OH_MY_ESOK_KEYSTORE_BASE64 }}
-        run: |
-          test -n "$KEYSTORE_BASE64" || { echo 'Release keystore secret is required.'; exit 1; }
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/oh-my-esok.jks"
-          chmod 600 "$RUNNER_TEMP/oh-my-esok.jks"
-      - name: Build signed universal candidate
-        if: github.event_name != 'pull_request' && github.repository == 'fata69/oh-my-esok'
-        env:
-          OH_MY_ESOK_KEYSTORE: ${{ runner.temp }}/oh-my-esok.jks
-          OH_MY_ESOK_STORE_PASSWORD: ${{ secrets.OH_MY_ESOK_STORE_PASSWORD }}
-          OH_MY_ESOK_KEY_ALIAS: ${{ secrets.OH_MY_ESOK_KEY_ALIAS }}
-          OH_MY_ESOK_KEY_PASSWORD: ${{ secrets.OH_MY_ESOK_KEY_PASSWORD }}
-        run: flutter build apk --release
-      - name: Prepare candidate assets
-        if: github.event_name != 'pull_request' && github.repository == 'fata69/oh-my-esok'
-        run: |
-          python3 scripts/release_metadata.py --apk build/app/outputs/flutter-apk/app-release.apk --output dist --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --source-commit "$GITHUB_SHA"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: github.event_name != 'pull_request' && github.repository == 'fata69/oh-my-esok'
-        with:
-          name: android-candidate-${{ github.sha }}
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14
-      - name: Remove runner signing key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/oh-my-esok.jks"
+      - run: flutter analyze --no-pub
+      - run: flutter test --no-pub --reporter expanded
+      # Deliberately no signing environment, key restore, APK publication,
+      # contents:write token, pull_request_target or privileged workflow_run.

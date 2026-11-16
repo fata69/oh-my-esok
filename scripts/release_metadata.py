@@ -15,6 +15,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--aapt", required=True)
     parser.add_argument("--apksigner", required=True)
+    parser.add_argument("--java", help="Java executable when --apksigner is a JAR")
     parser.add_argument("--source-commit", required=True)
     args = parser.parse_args()
     badging = subprocess.check_output(
@@ -37,8 +38,9 @@ def main():
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if args.source_commit != commit:
         raise SystemExit("Source commit must match the checked-out revision")
+    signer = [args.java, "-jar", args.apksigner] if args.java else [args.apksigner]
     cert = subprocess.check_output(
-        [args.apksigner, "verify", "--print-certs", str(args.apk)],
+        [*signer, "verify", "--print-certs", str(args.apk)],
         text=True,
         encoding="utf-8",
     )
