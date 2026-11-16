@@ -21,6 +21,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        UpdateBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "esok/settings",
@@ -69,57 +71,41 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "writeBackup" -> {
-                    val name = call.argument<String>("name")
-                    val content = call.argument<String>("content")
+                    val arguments = call.arguments as? Map<*, *>
+                    val name = arguments?.get("name") as? String
+                    val content = arguments?.get("content") as? String
                     if (name == null || content == null) {
                         result.error("invalid", "name dan content wajib", null)
                         return@setMethodCallHandler
                     }
-                    Thread {
+                    runBackupOperation(result) {
                         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                            runOnUiThread {
-                                result.error(
-                                    "unsupported_sdk",
-                                    "Cadangan otomatis butuh Android 10 atau lebih baru.",
-                                    null,
-                                )
-                            }
-                            return@Thread
+                            throw BackupOperationException(
+                                "unsupported_sdk",
+                                "Cadangan otomatis butuh Android 10 atau lebih baru.",
+                            )
                         }
-                        val ok = writeBackup(name, content)
-                        val exists = backupModifiedAt(name) != null
-                        runOnUiThread {
-                            if (ok && exists) {
-                                result.success(true)
-                            } else {
-                                result.error(
-                                    "write_failed",
-                                    "Gagal menulis atau memverifikasi berkas cadangan.",
-                                    null,
-                                )
-                            }
-                        }
-                    }.start()
+                        writeBackup(name, content)
+                        true
+                    }
                 }
 
                 "readBackup" -> {
-                    val name = call.argument<String>("name")
+                    val name = (call.arguments as? Map<*, *>)?.get("name") as? String
                     if (name == null) {
                         result.error("invalid", "name wajib", null)
                         return@setMethodCallHandler
                     }
-                    Thread {
-                        val content = readBackup(name)
-                        runOnUiThread { result.success(content) }
-                    }.start()
+                    runBackupOperation(result) { readBackup(name) }
                 }
 
                 "backupModifiedAt" -> {
-                    val name = call.argument<String>("name")
-                    Thread {
-                        val value = if (name == null) null else backupModifiedAt(name)
-                        runOnUiThread { result.success(value) }
-                    }.start()
+                    val name = (call.arguments as? Map<*, *>)?.get("name") as? String
+                    if (name == null) {
+                        result.error("invalid", "name wajib", null)
+                        return@setMethodCallHandler
+                    }
+                    runBackupOperation(result) { backupModifiedAt(name) }
                 }
 
                 else -> result.notImplemented()
@@ -127,10 +113,31 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private val backupFolder = "Esok"
+    private val backupFolder = "Oh My Esok"
+
+    private fun runBackupOperation(result: MethodChannel.Result, operation: () -> Any?) {
+        BackupWorker.dispatch(
+            operation = operation,
+            post = { action -> runOnUiThread(action) },
+            reply = { outcome ->
+                when (outcome) {
+                    is BackupOutcome.Success -> result.success(outcome.value)
+                    is BackupOutcome.Failure ->
+                        result.error(outcome.code, outcome.message, null)
+                }
+            },
+        )
+    }
 
     private fun collection(): Uri? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED ||
+            MediaStore.VOLUME_EXTERNAL_PRIMARY !in MediaStore.getExternalVolumeNames(this)) {
+            throw BackupOperationException(
+                "storage_unavailable",
+                "Penyimpanan unduhan belum tersedia. Coba cadangkan lagi nanti.",
+            )
+        }
         return MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
     }
 
@@ -144,7 +151,12 @@ class MainActivity : FlutterActivity() {
             name,
             "${Environment.DIRECTORY_DOWNLOADS}/$backupFolder/",
         )
-        contentResolver.query(downloads, projection, selection, args, null)?.use { cursor ->
+        val cursor = contentResolver.query(downloads, projection, selection, args, null)
+            ?: throw BackupOperationException(
+                "provider_unavailable",
+                "Penyedia berkas cadangan tidak dapat dibaca. Coba lagi nanti.",
+            )
+        cursor.use {
             if (cursor.moveToFirst()) {
                 return ContentUris.withAppendedId(downloads, cursor.getLong(0))
             }
@@ -152,8 +164,13 @@ class MainActivity : FlutterActivity() {
         return null
     }
 
-    private fun writeBackup(name: String, content: String): Boolean {
-        val downloads = collection() ?: return false
+    private fun writeBackup(name: String, content: String) {
+        val downloads = collection() ?: throw BackupOperationException(
+            "unsupported_sdk",
+            "Cadangan otomatis butuh Android 10 atau lebih baru.",
+        )
+        // A failed query must propagate; only an actually empty cursor means
+        // no previous backup exists and allows inserting a new row.
         val uri = findBackupUri(name) ?: run {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -163,37 +180,47 @@ class MainActivity : FlutterActivity() {
                     "${Environment.DIRECTORY_DOWNLOADS}/$backupFolder",
                 )
             }
-            contentResolver.insert(downloads, values) ?: return false
+            contentResolver.insert(downloads, values) ?: throw BackupOperationException(
+                "write_failed",
+                "Berkas cadangan tidak dapat dibuat.",
+            )
         }
-        return try {
-            val stream = contentResolver.openOutputStream(uri, "wt")
-                ?: return false
-            stream.use {
-                it.write(content.toByteArray(Charsets.UTF_8))
-            }
-            true
-        } catch (error: Exception) {
-            false
+        val stream = contentResolver.openOutputStream(uri, "wt")
+            ?: throw BackupOperationException("write_failed", "Berkas cadangan tidak dapat ditulis.")
+        stream.use {
+            it.write(content.toByteArray(Charsets.UTF_8))
+        }
+        if (backupModifiedAt(name) == null) {
+            throw BackupOperationException(
+                "write_failed",
+                "Berkas cadangan tidak ditemukan setelah ditulis.",
+            )
         }
     }
 
     private fun readBackup(name: String): String? {
         val uri = findBackupUri(name) ?: return null
-        return try {
-            contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-        } catch (error: Exception) {
-            null
-        }
+        val stream = contentResolver.openInputStream(uri)
+            ?: throw BackupOperationException("read_failed", "Berkas cadangan tidak dapat dibaca.")
+        return stream.bufferedReader().use { it.readText() }
     }
 
     private fun backupModifiedAt(name: String): Long? {
         val uri = findBackupUri(name) ?: return null
         val projection = arrayOf(MediaStore.MediaColumns.DATE_MODIFIED)
-        contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return cursor.getLong(0) * 1000L
+        val cursor = contentResolver.query(uri, projection, null, null, null)
+            ?: throw BackupOperationException(
+                "provider_unavailable",
+                "Informasi berkas cadangan tidak dapat dibaca.",
+            )
+        cursor.use {
+            if (!cursor.moveToFirst() || cursor.isNull(0)) {
+                throw BackupOperationException(
+                    "read_failed",
+                    "Informasi berkas cadangan tidak lengkap. Coba lagi nanti.",
+                )
             }
+            return cursor.getLong(0) * 1000L
         }
-        return null
     }
 }

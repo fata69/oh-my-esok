@@ -267,9 +267,9 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                 onPressed: canSave ? _save : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: EsokColors.accent,
-                  disabledBackgroundColor: const Color(0xFFD8CFC6),
+                  disabledBackgroundColor: EsokColors.soft,
                   foregroundColor: EsokColors.fabText,
-                  disabledForegroundColor: EsokColors.fabText,
+                  disabledForegroundColor: EsokColors.muted,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

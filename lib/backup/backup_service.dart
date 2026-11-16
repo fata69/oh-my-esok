@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:uuid/uuid.dart';
 
 import '../data/account.dart';
 import '../data/account_dao.dart';
@@ -30,6 +29,12 @@ class BackupData {
   final List<MoneyCategory> categories;
   final List<Account> accounts;
   final List<MoneyTransaction> transactions;
+
+  bool get isEmpty =>
+      tasks.isEmpty &&
+      categories.isEmpty &&
+      accounts.isEmpty &&
+      transactions.isEmpty;
 }
 
 class BackupService {
@@ -155,114 +160,202 @@ class BackupService {
   }
 
   static Future<BackupData> parseJsonBytes(Uint8List bytes) async {
-    final decoded = jsonDecode(utf8.decode(bytes));
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Berkas bukan JSON objek.');
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(bytes));
+    } on FormatException {
+      throw const FormatException('Berkas cadangan rusak atau tidak lengkap.');
     }
-    if (decoded['app'] != 'esok') {
+    if (decoded is! Map<String, dynamic> || decoded['app'] != 'esok') {
       throw const FormatException('Berkas ini bukan cadangan Esok.');
     }
-    final version = (decoded['schemaVersion'] as num?)?.toInt() ?? 0;
+    final version = decoded['schemaVersion'];
+    if (version is! int || version < 1) {
+      throw const FormatException('Versi skema cadangan tidak valid.');
+    }
     if (version > schemaVersion) {
       throw const FormatException(
         'Versi skema berkas lebih baru dari aplikasi ini.',
       );
     }
-
-    final tasks = <Task>[];
-    final rawTasks = decoded['tasks'];
-    if (rawTasks is List) {
-      for (final item in rawTasks) {
-        if (item is! Map) continue;
-        final json = item.cast<String, dynamic>();
-        tasks.add(
-          Task(
-            id: (json['id'] as String?) ?? const Uuid().v4(),
-            title: (json['title'] as String?) ?? 'Tanpa judul',
-            scheduledDate:
-                (json['date'] as String?) ??
-                (json['scheduled_date'] as String?) ??
-                dateKey(today()),
-            scheduledTime:
-                (json['time'] as String?) ??
-                (json['scheduled_time'] as String?),
-            notes: json['notes'] as String?,
-            isDone: json['isDone'] == true || json['isDone'] == 1,
-            createdAt: _epoch(json['createdAt']),
-          ),
-        );
-      }
+    if (decoded.containsKey('counts') &&
+        decoded['counts'] is! Map<String, dynamic>) {
+      throw const FormatException('Jumlah data cadangan tidak valid.');
     }
 
-    final categories = <MoneyCategory>[];
-    final rawCategories = decoded['categories'];
-    if (rawCategories is List) {
-      for (final item in rawCategories) {
-        if (item is! Map) continue;
-        final json = item.cast<String, dynamic>();
-        categories.add(
-          MoneyCategory(
-            id: (json['id'] as String?) ?? const Uuid().v4(),
-            name: (json['name'] as String?) ?? 'Tanpa nama',
-            kind: (json['kind'] as String?) ?? 'expense',
-            sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
-            archived: json['archived'] == true || json['archived'] == 1,
-            createdAt: _epoch(json['createdAt']),
-            iconId: json['iconId'] as String?,
-          ),
-        );
-      }
-    }
-
-    final accounts = <Account>[];
-    final rawAccounts = decoded['accounts'];
-    if (rawAccounts is List) {
-      for (final item in rawAccounts) {
-        if (item is! Map) continue;
-        final json = item.cast<String, dynamic>();
-        accounts.add(
-          Account(
-            id: (json['id'] as String?) ?? const Uuid().v4(),
-            name: (json['name'] as String?) ?? 'Tanpa nama',
-            type: (json['type'] as String?) ?? 'cash',
-            sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
-            archived: json['archived'] == true || json['archived'] == 1,
-            createdAt: _epoch(json['createdAt']),
-            openingBalance: (json['openingBalance'] as num?)?.toInt() ?? 0,
-          ),
-        );
-      }
-    }
-
-    final transactions = <MoneyTransaction>[];
-    final rawTransactions = decoded['transactions'];
-    if (rawTransactions is List) {
-      for (final item in rawTransactions) {
-        if (item is! Map) continue;
-        final json = item.cast<String, dynamic>();
-        transactions.add(
-          MoneyTransaction.fromJson({
-            'id': json['id'] ?? const Uuid().v4(),
-            'amount': (json['amount'] as num?)?.toInt() ?? 0,
-            'kind': json['kind'] ?? 'expense',
-            'categoryId': json['categoryId'] ?? json['category_id'],
-            'accountId': json['accountId'] ?? json['account_id'] ?? '',
-            'toAccountId': json['toAccountId'] ?? json['to_account_id'],
-            'date': json['date'] ?? dateKey(today()),
-            'time': json['time'],
-            'note': json['note'],
-            'createdAt': _epoch(json['createdAt']),
-          }),
-        );
-      }
-    }
-
-    return BackupData(
-      tasks: tasks,
-      categories: categories,
-      accounts: accounts,
-      transactions: transactions,
+    final data = BackupData(
+      tasks: _parseRows(
+        decoded,
+        'tasks',
+        (json) => Task(
+          id: json['id'] as String,
+          title: json['title'] as String,
+          scheduledDate: (json['date'] ?? json['scheduled_date']) as String,
+          scheduledTime: (json['time'] ?? json['scheduled_time']) as String?,
+          notes: json['notes'] as String?,
+          isDone: json['isDone'] == true || json['isDone'] == 1,
+          createdAt: _epoch(json['createdAt']),
+        ),
+      ),
+      categories: _parseRows(
+        decoded,
+        'categories',
+        (json) => MoneyCategory(
+          id: json['id'] as String,
+          name: json['name'] as String,
+          kind: json['kind'] as String,
+          sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+          archived: json['archived'] == true || json['archived'] == 1,
+          createdAt: _epoch(json['createdAt']),
+          iconId: json['iconId'] as String?,
+        ),
+      ),
+      accounts: _parseRows(
+        decoded,
+        'accounts',
+        (json) => Account(
+          id: json['id'] as String,
+          name: json['name'] as String,
+          type: json['type'] as String,
+          sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+          archived: json['archived'] == true || json['archived'] == 1,
+          createdAt: _epoch(json['createdAt']),
+          openingBalance: (json['openingBalance'] as num?)?.toInt() ?? 0,
+        ),
+      ),
+      transactions: _parseRows(
+        decoded,
+        'transactions',
+        (json) => MoneyTransaction.fromJson({
+          'id': json['id'],
+          'amount': json['amount'] as int,
+          'kind': json['kind'] as String,
+          'categoryId': json['categoryId'] ?? json['category_id'],
+          'accountId': (json['accountId'] ?? json['account_id']) as String,
+          'toAccountId': json['toAccountId'] ?? json['to_account_id'],
+          'date': json['date'] as String,
+          'time': json['time'],
+          'note': json['note'],
+          'detail': json['detail'],
+          'createdAt': _epoch(json['createdAt']),
+        }),
+      ),
     );
+    validate(data);
+    return data;
+  }
+
+  // Run for parsed files and typed callers before opening or changing SQLite.
+  static void validate(BackupData data) {
+    Set<String> uniqueIds(Iterable<String> values) {
+      final ids = <String>{};
+      for (final id in values) {
+        if (id.isEmpty || id != id.trim() || !ids.add(id)) {
+          throw const FormatException('ID cadangan kosong, rusak, atau ganda.');
+        }
+      }
+      return ids;
+    }
+
+    uniqueIds(data.tasks.map((task) => task.id));
+    uniqueIds(data.transactions.map((transaction) => transaction.id));
+    final accountIds = uniqueIds(data.accounts.map((account) => account.id));
+    uniqueIds(data.categories.map((category) => category.id));
+    final categories = {
+      for (final category in data.categories) category.id: category,
+    };
+    for (final task in data.tasks) {
+      _validateDateAndTime(task.scheduledDate, task.scheduledTime);
+    }
+    for (final transaction in data.transactions) {
+      _validateDateAndTime(transaction.date, transaction.time);
+      if (!const [
+        'expense',
+        'income',
+        'transfer',
+        'adjustment',
+      ].contains(transaction.kind)) {
+        throw const FormatException('Jenis transaksi cadangan tidak valid.');
+      }
+      if (!accountIds.contains(transaction.accountId)) {
+        throw const FormatException('Sumber dana transaksi tidak ditemukan.');
+      }
+      final destination = transaction.toAccountId;
+      if (transaction.isTransfer) {
+        if (destination == null ||
+            !accountIds.contains(destination) ||
+            destination == transaction.accountId) {
+          throw const FormatException('Tujuan pindah dana tidak valid.');
+        }
+      } else if (destination != null) {
+        throw const FormatException('Tujuan dana hanya berlaku untuk pindah.');
+      }
+      final categoryId = transaction.categoryId;
+      if (categoryId != null) {
+        final category = categories[categoryId];
+        if (category == null ||
+            ((transaction.isExpense || transaction.isIncome) &&
+                category.kind != transaction.kind)) {
+          throw const FormatException('Kategori transaksi tidak valid.');
+        }
+      }
+    }
+  }
+
+  static void _validateDateAndTime(String day, String? time) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(day);
+    if (match == null) {
+      throw const FormatException('Tanggal cadangan tidak valid.');
+    }
+    final year = int.parse(match[1]!);
+    final month = int.parse(match[2]!);
+    final number = int.parse(match[3]!);
+    final date = DateTime.utc(year, month, number);
+    if (year < 1 ||
+        month < 1 ||
+        month > 12 ||
+        date.year != year ||
+        date.month != month ||
+        date.day != number) {
+      throw const FormatException('Tanggal cadangan tidak valid.');
+    }
+    if (time != null &&
+        time.isNotEmpty &&
+        !RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(time)) {
+      throw const FormatException('Jam cadangan tidak valid.');
+    }
+  }
+
+  static List<T> _parseRows<T>(
+    Map<String, dynamic> backup,
+    String key,
+    T Function(Map<String, dynamic>) parse,
+  ) {
+    // Esok exports all four arrays, even when they contain no rows.
+    final raw = backup[key];
+    if (raw is! List) {
+      throw FormatException('Bagian "$key" hilang atau bukan daftar.');
+    }
+    final counts = backup['counts'];
+    if (counts is Map<String, dynamic> && counts.containsKey(key)) {
+      final count = counts[key];
+      if (count is! int || count != raw.length) {
+        throw FormatException('Jumlah data pada bagian "$key" tidak cocok.');
+      }
+    }
+
+    final rows = <T>[];
+    for (var index = 0; index < raw.length; index++) {
+      final entry = raw[index];
+      final message = 'Baris ${index + 1} pada bagian "$key" tidak valid.';
+      if (entry is! Map<String, dynamic>) throw FormatException(message);
+      try {
+        rows.add(parse(entry));
+      } on TypeError {
+        throw FormatException(message);
+      }
+    }
+    return rows;
   }
 
   static int _epoch(Object? value) {
@@ -274,6 +367,12 @@ class BackupService {
   }
 
   static Future<void> replaceAll(BackupData data) async {
+    validate(data);
+    if (data.isEmpty) {
+      throw const FormatException(
+        'Cadangan kosong. Data saat ini tidak diubah.',
+      );
+    }
     final db = await AppDatabase.open();
     await db.transaction((txn) async {
       await txn.delete('tasks');
@@ -309,10 +408,10 @@ class BackupService {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+      if (data.categories.isEmpty || data.accounts.isEmpty) {
+        await AppDatabase.seedDefaults(txn);
+      }
     });
-    if (data.categories.isEmpty || data.accounts.isEmpty) {
-      await AppDatabase.seedDefaults(db);
-    }
   }
 
   static Future<void> clearAll() async {

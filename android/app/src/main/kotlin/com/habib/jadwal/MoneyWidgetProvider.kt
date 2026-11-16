@@ -90,12 +90,12 @@ private fun buildMoneyWidgetViews(context: Context, layoutId: Int): RemoteViews 
     views.setTextViewText(R.id.money_month, amount(month))
 
     val openApp = Intent(context, MainActivity::class.java).apply {
-        data = Uri.parse("jadwal://money")
+        data = Uri.parse("ohmyesok://money")
         action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
     val openCatat = Intent(context, MainActivity::class.java).apply {
-        data = Uri.parse("jadwal://money/new")
+        data = Uri.parse("ohmyesok://money/new")
         action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }

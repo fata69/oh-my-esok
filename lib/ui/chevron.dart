@@ -16,11 +16,12 @@ class EsokChevron extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return CustomPaint(
       size: Size.square(size),
       painter: _ChevronPainter(
         left: left,
-        color: color ?? EsokColors.ink,
+        color: color ?? colors.ink,
       ),
     );
   }

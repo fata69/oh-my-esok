@@ -265,7 +265,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
             val headerIntent = Intent(context, MainActivity::class.java).apply {
                 if (day != null) {
-                    data = Uri.parse("jadwal://day/${day.date}")
+                    data = Uri.parse("ohmyesok://day/${day.date}")
                 }
                 action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

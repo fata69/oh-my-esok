@@ -6,9 +6,9 @@ import '../data/money_transaction.dart';
 import '../data/task.dart';
 import '../state/money_store.dart';
 import '../util/format.dart';
-import 'chevron.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
+import 'tab_layout.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
 
@@ -23,17 +23,17 @@ class MoneyPage extends StatelessWidget {
     final store = context.read<MoneyStore>();
     final saved = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
-        builder: (_) => TxEditorPage(
-          transaction: transaction,
-          initialDate: initialDate,
-        ),
+        builder: (_) =>
+            TxEditorPage(transaction: transaction, initialDate: initialDate),
       ),
     );
     if (saved == null || !context.mounted) return;
     await store.setMonth(DateTime.parse(saved));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Tersimpan di ${shortDateTitle(DateTime.parse(saved))}')),
+      SnackBar(
+        content: Text('Tersimpan di ${shortDateTitle(DateTime.parse(saved))}'),
+      ),
     );
   }
 
@@ -46,10 +46,10 @@ class MoneyPage extends StatelessWidget {
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (sheetContext) => Container(
         decoration: BoxDecoration(
-          color: EsokColors.canvas,
+          color: EsokColors.of(sheetContext).canvas,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.fromLTRB(0, 10, 0, 18),
@@ -64,7 +64,7 @@ class MoneyPage extends StatelessWidget {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 14),
                   decoration: BoxDecoration(
-                    color: EsokColors.handle,
+                    color: EsokColors.of(sheetContext).handle,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -98,12 +98,10 @@ class MoneyPage extends StatelessWidget {
       await showModalBottomSheet<void>(
         context: context,
         backgroundColor: Colors.transparent,
-        barrierColor: const Color(0x5214120E),
+        barrierColor: EsokColors.scrim,
         isScrollControlled: true,
-        builder: (_) => ItemsSheet(
-          detail: transaction.detail!,
-          total: transaction.amount,
-        ),
+        builder: (_) =>
+            ItemsSheet(detail: transaction.detail!, total: transaction.amount),
       );
       return;
     }
@@ -111,7 +109,7 @@ class MoneyPage extends StatelessWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: EsokColors.canvas,
+          backgroundColor: EsokColors.of(dialogContext).canvas,
           title: const Text('Hapus transaksi?'),
           content: const Text('Transaksi ini akan dihapus permanen.'),
           actions: [
@@ -135,101 +133,61 @@ class MoneyPage extends StatelessWidget {
     final store = context.watch<MoneyStore>();
     final grouped = store.monthByDay;
 
-    return Scaffold(
-      backgroundColor: EsokColors.canvas,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Uang',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.015,
-                    color: EsokColors.ink,
+    return EsokTabLayout(
+      child: Column(
+        children: [
+          EsokPeriodHeader(
+            title: monthTitle(store.month),
+            previousLabel: 'Bulan sebelumnya',
+            nextLabel: 'Bulan berikutnya',
+            onPrevious: () => store.previousMonth(),
+            onNext: () => store.nextMonth(),
+          ),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                EsokTabLayout.gutter,
+                4,
+                EsokTabLayout.gutter,
+                EsokTabLayout.scrollBottomOf(context),
+              ),
+              children: [
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: EsokEntryButton(
+                    label: 'Catat transaksi',
+                    onPressed: () => _openEditor(context, initialDate: today()),
                   ),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _MonthArrow(left: true, onTap: () => store.previousMonth()),
-                  SizedBox(
-                    width: 150,
+                const SizedBox(height: 16),
+                _BalanceBlock(store: store),
+                if (grouped.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 24),
                     child: Text(
-                      monthTitle(store.month),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.01,
-                        color: EsokColors.ink,
-                      ),
+                      'Belum ada transaksi bulan ini.',
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                  ),
-                  _MonthArrow(left: false, onTap: () => store.nextMonth()),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 110),
-                children: [
-                  _BalanceBlock(store: store),
-                  if (grouped.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 42),
-                      child: Text(
-                        'Belum ada transaksi bulan ini.\nKetuk + untuk mencatat.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.7,
-                          color: EsokColors.muted,
-                        ),
+                  )
+                else
+                  for (final entry in grouped.entries) ...[
+                    _DayHeader(
+                      date: DateTime.parse(entry.key),
+                      net: store.netForDay(entry.value),
+                    ),
+                    for (final transaction in entry.value)
+                      _TransactionRow(
+                        transaction: transaction,
+                        store: store,
+                        onTap: transaction.kind == 'adjustment'
+                            ? () {}
+                            : () => _showActions(context, store, transaction),
                       ),
-                    )
-                  else
-                    for (final entry in grouped.entries) ...[
-                      _DayHeader(
-                        date: DateTime.parse(entry.key),
-                        net: store.netForDay(entry.value),
-                      ),
-                      for (final transaction in entry.value)
-                        _TransactionRow(
-                          transaction: transaction,
-                          store: store,
-                          onTap: transaction.kind == 'adjustment'
-                              ? () {}
-                              : () => _showActions(
-                                  context,
-                                  store,
-                                  transaction,
-                                ),
-                        ),
-                    ],
-                ],
-              ),
+                  ],
+              ],
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openEditor(context, initialDate: today()),
-        backgroundColor: EsokColors.ink,
-        foregroundColor: EsokColors.fabText,
-        elevation: 2,
-        shape: const CircleBorder(),
-        tooltip: 'Catat transaksi',
-        child: const Icon(Icons.add, size: 24),
+          ),
+        ],
       ),
     );
   }
@@ -248,6 +206,7 @@ class _TxActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -258,29 +217,9 @@ class _TxActionRow extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 14,
-            color: danger ? EsokColors.lateInk : EsokColors.ink,
+            color: danger ? colors.lateInk : colors.ink,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _MonthArrow extends StatelessWidget {
-  const _MonthArrow({required this.left, required this.onTap});
-
-  final bool left;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkResponse(
-      onTap: onTap,
-      radius: 20,
-      child: SizedBox(
-        width: 34,
-        height: 34,
-        child: Center(child: EsokChevron(left: left, size: 16)),
       ),
     );
   }
@@ -293,8 +232,9 @@ class _BalanceBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final total = store.totalBalance;
-    final totalColor = total < 0 ? EsokColors.negative : EsokColors.ink;
+    final totalColor = total < 0 ? colors.negative : colors.ink;
     final accounts = store.activeAccounts;
     final allOpeningZero = accounts.every(
       (account) => account.openingBalance == 0,
@@ -309,7 +249,7 @@ class _BalanceBlock extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.09,
-            color: EsokColors.muted,
+            color: colors.muted,
           ),
         ),
         const SizedBox(height: 5),
@@ -324,34 +264,35 @@ class _BalanceBlock extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
+        Wrap(
+          spacing: 18,
+          runSpacing: 4,
           children: [
             Text.rich(
               TextSpan(
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
+                style: TextStyle(fontSize: 11.5, color: colors.muted),
                 children: [
                   const TextSpan(text: 'Masuk '),
                   TextSpan(
                     text: rupiahText(store.monthIncome),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: EsokColors.positive,
+                      color: colors.positive,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 18),
             Text.rich(
               TextSpan(
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
+                style: TextStyle(fontSize: 11.5, color: colors.muted),
                 children: [
                   const TextSpan(text: 'Keluar '),
                   TextSpan(
                     text: rupiahText(store.monthExpense),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: EsokColors.negative,
+                      color: colors.negative,
                     ),
                   ),
                 ],
@@ -369,7 +310,7 @@ class _BalanceBlock extends StatelessWidget {
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.09,
-                  color: EsokColors.muted,
+                  color: colors.muted,
                 ),
               ),
             ),
@@ -384,7 +325,7 @@ class _BalanceBlock extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w600,
-                  color: EsokColors.accent,
+                  color: colors.accent,
                 ),
               ),
             ),
@@ -395,7 +336,7 @@ class _BalanceBlock extends StatelessWidget {
             padding: const EdgeInsets.only(top: 10),
             child: Text(
               'Belum ada sumber dana.',
-              style: TextStyle(fontSize: 12, color: EsokColors.muted),
+              style: TextStyle(fontSize: 12, color: colors.muted),
             ),
           )
         else
@@ -420,7 +361,7 @@ class _BalanceBlock extends StatelessWidget {
               padding: const EdgeInsets.only(top: 10),
               child: Text(
                 'Atur dana awal di Sumber dana agar saldo sesuai.',
-                style: TextStyle(fontSize: 11, color: EsokColors.accent),
+                style: TextStyle(fontSize: 11, color: colors.accent),
               ),
             ),
           ),
@@ -442,66 +383,67 @@ class _AccountBalanceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final initial = account.name.isEmpty
         ? '?'
         : account.name.substring(0, 1).toUpperCase();
-    final color = balance < 0 ? EsokColors.negative : EsokColors.ink;
+    final color = balance < 0 ? colors.negative : colors.ink;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        height: 52,
+        constraints: const BoxConstraints(minHeight: 52),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: EsokColors.line)),
+          border: Border(bottom: BorderSide(color: colors.line)),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: EsokColors.soft,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                initial,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: EsokColors.muted,
+        child: _LedgerColumns(
+          details: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: colors.soft,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: colors.muted,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 11),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    account.name,
-                    style: TextStyle(fontSize: 14, color: EsokColors.ink),
-                  ),
-                  Text(
-                    accountTypeLabel(account.type),
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: EsokColors.muted,
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      account.name,
+                      style: TextStyle(fontSize: 14, color: colors.ink),
                     ),
-                  ),
-                ],
+                    Text(
+                      accountTypeLabel(account.type),
+                      style: TextStyle(fontSize: 10.5, color: colors.muted),
+                    ),
+                  ],
+                ),
               ),
+            ],
+          ),
+          amount: Text(
+            numberText(balance),
+            style: TextStyle(
+              fontSize: 14,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
-            Text(
-              numberText(balance),
-              style: TextStyle(
-                fontSize: 14,
-                color: color,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -516,28 +458,26 @@ class _DayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final color = net < 0
-        ? EsokColors.negative
+        ? colors.negative
         : net > 0
-        ? EsokColors.positive
-        : EsokColors.muted;
+        ? colors.positive
+        : colors.muted;
     return Padding(
       padding: const EdgeInsets.only(top: 22, bottom: 7),
       child: Container(
         padding: const EdgeInsets.only(bottom: 7),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: EsokColors.line)),
+          border: Border(bottom: BorderSide(color: colors.line)),
         ),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 moneyDayLabel(date),
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: EsokColors.inkSoft,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
             Text(
@@ -615,74 +555,106 @@ class _TransactionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final amountColor = transaction.isIncome
-        ? EsokColors.positive
+        ? colors.positive
         : transaction.isExpense
-        ? EsokColors.negative
-        : EsokColors.inkSoft;
+        ? colors.negative
+        : colors.inkSoft;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: EsokColors.line)),
+          border: Border(bottom: BorderSide(color: colors.line)),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: EsokColors.soft,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                _initial,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: EsokColors.muted,
+        child: _LedgerColumns(
+          details: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: colors.soft,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _initial,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: colors.muted,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, color: EsokColors.ink),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    _subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: EsokColors.muted,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 14, color: colors.ink),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 3),
+                    Text(
+                      _subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: colors.muted),
+                    ),
+                  ],
+                ),
               ),
+            ],
+          ),
+          amount: Text(
+            _amount,
+            style: TextStyle(
+              fontSize: 14,
+              color: amountColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
-            const SizedBox(width: 10),
-            Text(
-              _amount,
-              style: TextStyle(
-                fontSize: 14,
-                color: amountColor,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _LedgerColumns extends StatelessWidget {
+  const _LedgerColumns({required this.details, required this.amount});
+
+  final Widget details;
+  final Widget amount;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 240 * scale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              details,
+              const SizedBox(height: 4),
+              Align(alignment: AlignmentDirectional.centerEnd, child: amount),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: details),
+            const SizedBox(width: 10),
+            amount,
+          ],
+        );
+      },
     );
   }
 }

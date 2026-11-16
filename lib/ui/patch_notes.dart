@@ -29,6 +29,26 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.2',
+      date: '16 Nov 2026',
+      notes: [
+        'Tab Uang langsung mengikuti tema Terang atau Gelap.',
+        'Judul tab konsisten, navigasi lebih dekat ke bawah, dan aksen teal dipakai seperlunya.',
+        'Kolom Catatan transaksi tetap bisa diketik saat keyboard terbuka.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.1',
+      date: '16 Nov 2026',
+      notes: [
+        'Oh My Esok: tema monokrom terang dan gelap dengan navigasi mengambang.',
+        'Tutup Hari merangkum catatan dan arus kas, lalu membantu menjadwalkan ulang catatan yang belum selesai.',
+        'Pindai struk mempertahankan teks barang dan menampilkan hasil untuk diperiksa sebelum diterapkan ke draf.',
+        'Pembaruan APK dari GitHub, dengan pemeriksaan integritas dan konfirmasi Android.',
+        'Dipasang berdampingan dengan Esok; cadangan JSON dan pemulihan diperkuat.',
+      ],
+    ),
+    (
       version: '1.9.4',
       date: '16 Nov 2026',
       notes: [
@@ -231,7 +251,7 @@ class PatchNotesSheet extends StatelessWidget {
               ],
               const SizedBox(height: 24),
               Text(
-                'Dibuat untuk pemakaian pribadi.',
+                'Dikembangkan dari Esok oleh notSeraphimXD.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
               ),

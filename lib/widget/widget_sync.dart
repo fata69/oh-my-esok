@@ -15,9 +15,10 @@ import '../util/sound_library.dart';
 class WidgetSync {
   WidgetSync._();
 
-  static const androidProvider = 'TaskWidgetProvider';
+  // Kotlin classes keep their upstream namespace; the installed app ID differs.
+  static const androidProvider = 'com.habib.jadwal.TaskWidgetProvider';
 
-  static Future<void> push() async {
+  static Future<void> push({bool reportErrors = false}) async {
     try {
       final db = await AppDatabase.open();
       final dao = TaskDao(db);
@@ -38,11 +39,11 @@ class WidgetSync {
         };
       }
 
-      await HomeWidget.saveWidgetData<String>(
-        'tasks_json',
+      await _saveTaskSnapshot(
         jsonEncode(taskDays),
+        reportErrors: reportErrors,
       );
-      await HomeWidget.updateWidget(androidName: androidProvider);
+      await HomeWidget.updateWidget(qualifiedAndroidName: androidProvider);
 
       final now = today();
       final moneyDao = MoneyTransactionDao(db);
@@ -123,22 +124,46 @@ class WidgetSync {
         'sound_complete_file',
         complete.file ?? '',
       );
-      await HomeWidget.updateWidget(androidName: 'MoneyWidgetProvider');
       await HomeWidget.updateWidget(
-        androidName: 'MoneyWidgetBarProvider',
+        qualifiedAndroidName: 'com.habib.jadwal.MoneyWidgetProvider',
+      );
+      await HomeWidget.updateWidget(
+        qualifiedAndroidName: 'com.habib.jadwal.MoneyWidgetBarProvider',
       );
     } catch (error, stack) {
       debugPrint('WidgetSync.push failed: $error\n$stack');
+      if (reportErrors) rethrow;
     }
   }
 
-  static Future<bool> drainPendingToggles(TaskStore store) async {
+  static Future<void> _saveTaskSnapshot(
+    String json, {
+    required bool reportErrors,
+  }) async {
+    final saved = await HomeWidget.saveWidgetData<String>('tasks_json', json);
+    if (reportErrors && saved != true) {
+      throw StateError('Task widget snapshot could not be saved');
+    }
+  }
+
+  static Future<bool> drainPendingToggles(
+    TaskStore store, {
+    bool reportErrors = false,
+  }) async {
     try {
       final raw = await HomeWidget.getWidgetData<String>('pending_toggles');
       if (raw == null || raw.isEmpty) return false;
 
       final decoded = jsonDecode(raw);
-      if (decoded is! Map) return false;
+      if (decoded is! Map) {
+        if (reportErrors) throw const FormatException('Invalid widget queue');
+        return false;
+      }
+
+      if (reportErrors &&
+          decoded.entries.any((entry) => entry.value is! bool)) {
+        throw const FormatException('Invalid widget checkmark');
+      }
 
       var changed = false;
       for (final entry in decoded.entries) {
@@ -147,10 +172,17 @@ class WidgetSync {
         await store.setDone(id, done);
         changed = true;
       }
-      await HomeWidget.saveWidgetData<String>('pending_toggles', '{}');
+      final cleared = await HomeWidget.saveWidgetData<String>(
+        'pending_toggles',
+        '{}',
+      );
+      if (reportErrors && cleared != true) {
+        throw StateError('Widget queue could not be cleared');
+      }
       return changed;
     } catch (error, stack) {
       debugPrint('WidgetSync.drainPendingToggles failed: $error\n$stack');
+      if (reportErrors) rethrow;
       return false;
     }
   }

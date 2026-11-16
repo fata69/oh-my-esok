@@ -1,7 +1,23 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val unsignedReleaseBuild = providers.environmentVariable("OH_MY_ESOK_UNSIGNED_BUILD").orNull == "true"
+
+val requireUnsignedRelease = tasks.register("requireUnsignedRelease") {
+    doLast {
+        check(unsignedReleaseBuild) {
+            "Use scripts/build-android.ps1 for a signed candidate, or explicitly opt in to " +
+                "unsigned output with OH_MY_ESOK_UNSIGNED_BUILD=true and no signing credentials."
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(requireUnsignedRelease)
 }
 
 android {
@@ -16,7 +32,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.habib.jadwal"
+        applicationId = "io.github.fata69.ohmyesok"
         minSdk = 24
         targetSdk = 36
         versionCode = flutter.versionCode
@@ -25,9 +41,8 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Production signing is done by apksigner after Flutter/Gradle exits.
+            signingConfig = null
         }
     }
 

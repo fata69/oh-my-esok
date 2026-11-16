@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Esok</string>
+    <string name="app_name">Oh My Esok</string>
     <string name="widget_toggle">Tandai selesai</string>
     <string name="widget_empty">Tidak ada catatan</string>
-    <string name="widget_open">Buka Esok</string>
+    <string name="widget_open">Buka Oh My Esok</string>
 </resources>

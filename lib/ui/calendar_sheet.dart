@@ -213,10 +213,10 @@ class _DayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = dim ? const Color(0xFFBFBAAE) : EsokColors.ink;
+    final baseColor = dim ? EsokColors.muted : EsokColors.ink;
     final dotColor = isSelected
         ? EsokColors.canvas
-        : (dim ? const Color(0xFFCFCABC) : EsokColors.chevron);
+        : EsokColors.chevron;
 
     return InkWell(
       onTap: onTap,
