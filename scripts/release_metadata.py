@@ -15,6 +15,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--aapt", required=True)
     parser.add_argument("--apksigner", required=True)
+    parser.add_argument("--source-commit", required=True)
     args = parser.parse_args()
     badging = subprocess.check_output(
         [args.aapt, "dump", "badging", str(args.apk)], text=True, encoding="utf-8"
@@ -29,6 +30,13 @@ def main():
     app_id, code, version = package.groups()
     if app_id != "io.github.fata69.ohmyesok":
         raise SystemExit("Refusing to package an APK with another applicationId")
+    native = re.search(r"^native-code:(.+)$", badging, re.MULTILINE)
+    abis = set(re.findall(r"'([^']+)'", native.group(1))) if native else set()
+    if not {"armeabi-v7a", "arm64-v8a", "x86_64"}.issubset(abis):
+        raise SystemExit(f"APK is missing required universal ABIs: {sorted(abis)}")
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    if args.source_commit != commit:
+        raise SystemExit("Source commit must match the checked-out revision")
     cert = subprocess.check_output(
         [args.apksigner, "verify", "--print-certs", str(args.apk)],
         text=True,
@@ -57,7 +65,7 @@ def main():
     (args.output / "SHA256SUMS").write_text(f"{digest}  {name}\n", encoding="utf-8")
     (args.output / "signing-certificate.txt").write_text(cert, encoding="utf-8")
     (args.output / "source-commit.txt").write_text(
-        subprocess.check_output(["git", "rev-parse", "HEAD"], text=True), encoding="utf-8"
+        commit + "\n", encoding="utf-8"
     )
     print(f"Prepared {app_id} {version} ({code}) SHA-256 {digest}")
 

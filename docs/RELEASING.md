@@ -15,7 +15,8 @@ belongs to upstream; never install a candidate over it.
    environment. Never commit keys or secrets. Debug certificates are rejected
    by the release metadata script.
 4. Run `scripts/release_metadata.py` with the APK, output directory, and paths
-   to the Android `aapt` and `apksigner` executables. It creates the universal
+   to the Android `aapt` and `apksigner` executables and the source commit captured
+   before building. It rejects artifacts missing a universal ABI and creates the
    APK, `ota-android.json`, `SHA256SUMS`, public certificate details, and the
    source commit. Metadata is derived from the final signed APK.
 
