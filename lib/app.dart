@@ -122,7 +122,7 @@ class _RestoreGateState extends State<_RestoreGate> {
   }
 
   Future<void> _ask() async {
-    if (_asked || !mounted) return;
+    if (_asked || !mounted || widget.candidate.isEmpty) return;
     _asked = true;
 
     final candidate = widget.candidate;
@@ -192,8 +192,11 @@ class _RestoreSheet extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Ada $tasks catatan dan $transactions transaksi dari cadangan '
-              'terakhir di Download/Esok. Pulihkan sekarang?',
+              tasks == 0 && transactions == 0
+                  ? 'Cadangan hanya berisi kategori atau sumber dana. '
+                        'Pulihkan dan ganti kategori serta sumber dana yang ada?'
+                  : 'Ada $tasks catatan dan $transactions transaksi dari '
+                        'cadangan terakhir di Download/Esok. Pulihkan sekarang?',
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.6,

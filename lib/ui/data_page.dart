@@ -89,6 +89,10 @@ class _DataPageState extends State<DataPage> {
       final bytes = await picked.readAsBytes();
       final data = await BackupService.parseJsonBytes(bytes);
       if (!mounted) return;
+      if (data.isEmpty) {
+        _message('Cadangan kosong. Data saat ini tidak diubah.');
+        return;
+      }
 
       final confirmed = await showModalBottomSheet<bool>(
         context: context,
@@ -714,6 +718,8 @@ class _ImportSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onlyCategoriesAndAccounts =
+        data.tasks.isEmpty && data.transactions.isEmpty;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.7,
@@ -796,7 +802,12 @@ class _ImportSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'Data sekarang akan diganti seluruhnya. Setelah impor, notifikasi dijadwalkan ulang dan widget diperbarui.',
+                  onlyCategoriesAndAccounts
+                      ? 'Cadangan ini tidak berisi tugas atau transaksi. '
+                            'Tugas dan transaksi yang ada akan dihapus. '
+                            'Kategori dan sumber dana akan diganti.'
+                      : 'Data sekarang akan diganti seluruhnya. Setelah impor, '
+                            'notifikasi dijadwalkan ulang dan widget diperbarui.',
                   style: TextStyle(
                     fontSize: 11.5,
                     height: 1.65,
@@ -817,7 +828,10 @@ class _ImportSheet extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'Ganti ${data.tasks.length} tugas & ${data.transactions.length} transaksi',
+                    onlyCategoriesAndAccounts
+                        ? 'Ganti data yang ada'
+                        : 'Ganti ${data.tasks.length} tugas & '
+                              '${data.transactions.length} transaksi',
                   ),
                 ),
               ),
