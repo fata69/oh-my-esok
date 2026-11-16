@@ -480,7 +480,10 @@ class _TxEditorPageState extends State<TxEditorPage> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final roomy = constraints.maxHeight >= 640;
+            final categoryHeight = (constraints.maxHeight - 510).clamp(
+              158.0,
+              226.0,
+            );
             final categoryGrid = Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _CategoryGrid(
@@ -559,10 +562,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                 ),
               const SizedBox(height: 14),
               if (!_isTransfer) ...[
-                if (roomy)
-                  Expanded(child: categoryGrid)
-                else
-                  SizedBox(height: 158, child: categoryGrid),
+                SizedBox(height: categoryHeight, child: categoryGrid),
                 if (_creatingCategory) ...[
                   const SizedBox(height: 8),
                   Padding(
@@ -626,7 +626,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     ],
                   ),
                 ),
-                if (roomy) const Spacer() else const SizedBox(height: 8),
+                const SizedBox(height: 8),
               ],
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -765,9 +765,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
               ),
             ];
 
-            final column = Column(children: children);
-            if (roomy) return column;
-            return SingleChildScrollView(child: column);
+            // Keep the note field mounted when the Android keyboard resizes
+            // the viewport. Replacing this subtree would drop its focus.
+            return SingleChildScrollView(child: Column(children: children));
           },
         ),
       ),
@@ -1038,6 +1038,7 @@ class _CategoryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
+      primary: false,
       padding: EdgeInsets.zero,
       itemCount: categories.length + 1,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
