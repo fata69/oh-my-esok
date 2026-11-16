@@ -164,6 +164,27 @@ class SoundPage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _SoundCard(
+              icon: Icons.done_all,
+              title: 'Semua tugas selesai',
+              subtitle: 'Saat tugas terakhir di hari itu dicentang',
+              current: settings.soundComplete,
+              presets: SoundLibrary.builtIn,
+              onPreset: (option) async {
+                await _applyAndSync(settings.setSoundComplete, option.id);
+                SoundFx.play(option);
+              },
+              onGanti: () => _choose(
+                context,
+                title: 'Bunyi semua tugas selesai',
+                selectedId: settings.soundComplete.id,
+                notifyOnly: false,
+                apply: (id) => _applyAndSync(settings.setSoundComplete, id),
+              ),
+              actionLabel: 'Coba suara',
+              onAction: () => SoundFx.play(settings.soundComplete),
+            ),
+            const SizedBox(height: 12),
+            _SoundCard(
               icon: Icons.trending_up,
               title: 'Saldo bertambah',
               subtitle: 'Saat pemasukan atau refund dicatat',

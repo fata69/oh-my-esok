@@ -162,7 +162,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final settings = context.read<SettingsStore>();
     final updated = await store.toggle(task);
     if (updated.isDone) {
-      if (settings.soundEnabled) SoundFx.play(settings.soundCheck);
+      final dayTasks = await store.tasksFor(updated.date);
+      final allDone =
+          dayTasks.isNotEmpty && dayTasks.every((item) => item.isDone);
+      if (settings.soundEnabled) {
+        SoundFx.play(allDone ? settings.soundComplete : settings.soundCheck);
+      }
       await TaskNotifier.instance.cancel(task.id);
     } else {
       if (settings.soundEnabled) SoundFx.play(settings.soundUncheck);

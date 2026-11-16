@@ -18,17 +18,30 @@ class TaskToggleReceiver : BroadcastReceiver() {
 
         val prefs = HomeWidgetPlugin.getData(context)
         val raw = prefs.getString("tasks_json", "{}") ?: "{}"
+        var completedAll = false
         val serialized: String = if (raw.trimStart().startsWith("[")) {
             val items = try {
                 JSONArray(raw)
             } catch (error: Exception) {
                 JSONArray()
             }
+            var changed = false
             for (index in 0 until items.length()) {
                 val item = items.optJSONObject(index) ?: continue
                 if (item.optString("id") == taskId) {
                     item.put("done", newDone)
+                    changed = true
                 }
+            }
+            if (changed && newDone && items.length() > 0) {
+                var allDone = true
+                for (index in 0 until items.length()) {
+                    if (items.optJSONObject(index)?.optBoolean("done", false) != true) {
+                        allDone = false
+                        break
+                    }
+                }
+                completedAll = allDone
             }
             items.toString()
         } else {
@@ -57,6 +70,9 @@ class TaskToggleReceiver : BroadcastReceiver() {
                     }
                     day.put("done", doneCount)
                     day.put("total", items.length())
+                    if (newDone && items.length() > 0 && doneCount == items.length()) {
+                        completedAll = true
+                    }
                 }
             }
             root.toString()
@@ -76,7 +92,7 @@ class TaskToggleReceiver : BroadcastReceiver() {
             .apply()
 
         TaskWidgetProvider.refreshAll(context)
-        playToggleSound(context, newDone)
+        playToggleSound(context, newDone, completedAll)
     }
 
     /**
@@ -85,7 +101,11 @@ class TaskToggleReceiver : BroadcastReceiver() {
      * Flutter agar pilihan terbaru langsung terpakai; data widget hanya
      * cadangan untuk versi lama.
      */
-    private fun playToggleSound(context: Context, done: Boolean) {
+    private fun playToggleSound(
+        context: Context,
+        done: Boolean,
+        completedAll: Boolean,
+    ) {
         val widgetPrefs = HomeWidgetPlugin.getData(context)
         val appPrefs = context.getSharedPreferences(
             "FlutterSharedPreferences",
@@ -100,11 +120,20 @@ class TaskToggleReceiver : BroadcastReceiver() {
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         if (audio?.ringerMode == AudioManager.RINGER_MODE_SILENT) return
 
-        val suffix = if (done) "check" else "uncheck"
-        val selectedId = appPrefs.getString(
-            if (done) "flutter.sound_check_id" else "flutter.sound_uncheck_id",
-            null,
-        ) ?: if (done) appPrefs.getString("flutter.sound_done_id", null) else null
+        val suffix = when {
+            completedAll -> "complete"
+            done -> "check"
+            else -> "uncheck"
+        }
+        val idKey = when (suffix) {
+            "complete" -> "flutter.sound_complete_id"
+            "check" -> "flutter.sound_check_id"
+            else -> "flutter.sound_uncheck_id"
+        }
+        var selectedId = appPrefs.getString(idKey, null)
+        if (selectedId == null && suffix == "check") {
+            selectedId = appPrefs.getString("flutter.sound_done_id", null)
+        }
 
         var rawName = ""
         var filePath = ""
@@ -132,7 +161,11 @@ class TaskToggleReceiver : BroadcastReceiver() {
                 .orEmpty()
         }
         if (rawName.isEmpty() && filePath.isEmpty()) {
-            rawName = if (done) "chime" else "pop"
+            rawName = when (suffix) {
+                "complete" -> "coin"
+                "check" -> "chime"
+                else -> "pop"
+            }
         }
 
         if (filePath.isNotEmpty() && !File(filePath).isFile) {

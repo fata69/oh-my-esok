@@ -16,6 +16,7 @@ class SettingsStore extends ChangeNotifier {
   static const _soundReminderKey = 'sound_reminder_id';
   static const _soundCheckKey = 'sound_check_id';
   static const _soundUncheckKey = 'sound_uncheck_id';
+  static const _soundCompleteKey = 'sound_complete_id';
   static const _soundDoneLegacyKey = 'sound_done_id';
   static const _soundImportsKey = 'sound_imports';
   static const _aiApiKey = 'ai_api_key';
@@ -34,6 +35,7 @@ class SettingsStore extends ChangeNotifier {
   String _soundReminderId = SoundLibrary.builtIn[0].id;
   String _soundCheckId = SoundLibrary.builtIn[1].id;
   String _soundUncheckId = SoundLibrary.builtIn[2].id;
+  String _soundCompleteId = SoundLibrary.builtIn[0].id;
   List<SoundOption> _importedSounds = const [];
   String _aiKey = '';
   String _aiModel = defaultAiModel;
@@ -79,6 +81,12 @@ class SettingsStore extends ChangeNotifier {
     fallback: SoundLibrary.builtIn[2],
   );
 
+  SoundOption get soundComplete => SoundLibrary.resolve(
+    _soundCompleteId,
+    _importedSounds,
+    fallback: SoundLibrary.builtIn[0],
+  );
+
   String get aiKey => _aiKey;
   String get aiModel => _aiModel;
   bool get aiReady => _aiKey.trim().isNotEmpty;
@@ -106,6 +114,8 @@ class SettingsStore extends ChangeNotifier {
         _soundCheckId;
     _soundUncheckId =
         prefs.getString(_soundUncheckKey) ?? _soundUncheckId;
+    _soundCompleteId =
+        prefs.getString(_soundCompleteKey) ?? _soundCompleteId;
     _importedSounds = _decodeImports(prefs.getString(_soundImportsKey));
     _aiKey = prefs.getString(_aiApiKey) ?? '';
     final storedModel = prefs.getString(_aiModelKey);
@@ -214,6 +224,14 @@ class SettingsStore extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_soundUncheckKey, id);
+  }
+
+  Future<void> setSoundComplete(String id) async {
+    if (_soundCompleteId == id) return;
+    _soundCompleteId = id;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_soundCompleteKey, id);
   }
 
   Future<void> addImportedSound(SoundOption option) async {

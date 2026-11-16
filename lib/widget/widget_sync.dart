@@ -80,6 +80,8 @@ class WidgetSync {
           SoundLibrary.builtIn[1].id;
       final uncheckId =
           prefs.getString('sound_uncheck_id') ?? SoundLibrary.builtIn[2].id;
+      final completeId =
+          prefs.getString('sound_complete_id') ?? SoundLibrary.builtIn[0].id;
       final imported = _decodeImportedSounds(prefs.getString('sound_imports'));
       final check = SoundLibrary.resolve(
         checkId,
@@ -90,6 +92,11 @@ class WidgetSync {
         uncheckId,
         imported,
         fallback: SoundLibrary.builtIn[2],
+      );
+      final complete = SoundLibrary.resolve(
+        completeId,
+        imported,
+        fallback: SoundLibrary.builtIn[0],
       );
       await HomeWidget.saveWidgetData<bool>('sound_enabled', soundEnabled);
       await HomeWidget.saveWidgetData<String>(
@@ -107,6 +114,14 @@ class WidgetSync {
       await HomeWidget.saveWidgetData<String>(
         'sound_uncheck_file',
         uncheck.file ?? '',
+      );
+      await HomeWidget.saveWidgetData<String>(
+        'sound_complete_raw',
+        complete.raw ?? '',
+      );
+      await HomeWidget.saveWidgetData<String>(
+        'sound_complete_file',
+        complete.file ?? '',
       );
       await HomeWidget.updateWidget(androidName: 'MoneyWidgetProvider');
       await HomeWidget.updateWidget(

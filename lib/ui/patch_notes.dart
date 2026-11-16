@@ -29,6 +29,13 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '1.9.3',
+      date: '16 Nov 2026',
+      notes: [
+        'Suara khusus saat semua tugas di satu hari selesai, bisa diatur di Setelan → Suara.',
+      ],
+    ),
+    (
       version: '1.9.2',
       date: '16 Nov 2026',
       notes: [
