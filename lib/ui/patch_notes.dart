@@ -242,7 +242,7 @@ class PatchNotesSheet extends StatelessWidget {
               ],
               const SizedBox(height: 24),
               Text(
-                'Dibuat untuk pemakaian pribadi.',
+                'Dikembangkan dari Esok oleh notSeraphimXD.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
               ),
