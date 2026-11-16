@@ -103,9 +103,9 @@ class _DayMoneySectionState extends State<DayMoneySection> {
               ),
               const SizedBox(height: 12),
               if (transactions.isEmpty)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                Wrap(
+                  spacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.end,
                   children: [
                     Text(
                       '0',
@@ -116,7 +116,6 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
-                    const SizedBox(width: 10),
                     Text(
                       'belum ada transaksi',
                       style: TextStyle(fontSize: 12, color: EsokColors.muted),
@@ -124,9 +123,9 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                   ],
                 )
               else ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                Wrap(
+                  spacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.end,
                   children: [
                     Text(
                       hasIncome ? signedNumberText(big) : numberText(big),
@@ -146,7 +145,6 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
-                    const SizedBox(width: 10),
                     Text(
                       hasIncome ? 'selisih' : 'keluar',
                       style: TextStyle(
@@ -157,7 +155,9 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 4,
                   children: [
                     Text.rich(
                       TextSpan(
@@ -177,7 +177,6 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 20),
                     Text.rich(
                       TextSpan(
                         style: TextStyle(
@@ -264,7 +263,11 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                   },
                   borderRadius: BorderRadius.circular(11),
                   child: Container(
-                    height: 44,
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(11),
                       border: Border.all(color: EsokColors.lineStrong),
@@ -274,14 +277,17 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                       children: [
                         Icon(Icons.add, size: 15, color: EsokColors.ink),
                         const SizedBox(width: 8),
-                        Text(
-                          transactions.isEmpty
-                              ? 'Catat transaksi'
-                              : 'Catat pengeluaran',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: EsokColors.ink,
+                        Flexible(
+                          child: Text(
+                            transactions.isEmpty
+                                ? 'Catat transaksi'
+                                : 'Catat pengeluaran',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: EsokColors.ink,
+                            ),
                           ),
                         ),
                       ],

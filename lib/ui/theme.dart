@@ -4,92 +4,48 @@ class _Palette {
   const _Palette({
     required this.canvas,
     required this.surface,
-    required this.soft,
+    required this.subtle,
+    required this.control,
+    required this.selected,
+    required this.line,
+    required this.outline,
     required this.ink,
     required this.muted,
-    required this.line,
-    required this.accent,
-    required this.positive,
-    required this.negative,
-    required this.lateSurface,
-    required this.lateInk,
-    required this.inkSoft,
-    required this.disabled,
-    required this.lineStrong,
-    required this.barFill,
-    required this.chevron,
-    required this.handle,
-    required this.fabText,
-    required this.onAccent,
-    required this.track,
   });
 
   final Color canvas;
   final Color surface;
-  final Color soft;
+  final Color subtle;
+  final Color control;
+  final Color selected;
+  final Color line;
+  final Color outline;
   final Color ink;
   final Color muted;
-  final Color line;
-  final Color accent;
-  final Color positive;
-  final Color negative;
-  final Color lateSurface;
-  final Color lateInk;
-  final Color inkSoft;
-  final Color disabled;
-  final Color lineStrong;
-  final Color barFill;
-  final Color chevron;
-  final Color handle;
-  final Color fabText;
-  final Color onAccent;
-  final Color track;
 }
 
 const _lightPalette = _Palette(
-  canvas: Color(0xFFFAF9F7),
+  canvas: Color(0xFFFCFCFC),
   surface: Color(0xFFFFFFFF),
-  soft: Color(0xFFF2F0EA),
-  ink: Color(0xFF1A1917),
-  muted: Color(0xFF6B6862),
-  line: Color(0xFFE5E2DC),
-  accent: Color(0xFF8F4A16),
-  positive: Color(0xFF2F7D4F),
-  negative: Color(0xFFB03A2E),
-  lateSurface: Color(0xFFF3E7DE),
-  lateInk: Color(0xFF5A3A20),
-  inkSoft: Color(0xFF3E3B33),
-  disabled: Color(0xFFC4BFB3),
-  lineStrong: Color(0xFFD9D4C9),
-  barFill: Color(0xFF8E887C),
-  chevron: Color(0xFFB9B4A7),
-  handle: Color(0xFFD5D0C4),
-  fabText: Color(0xFFFFFFFF),
-  onAccent: Color(0xFFFFFFFF),
-  track: Color(0xFFEFECE5),
+  subtle: Color(0xFFF9F9F9),
+  control: Color(0xFFF0F0F0),
+  selected: Color(0xFFE0E0E0),
+  line: Color(0xFFD9D9D9),
+  outline: Color(0xFF8D8D8D),
+  ink: Color(0xFF202020),
+  muted: Color(0xFF646464),
 );
 
 const _darkPalette = _Palette(
-  canvas: Color(0xFF14130F),
-  surface: Color(0xFF1C1B17),
-  soft: Color(0xFF1F1E19),
-  ink: Color(0xFFF2F0EA),
-  muted: Color(0xFF9A968C),
-  line: Color(0xFF2A2823),
-  accent: Color(0xFFE08A4B),
-  positive: Color(0xFF5FAE7C),
-  negative: Color(0xFFE07A63),
-  lateSurface: Color(0xFF2A1D14),
-  lateInk: Color(0xFFE0A57F),
-  inkSoft: Color(0xFFD6D1C6),
-  disabled: Color(0xFF5D594F),
-  lineStrong: Color(0xFF3A372F),
-  barFill: Color(0xFF6E6A5F),
-  chevron: Color(0xFF6E6A5F),
-  handle: Color(0xFF3A372F),
-  fabText: Color(0xFF14130F),
-  onAccent: Color(0xFF14130F),
-  track: Color(0xFF2A2823),
+  canvas: Color(0xFF111111),
+  surface: Color(0xFF191919),
+  subtle: Color(0xFF191919),
+  control: Color(0xFF222222),
+  selected: Color(0xFF313131),
+  line: Color(0xFF3A3A3A),
+  outline: Color(0xFF6E6E6E),
+  ink: Color(0xFFEEEEEE),
+  muted: Color(0xFFB4B4B4),
 );
 
 class EsokColors {
@@ -105,31 +61,39 @@ class EsokColors {
 
   static _Palette get _p => _dark ? _darkPalette : _lightPalette;
 
+  static const scrim = Color(0x52000000);
+
   static Color get canvas => _p.canvas;
   static Color get surface => _p.surface;
-  static Color get soft => _p.soft;
+  static Color get soft => _p.control;
+  static Color get selected => _p.selected;
   static Color get ink => _p.ink;
   static Color get muted => _p.muted;
   static Color get line => _p.line;
-  static Color get accent => _p.accent;
-  static Color get positive => _p.positive;
-  static Color get negative => _p.negative;
-  static Color get done => positive;
-  static Color get lateSurface => _p.lateSurface;
-  static Color get lateInk => _p.lateInk;
-  static Color get inkSoft => _p.inkSoft;
-  static Color get disabled => _p.disabled;
-  static Color get lineStrong => _p.lineStrong;
-  static Color get barFill => _p.barFill;
-  static Color get chevron => _p.chevron;
-  static Color get handle => _p.handle;
-  static Color get fabText => _p.fabText;
-  static Color get onAccent => _p.onAccent;
-  static Color get track => _p.track;
+  static Color get accent => _p.ink;
+
+  // Keep the semantic roles for existing screens. Their labels, signs and
+  // checkmarks convey the meaning independently of hue.
+  static Color get positive => _p.ink;
+  static Color get negative => _p.ink;
+  static Color get done => _p.ink;
+  static Color get lateSurface => _p.control;
+  static Color get lateInk => _p.ink;
+  static Color get inkSoft => _p.muted;
+  static Color get disabled => _p.outline;
+  static Color get lineStrong => _p.line;
+  static Color get barFill => _p.muted;
+  static Color get chevron => _p.outline;
+  static Color get handle => _p.outline;
+  static Color get fabText => _p.canvas;
+  static Color get onAccent => _p.canvas;
+  static Color get track => _p.control;
 }
 
 class EsokTheme {
   EsokTheme._();
+
+  static const _fontFamily = 'PlusJakartaSans';
 
   static ThemeData light() => _build(_lightPalette, Brightness.light);
 
@@ -138,26 +102,32 @@ class EsokTheme {
   static ThemeData _build(_Palette p, Brightness brightness) {
     final base = ThemeData(
       useMaterial3: true,
-      brightness: brightness,
-      scaffoldBackgroundColor: p.canvas,
-      fontFamily: 'PlusJakartaSans',
-    );
-    final isDark = brightness == Brightness.dark;
-
-    return base.copyWith(
       colorScheme: ColorScheme(
         brightness: brightness,
-        primary: p.accent,
-        onPrimary: p.onAccent,
-        secondary: p.positive,
-        onSecondary: isDark ? p.canvas : p.surface,
-        error: p.negative,
-        onError: isDark ? p.canvas : p.surface,
+        primary: p.ink,
+        onPrimary: p.canvas,
+        primaryContainer: p.selected,
+        onPrimaryContainer: p.ink,
+        secondary: p.ink,
+        onSecondary: p.canvas,
+        error: p.ink,
+        onError: p.canvas,
         surface: p.canvas,
         onSurface: p.ink,
-        outline: p.line,
+        onSurfaceVariant: p.muted,
+        surfaceContainerLowest: p.surface,
+        surfaceContainerLow: p.subtle,
+        surfaceContainer: p.control,
+        surfaceContainerHigh: p.control,
+        surfaceContainerHighest: p.selected,
+        outline: p.outline,
         outlineVariant: p.line,
+        surfaceTint: Colors.transparent,
       ),
+      scaffoldBackgroundColor: p.canvas,
+      fontFamily: _fontFamily,
+    );
+    return base.copyWith(
       textTheme: base.textTheme.copyWith(
         headlineSmall: TextStyle(
           fontSize: 28,
@@ -187,13 +157,13 @@ class EsokTheme {
           letterSpacing: 0.09,
           color: p.muted,
         ),
-      ),
+      ).apply(fontFamily: _fontFamily),
       dividerTheme: DividerThemeData(
         color: p.line,
         thickness: 1,
         space: 1,
       ),
-      splashFactory: InkSparkle.splashFactory,
+      splashFactory: InkRipple.splashFactory,
       snackBarTheme: SnackBarThemeData(
         backgroundColor: p.ink,
         contentTextStyle: TextStyle(color: p.canvas, fontSize: 13),
@@ -227,7 +197,7 @@ class EsokTheme {
         dayShape: WidgetStateProperty.resolveWith<OutlinedBorder?>((states) {
           if (states.contains(WidgetState.selected)) {
             return CircleBorder(
-              side: BorderSide(color: p.accent, width: 1.5),
+              side: BorderSide(color: p.ink, width: 1.5),
             );
           }
           return const CircleBorder();
@@ -240,10 +210,10 @@ class EsokTheme {
       ),
       timePickerTheme: TimePickerThemeData(
         backgroundColor: p.canvas,
-        dialBackgroundColor: p.soft,
+        dialBackgroundColor: p.control,
         dialHandColor: p.ink,
-        hourMinuteColor: p.soft,
-        dayPeriodColor: p.soft,
+        hourMinuteColor: p.control,
+        dayPeriodColor: p.control,
         entryModeIconColor: p.muted,
       ),
     );

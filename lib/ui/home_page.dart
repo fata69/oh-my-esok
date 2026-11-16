@@ -17,6 +17,7 @@ import '../widget/widget_sync.dart';
 import 'calendar_sheet.dart';
 import 'chevron.dart';
 import 'day_money_section.dart';
+import 'floating_add_button.dart';
 import 'patch_notes.dart';
 import 'task_editor.dart';
 import 'theme.dart';
@@ -98,7 +99,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (context) => CalendarSheet(initialDate: store.selectedDate),
     );
     if (picked != null) {
@@ -112,7 +113,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (context) =>
           TaskEditorSheet(task: task, initialDate: date ?? store.selectedDate),
     );
@@ -129,7 +130,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           content: const Text('Tugas dihapus.'),
           action: SnackBarAction(
             label: 'Urungkan',
-            textColor: const Color(0xFFE08A4B),
+            textColor: EsokColors.canvas,
             onPressed: () async {
               await store.restore(task);
               await TaskNotifier.instance.schedule(task);
@@ -263,129 +264,112 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final store = context.watch<TaskStore>();
     final selected = store.selectedDate;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: EsokColors.canvas,
-        systemNavigationBarDividerColor: EsokColors.canvas,
-        systemNavigationBarIconBrightness: Brightness.dark,
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 6, 10, 0),
+              child: Row(
+                children: [
+                  SvgPicture.asset(
+                    'assets/brand/esok-wordmark.svg',
+                    height: 26,
+                    colorFilter: ColorFilter.mode(
+                      EsokColors.ink,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                  const Spacer(),
+                  PopupMenuButton<String>(
+                    tooltip: 'Pengaturan',
+                    icon: Icon(
+                      Icons.more_horiz,
+                      size: 20,
+                      color: EsokColors.muted,
+                    ),
+                    color: EsokColors.surface,
+                    surfaceTintColor: Colors.transparent,
+                    onSelected: (value) {
+                      if (value == 'alarms') {
+                        TaskNotifier.instance.requestExactAlarms();
+                      } else if (value == 'battery') {
+                        _openBatterySettings();
+                      } else if (value == 'widget') {
+                        _pinWidget();
+                      } else if (value == 'release_notes') {
+                        _openReleaseNotes();
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'alarms',
+                        child: Text('Alarm & pengingat'),
+                      ),
+                      PopupMenuItem(
+                        value: 'battery',
+                        child: Text('Baterai tanpa batas'),
+                      ),
+                      PopupMenuItem(
+                        value: 'widget',
+                        child: Text('Pasang widget'),
+                      ),
+                      PopupMenuItem(
+                        value: 'release_notes',
+                        child: Text('Catatan rilis'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _DateNav(
+                date: selected,
+                count: store.tasks.length,
+                canGoBack: store.canGoPrevious,
+                onBack: () =>
+                    _jumpTo(selected.subtract(const Duration(days: 1))),
+                onForward: () =>
+                    _jumpTo(selected.add(const Duration(days: 1))),
+                onTapDate: _openCalendar,
+              ),
+            ),
+            Expanded(
+              child: PageView.builder(
+                controller: _controller,
+                itemCount: _basePage * 2 + 1,
+                onPageChanged: (index) {
+                  context.read<TaskStore>().selectDate(_dateForPage(index));
+                },
+                itemBuilder: (context, index) {
+                  final date = _dateForPage(index);
+                  return _DayPane(
+                    key: ValueKey(index),
+                    date: date,
+                    revision: store.revision,
+                    atEarliest: date == store.earliestAllowedDate,
+                    onToggle: _toggle,
+                    onOpen: (task) => _openEditor(task: task),
+                    onAdd: () => _openEditor(date: date),
+                    onJumpToday: () => _jumpTo(today()),
+                    onJumpNext: () =>
+                        _jumpTo(date.add(const Duration(days: 1))),
+                    onOpenMoney: widget.onOpenMoney,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 6, 10, 0),
-                child: Row(
-                  children: [
-                    SvgPicture.asset(
-                      'assets/brand/esok-wordmark.svg',
-                      height: 26,
-                      colorFilter: ColorFilter.mode(
-                        EsokColors.ink,
-                        BlendMode.srcIn,
-                      ),
-                    ),
-                    const Spacer(),
-                    PopupMenuButton<String>(
-                      tooltip: 'Pengaturan',
-                      icon: Icon(
-                        Icons.more_horiz,
-                        size: 20,
-                        color: EsokColors.muted,
-                      ),
-                      color: EsokColors.surface,
-                      surfaceTintColor: Colors.transparent,
-                      onSelected: (value) {
-                        if (value == 'alarms') {
-                          TaskNotifier.instance.requestExactAlarms();
-                        } else if (value == 'battery') {
-                          _openBatterySettings();
-                        } else if (value == 'widget') {
-                          _pinWidget();
-                        } else if (value == 'release_notes') {
-                          _openReleaseNotes();
-                        }
-                      },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(
-                          value: 'alarms',
-                          child: Text('Alarm & pengingat'),
-                        ),
-                        PopupMenuItem(
-                          value: 'battery',
-                          child: Text('Baterai tanpa batas'),
-                        ),
-                        PopupMenuItem(
-                          value: 'widget',
-                          child: Text('Pasang widget'),
-                        ),
-                        PopupMenuItem(
-                          value: 'release_notes',
-                          child: Text('Catatan rilis'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _DateNav(
-                  date: selected,
-                  count: store.tasks.length,
-                  canGoBack: store.canGoPrevious,
-                  onBack: () =>
-                      _jumpTo(selected.subtract(const Duration(days: 1))),
-                  onForward: () =>
-                      _jumpTo(selected.add(const Duration(days: 1))),
-                  onTapDate: _openCalendar,
-                ),
-              ),
-              Expanded(
-                child: PageView.builder(
-                  controller: _controller,
-                  itemCount: _basePage * 2 + 1,
-                  onPageChanged: (index) {
-                    context.read<TaskStore>().selectDate(_dateForPage(index));
-                  },
-                  itemBuilder: (context, index) {
-                    final date = _dateForPage(index);
-                    return _DayPane(
-                      key: ValueKey(index),
-                      date: date,
-                      revision: store.revision,
-                      atEarliest: date == store.earliestAllowedDate,
-                      onToggle: _toggle,
-                      onOpen: (task) => _openEditor(task: task),
-                      onAdd: () => _openEditor(date: date),
-                      onJumpToday: () => _jumpTo(today()),
-                      onJumpNext: () =>
-                          _jumpTo(date.add(const Duration(days: 1))),
-                      onOpenMoney: widget.onOpenMoney,
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        floatingActionButton: Padding(
-          padding: const EdgeInsets.only(right: 4, bottom: 4),
-          child: FloatingActionButton(
-            onPressed: () => _openEditor(date: store.selectedDate),
-            backgroundColor: EsokColors.accent,
-            foregroundColor: EsokColors.fabText,
-            elevation: 2,
-            shape: const CircleBorder(),
-            tooltip: 'Tambah tugas',
-            child: const Icon(Icons.add, size: 24),
-          ),
-        ),
+      floatingActionButton: EsokFloatingAddButton(
+        bottomLift: EsokFloatingAddButton.liftOf(context),
+        tooltip: 'Tambah tugas',
+        onPressed: () => _openEditor(date: store.selectedDate),
       ),
     );
   }
@@ -570,7 +554,12 @@ class _DayPaneState extends State<_DayPane> {
         final isPast = widget.date.isBefore(today());
 
         return ListView(
-          padding: const EdgeInsets.fromLTRB(24, 18, 24, 140),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            18,
+            24,
+            EsokFloatingAddButton.scrollBottomOf(context),
+          ),
           children: [
             if (tasks.isEmpty) _EmptyState(onAdd: widget.onAdd),
             for (var index = 0; index < tasks.length; index++)
@@ -670,8 +659,8 @@ class _TaskRow extends StatelessWidget {
                 child: GestureDetector(
                   onTap: onOpen,
                   behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    height: 64,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 64),
                     child: Row(
                       children: [
                         Expanded(
@@ -729,9 +718,11 @@ class _LateNote extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 9),
-          Text(
-            '$count tugas belum dicentang',
-            style: TextStyle(fontSize: 12, color: EsokColors.lateInk),
+          Expanded(
+            child: Text(
+              '$count tugas belum dicentang',
+              style: TextStyle(fontSize: 12, color: EsokColors.lateInk),
+            ),
           ),
         ],
       ),

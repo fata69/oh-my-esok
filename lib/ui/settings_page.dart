@@ -84,7 +84,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final value = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _Sheet(
         title: 'Pengingat awal',
         child: Column(
@@ -187,7 +187,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       isScrollControlled: true,
       builder: (sheetContext) => Padding(
         padding: EdgeInsets.only(
@@ -287,7 +287,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (context) => _Sheet(
         title: 'Lisensi font',
         child: Text(
@@ -338,7 +338,12 @@ class _SettingsPageState extends State<SettingsPage> {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            10,
+            24,
+            MediaQuery.paddingOf(context).bottom + 16,
+          ),
           children: [
             Text(
               'Setelan',
@@ -495,97 +500,73 @@ class _ThemeSelector extends StatelessWidget {
   final ThemeMode value;
   final ValueChanged<ThemeMode> onChanged;
 
-  int get _index => switch (value) {
-    ThemeMode.light => 0,
-    ThemeMode.system => 1,
-    ThemeMode.dark => 2,
-  };
-
   @override
   Widget build(BuildContext context) {
-    final disabled = MediaQuery.of(context).disableAnimations;
-    final duration = disabled
-        ? Duration.zero
-        : const Duration(milliseconds: 180);
-    const labels = ['Terang', 'Sistem', 'Gelap'];
-    const modes = [ThemeMode.light, ThemeMode.system, ThemeMode.dark];
+    const modes = [
+      (ThemeMode.light, 'Terang'),
+      (ThemeMode.system, 'Ikut sistem'),
+      (ThemeMode.dark, 'Gelap'),
+    ];
+    const radius = BorderRadius.all(Radius.circular(8));
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final segment = (width - 8) / 3;
-        return Container(
-          height: 40,
-          decoration: BoxDecoration(
-            color: EsokColors.soft,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Stack(
-            children: [
-              AnimatedPositioned(
-                duration: duration,
-                curve: Curves.easeOutQuint,
-                left: 4 + _index * segment,
-                top: 4,
-                bottom: 4,
-                width: segment,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: EsokColors.ink,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  for (var i = 0; i < labels.length; i++)
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onChanged(modes[i]),
-                        child: Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (i != 1) ...[
-                                Container(
-                                  width: 9,
-                                  height: 9,
-                                  decoration: BoxDecoration(
-                                    color: i == 0
-                                        ? const Color(0xFFFAF9F7)
-                                        : const Color(0xFF14130F),
-                                    borderRadius: BorderRadius.circular(3),
-                                    border: Border.all(
-                                      color: EsokColors.muted.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Text(
-                                labels[i],
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: _index == i
-                                      ? EsokColors.canvas
-                                      : EsokColors.muted,
-                                ),
+    return Material(
+      color: EsokColors.soft,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            for (final (mode, label) in modes)
+              Expanded(
+                child: Semantics(
+                  container: true,
+                  button: true,
+                  selected: mode == value,
+                  inMutuallyExclusiveGroup: true,
+                  label: label,
+                  onTap: () => onChanged(mode),
+                  excludeSemantics: true,
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: mode == value
+                          ? EsokColors.selected
+                          : Colors.transparent,
+                      borderRadius: radius,
+                    ),
+                    child: InkWell(
+                      onTap: () => onChanged(mode),
+                      borderRadius: radius,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 8,
+                          ),
+                          child: Center(
+                            heightFactor: 1,
+                            child: Text(
+                              label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                letterSpacing: 0,
+                                fontWeight: FontWeight.w600,
+                                color: mode == value
+                                    ? EsokColors.ink
+                                    : EsokColors.muted,
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                ],
+                  ),
+                ),
               ),
-            ],
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }
@@ -627,7 +608,7 @@ class _Toggle extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x3314120E),
+                  color: Color(0x33000000),
                   blurRadius: 2,
                   offset: Offset(0, 1),
                 ),

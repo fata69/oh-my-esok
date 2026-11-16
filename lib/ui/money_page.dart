@@ -7,6 +7,7 @@ import '../data/task.dart';
 import '../state/money_store.dart';
 import '../util/format.dart';
 import 'chevron.dart';
+import 'floating_add_button.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
 import 'theme.dart';
@@ -46,7 +47,7 @@ class MoneyPage extends StatelessWidget {
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (sheetContext) => Container(
         decoration: BoxDecoration(
           color: EsokColors.canvas,
@@ -98,7 +99,7 @@ class MoneyPage extends StatelessWidget {
       await showModalBottomSheet<void>(
         context: context,
         backgroundColor: Colors.transparent,
-        barrierColor: const Color(0x5214120E),
+        barrierColor: EsokColors.scrim,
         isScrollControlled: true,
         builder: (_) => ItemsSheet(
           detail: transaction.detail!,
@@ -181,7 +182,12 @@ class MoneyPage extends StatelessWidget {
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 110),
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  8,
+                  24,
+                  EsokFloatingAddButton.scrollBottomOf(context),
+                ),
                 children: [
                   _BalanceBlock(store: store),
                   if (grouped.isEmpty)
@@ -222,14 +228,10 @@ class MoneyPage extends StatelessWidget {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openEditor(context, initialDate: today()),
-        backgroundColor: EsokColors.ink,
-        foregroundColor: EsokColors.fabText,
-        elevation: 2,
-        shape: const CircleBorder(),
+      floatingActionButton: EsokFloatingAddButton(
+        bottomLift: EsokFloatingAddButton.liftOf(context),
         tooltip: 'Catat transaksi',
-        child: const Icon(Icons.add, size: 24),
+        onPressed: () => _openEditor(context, initialDate: today()),
       ),
     );
   }
@@ -324,7 +326,9 @@ class _BalanceBlock extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
+        Wrap(
+          spacing: 18,
+          runSpacing: 4,
           children: [
             Text.rich(
               TextSpan(
@@ -341,7 +345,6 @@ class _BalanceBlock extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 18),
             Text.rich(
               TextSpan(
                 style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
@@ -450,7 +453,8 @@ class _AccountBalanceRow extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        height: 52,
+        constraints: const BoxConstraints(minHeight: 52),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: EsokColors.line)),
         ),
