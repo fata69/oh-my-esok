@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_canvas">#14130F</color>
+    <color name="widget_ink">#F2F0EA</color>
+    <color name="widget_muted">#9A968C</color>
+    <color name="widget_line">#2A2823</color>
+    <color name="widget_negative">#E07A63</color>
+    <color name="widget_positive">#5FAE7C</color>
+    <color name="widget_soft">#1F1E19</color>
+</resources>

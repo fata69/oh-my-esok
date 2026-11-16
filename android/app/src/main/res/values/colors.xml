@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="esok_canvas">#FAF9F7</color>
+    <color name="widget_canvas">#FAF9F7</color>
+    <color name="widget_ink">#1A1917</color>
+    <color name="widget_muted">#6B6862</color>
+    <color name="widget_line">#E5E2DC</color>
+    <color name="widget_negative">#B03A2E</color>
+    <color name="widget_positive">#2F7D4F</color>
+    <color name="widget_soft">#F2F0EA</color>
+</resources>

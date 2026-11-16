@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/money_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/money_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif"
+        android:letterSpacing="0.09"
+        android:text="HARI INI"
+        android:textColor="@color/widget_muted"
+        android:textSize="9.5sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/money_today"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="sans-serif"
+        android:fontFeatureSettings="tnum"
+        android:maxLines="1"
+        android:text="Rp 0"
+        android:textColor="@color/widget_negative"
+        android:textSize="25sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="bottom"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="0.09"
+                android:text="BULAN INI"
+                android:textColor="@color/widget_muted"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/money_month"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="sans-serif"
+                android:fontFeatureSettings="tnum"
+                android:text="Rp 0"
+                android:textColor="@color/widget_negative"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/money_plus"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/widget_plus_bg"
+            android:contentDescription="@string/widget_open"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:text="+"
+            android:textColor="@color/widget_ink"
+            android:textSize="18sp" />
+    </LinearLayout>
+</LinearLayout>
