@@ -25,10 +25,19 @@ enum UpdatePhase {
 }
 
 class UpdateController extends ChangeNotifier {
-  UpdateController() : _clientFactory = (() => HttpClient());
+  UpdateController()
+    : _clientFactory = (() => HttpClient()),
+      _temporaryDirectory = getTemporaryDirectory,
+      _installPollInterval = const Duration(milliseconds: 500);
   @visibleForTesting
-  UpdateController.withClient(this._clientFactory);
+  UpdateController.withClient(
+    this._clientFactory, {
+    this._temporaryDirectory = getTemporaryDirectory,
+    this._installPollInterval = const Duration(milliseconds: 500),
+  });
   final HttpClient Function() _clientFactory;
+  final Future<Directory> Function() _temporaryDirectory;
+  final Duration _installPollInterval;
   static const _bridge = MethodChannel('ohmyesok/update');
   UpdatePhase phase = UpdatePhase.idle;
   String installedVersion = '…';
@@ -42,6 +51,7 @@ class UpdateController extends ChangeNotifier {
   File? _apk;
   bool _cancelled = false;
   bool _disposed = false;
+  Timer? _installPoll;
   bool get busy => {
     UpdatePhase.checking,
     UpdatePhase.downloading,
@@ -51,6 +61,7 @@ class UpdateController extends ChangeNotifier {
 
   void _publish(UpdatePhase next, [String? detail]) {
     if (_disposed) return;
+    if (next != UpdatePhase.awaitingAndroid) _installPoll?.cancel();
     phase = next;
     message = detail;
     notifyListeners();
@@ -171,7 +182,7 @@ class UpdateController extends ChangeNotifier {
     File? partial;
     try {
       final directory = Directory(
-        '${(await getTemporaryDirectory()).path}/updates',
+        '${(await _temporaryDirectory()).path}/updates',
       );
       if (_disposed) return;
       await directory.create(recursive: true);
@@ -240,15 +251,20 @@ class UpdateController extends ChangeNotifier {
   }
 
   Future<void> install() async {
-    if (release == null || _apk == null || busy) return;
+    final target = release;
+    if (target == null || _apk == null || phase != UpdatePhase.ready) return;
+    _publish(UpdatePhase.awaitingAndroid);
     try {
       final permitted = await _bridge.invokeMethod<bool>('canInstall') ?? false;
+      if (_disposed) return;
       if (!permitted) {
         _publish(UpdatePhase.permissionRequired);
         return;
       }
-      _publish(UpdatePhase.awaitingAndroid);
-      await _bridge.invokeMethod<void>('install', _arguments(release!));
+      await _bridge.invokeMethod<void>('install', _arguments(target));
+      // A rejected commit can report failure without opening an activity.
+      // Observe the callback even if Flutter never receives a resume event.
+      await _observeInstaller();
     } catch (error) {
       _publish(UpdatePhase.failed, _error(error));
     }
@@ -263,27 +279,47 @@ class UpdateController extends ChangeNotifier {
   }
 
   Future<void> onResume() async {
-    if (phase == UpdatePhase.permissionRequired ||
-        phase == UpdatePhase.awaitingAndroid) {
-      try {
-        await loadInstalled();
-        if (_disposed) return;
-        if (release != null && installedCode >= release!.versionCode) {
-          _publish(UpdatePhase.upToDate, 'Pembaruan berhasil dipasang.');
-        } else {
-          final status = await _bridge.invokeMethod<String>('installStatus');
+    if (phase != UpdatePhase.permissionRequired) return;
+    try {
+      final permitted = await _bridge.invokeMethod<bool>('canInstall') ?? false;
+      if (phase == UpdatePhase.permissionRequired && permitted) {
+        _publish(UpdatePhase.ready);
+      }
+    } catch (error) {
+      _publish(UpdatePhase.failed, _error(error));
+    }
+  }
+
+  Future<void> _observeInstaller() async {
+    if (_disposed || phase != UpdatePhase.awaitingAndroid) return;
+    try {
+      final status = await _bridge.invokeMethod<String>('installStatus');
+      if (_disposed || phase != UpdatePhase.awaitingAndroid) return;
+      switch (status) {
+        case 'success':
+          await loadInstalled();
+          if (release != null && installedCode >= release!.versionCode) {
+            _publish(UpdatePhase.upToDate, 'Pembaruan berhasil dipasang.');
+            return;
+          }
+        case 'failed':
           _publish(
             UpdatePhase.ready,
-            status == 'failed'
-                ? 'Pemasangan dibatalkan atau ditolak Android. Kamu bisa mencoba lagi.'
-                : status == 'awaiting_user'
-                ? 'Ketuk Pasang untuk melanjutkan konfirmasi Android.'
-                : null,
+            'Pemasangan dibatalkan atau ditolak Android. Kamu bisa mencoba lagi.',
           );
-        }
-      } catch (error) {
-        _publish(UpdatePhase.failed, _error(error));
+          return;
+        case 'awaiting_user':
+          _publish(
+            UpdatePhase.ready,
+            'Ketuk Pasang untuk melanjutkan konfirmasi Android.',
+          );
+          return;
       }
+      if (!_disposed && phase == UpdatePhase.awaitingAndroid) {
+        _installPoll = Timer(_installPollInterval, _observeInstaller);
+      }
+    } catch (error) {
+      _publish(UpdatePhase.failed, _error(error));
     }
   }
 
@@ -358,6 +394,7 @@ class UpdateController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _installPoll?.cancel();
     _client?.close(force: true);
     super.dispose();
   }

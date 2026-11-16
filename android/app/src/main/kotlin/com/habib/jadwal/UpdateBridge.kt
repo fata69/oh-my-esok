@@ -54,6 +54,7 @@ class UpdateBridge(private val activity: Activity, messenger: BinaryMessenger) {
                             activity.runOnUiThread {
                                 try {
                                     require(confirmWhenActive(pending)) { "Buka aplikasi untuk melanjutkan pemasangan." }
+                                    activity.getSharedPreferences("updates", 0).edit().putString("status", "pending").apply()
                                     result.success(null)
                                 } catch (_: Exception) {
                                     result.error("confirmation", "Konfirmasi Android tidak dapat dibuka. Coba lagi.", null)

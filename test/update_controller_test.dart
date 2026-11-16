@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:jadwal/update/update_controller.dart';
@@ -14,6 +16,7 @@ class _Headers extends Fake implements HttpHeaders {
 class _Response extends Stream<List<int>> implements HttpClientResponse {
   _Response(this.statusCode, Object body)
     : bytes = utf8.encode(jsonEncode(body));
+  _Response.bytes(this.statusCode, this.bytes);
   @override
   final int statusCode;
   final List<int> bytes;
@@ -177,4 +180,74 @@ void main() {
     expect(controller.phase, UpdatePhase.failed);
     expect(controller.release, isNull);
   });
+
+  test(
+    'installer failure unlocks the page without a lifecycle change',
+    () async {
+      const bridge = MethodChannel('ohmyesok/update');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final cache = await Directory.systemTemp.createTemp(
+        'oh-my-esok-install-test',
+      );
+      addTearDown(() => cache.delete(recursive: true));
+      final binary = List<int>.generate(123, (index) => index);
+      final info = metadata();
+      (info['apk']! as Map)['sha256'] = sha256.convert(binary).toString();
+      final firstPoll = Completer<void>();
+      final nextPoll = Completer<void>();
+      var installCalls = 0;
+      var statusCalls = 0;
+      var nativeStatus = 'pending';
+      messenger.setMockMethodCallHandler(bridge, (call) async {
+        switch (call.method) {
+          case 'checkApk':
+            return null;
+          case 'canInstall':
+            return true;
+          case 'install':
+            installCalls++;
+            return null;
+          case 'installStatus':
+            statusCalls++;
+            if (statusCalls == 1) firstPoll.complete();
+            if (statusCalls == 2) nextPoll.complete();
+            return nativeStatus;
+        }
+        throw StateError('Unexpected method: ${call.method}');
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(bridge, null));
+      final responses = [
+        _Response(200, release()),
+        _Response(200, info),
+        _Response.bytes(200, binary),
+      ];
+      final controller = UpdateController.withClient(
+        () => _Client(responses),
+        temporaryDirectory: () async => cache,
+        installPollInterval: const Duration(milliseconds: 5),
+      );
+      addTearDown(controller.dispose);
+      await controller.check();
+      await controller.download();
+      expect(controller.phase, UpdatePhase.ready);
+      await Future.wait([controller.install(), controller.install()]);
+      await firstPoll.future.timeout(const Duration(seconds: 2));
+      await nextPoll.future.timeout(const Duration(seconds: 2));
+      expect(controller.phase, UpdatePhase.awaitingAndroid);
+      expect(installCalls, 1);
+
+      final unlocked = Completer<void>();
+      controller.addListener(() {
+        if (controller.phase == UpdatePhase.ready && !unlocked.isCompleted) {
+          unlocked.complete();
+        }
+      });
+      nativeStatus = 'failed';
+      await unlocked.future.timeout(const Duration(seconds: 2));
+      expect(controller.busy, isFalse);
+      expect(controller.message, contains('ditolak Android'));
+      expect(installCalls, 1);
+    },
+  );
 }
