@@ -133,7 +133,7 @@ class _DataPageState extends State<DataPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: EsokColors.canvas,
+        backgroundColor: EsokColors.of(context).canvas,
         title: const Text('Hapus semua data?'),
         content: const Text(
           'Semua tugas dan transaksi akan dihapus. Tindakan ini tidak bisa dibatalkan.',
@@ -177,8 +177,9 @@ class _DataPageState extends State<DataPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Scaffold(
-      backgroundColor: EsokColors.canvas,
+      backgroundColor: colors.canvas,
       body: SafeArea(
         child: Column(
           children: [
@@ -202,7 +203,7 @@ class _DataPageState extends State<DataPage> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: EsokColors.ink,
+                        color: colors.ink,
                       ),
                     ),
                   ),
@@ -276,10 +277,11 @@ class _StatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 18, 20, 0),
       decoration: BoxDecoration(
-        border: Border.all(color: EsokColors.line),
+        border: Border.all(color: colors.line),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
@@ -307,13 +309,14 @@ class _StatCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
         decoration: BoxDecoration(
           border: last
               ? null
-              : Border(right: BorderSide(color: EsokColors.line)),
+              : Border(right: BorderSide(color: colors.line)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,7 +326,7 @@ class _StatCell extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 letterSpacing: 0.06,
-                color: EsokColors.muted,
+                color: colors.muted,
               ),
             ),
             const SizedBox(height: 4),
@@ -332,7 +335,7 @@ class _StatCell extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: EsokColors.ink,
+                color: colors.ink,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
@@ -350,6 +353,7 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
       child: Text(
@@ -358,7 +362,7 @@ class _SectionLabel extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.09,
-          color: EsokColors.muted,
+          color: colors.muted,
         ),
       ),
     );
@@ -384,13 +388,14 @@ class _DataRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return InkWell(
       onTap: onTap,
       child: Container(
         height: 56,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: EsokColors.line)),
+          border: Border(bottom: BorderSide(color: colors.line)),
         ),
         child: Row(
           children: [
@@ -399,7 +404,7 @@ class _DataRow extends StatelessWidget {
               child: Icon(
                 icon,
                 size: 19,
-                color: danger ? EsokColors.lateInk : EsokColors.ink,
+                color: danger ? colors.lateInk : colors.ink,
               ),
             ),
             const SizedBox(width: 13),
@@ -412,7 +417,7 @@ class _DataRow extends StatelessWidget {
                     label,
                     style: TextStyle(
                       fontSize: 14.5,
-                      color: danger ? EsokColors.lateInk : EsokColors.ink,
+                      color: danger ? colors.lateInk : colors.ink,
                     ),
                   ),
                   if (detail != null)
@@ -420,7 +425,7 @@ class _DataRow extends StatelessWidget {
                       detail!,
                       style: TextStyle(
                         fontSize: 11,
-                        color: EsokColors.muted,
+                        color: colors.muted,
                       ),
                     ),
                 ],
@@ -429,7 +434,7 @@ class _DataRow extends StatelessWidget {
             if (trailing != null)
               Text(
                 trailing!,
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
+                style: TextStyle(fontSize: 11.5, color: colors.muted),
               ),
           ],
         ),
@@ -443,10 +448,11 @@ class _InfoBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: EsokColors.soft,
+        color: colors.soft,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text.rich(
@@ -454,7 +460,7 @@ class _InfoBox extends StatelessWidget {
           style: TextStyle(
             fontSize: 11.5,
             height: 1.7,
-            color: EsokColors.muted,
+            color: colors.muted,
           ),
           children: [
             TextSpan(text: 'Berkas cadangan berisi '),
@@ -462,7 +468,7 @@ class _InfoBox extends StatelessWidget {
               text: 'semua tugas, transaksi, kategori, dan sumber dana',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: EsokColors.inkSoft,
+                color: colors.inkSoft,
               ),
             ),
             TextSpan(
@@ -539,9 +545,10 @@ class _ExportSheetState extends State<_ExportSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: EsokColors.canvas,
+        color: colors.canvas,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
@@ -557,7 +564,7 @@ class _ExportSheetState extends State<_ExportSheet> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
-                  color: EsokColors.handle,
+                  color: colors.handle,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -567,7 +574,7 @@ class _ExportSheetState extends State<_ExportSheet> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: EsokColors.ink,
+                color: colors.ink,
               ),
             ),
             const SizedBox(height: 5),
@@ -576,7 +583,7 @@ class _ExportSheetState extends State<_ExportSheet> {
               '${widget.data.transactions.length} transaksi · '
               '${widget.data.categories.length} kategori · '
               '${widget.data.accounts.length} sumber dana',
-              style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
+              style: TextStyle(fontSize: 11.5, color: colors.muted),
             ),
             const SizedBox(height: 18),
             Text(
@@ -585,7 +592,7 @@ class _ExportSheetState extends State<_ExportSheet> {
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.09,
-                color: EsokColors.muted,
+                color: colors.muted,
               ),
             ),
             const SizedBox(height: 9),
@@ -610,7 +617,7 @@ class _ExportSheetState extends State<_ExportSheet> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: EsokColors.lateSurface,
+                color: colors.lateSurface,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -618,7 +625,7 @@ class _ExportSheetState extends State<_ExportSheet> {
                 style: TextStyle(
                   fontSize: 11.5,
                   height: 1.65,
-                  color: EsokColors.lateInk,
+                  color: colors.lateInk,
                 ),
               ),
             ),
@@ -628,8 +635,8 @@ class _ExportSheetState extends State<_ExportSheet> {
               child: FilledButton(
                 onPressed: _busy ? null : _share,
                 style: FilledButton.styleFrom(
-                  backgroundColor: EsokColors.accent,
-                  foregroundColor: EsokColors.fabText,
+                  backgroundColor: colors.accent,
+                  foregroundColor: colors.fabText,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(11),
                   ),
@@ -643,8 +650,8 @@ class _ExportSheetState extends State<_ExportSheet> {
               child: OutlinedButton(
                 onPressed: _busy ? null : _save,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: EsokColors.ink,
-                  side: BorderSide(color: EsokColors.lineStrong),
+                  foregroundColor: colors.ink,
+                  side: BorderSide(color: colors.lineStrong),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(11),
                   ),
@@ -674,13 +681,14 @@ class _FormatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: selected ? EsokColors.ink : EsokColors.soft,
+          color: selected ? colors.ink : colors.soft,
           borderRadius: BorderRadius.circular(9),
         ),
         child: Row(
@@ -690,7 +698,7 @@ class _FormatChip extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 12.5,
-                color: selected ? EsokColors.canvas : EsokColors.inkSoft,
+                color: selected ? colors.canvas : colors.inkSoft,
               ),
             ),
             const SizedBox(width: 6),
@@ -699,8 +707,8 @@ class _FormatChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9.5,
                 color: selected
-                    ? EsokColors.canvas.withValues(alpha: 0.65)
-                    : EsokColors.muted,
+                    ? colors.canvas.withValues(alpha: 0.65)
+                    : colors.muted,
               ),
             ),
           ],
@@ -718,6 +726,7 @@ class _ImportSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final onlyCategoriesAndAccounts =
         data.tasks.isEmpty && data.transactions.isEmpty;
     return Container(
@@ -725,7 +734,7 @@ class _ImportSheet extends StatelessWidget {
         maxHeight: MediaQuery.sizeOf(context).height * 0.7,
       ),
       decoration: BoxDecoration(
-        color: EsokColors.canvas,
+        color: colors.canvas,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
@@ -742,7 +751,7 @@ class _ImportSheet extends StatelessWidget {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 14),
                   decoration: BoxDecoration(
-                    color: EsokColors.handle,
+                    color: colors.handle,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -752,21 +761,21 @@ class _ImportSheet extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: EsokColors.ink,
+                  color: colors.ink,
                 ),
               ),
               const SizedBox(height: 5),
               Text(
                 'Berkas dibaca, belum ada yang diubah.',
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
+                style: TextStyle(fontSize: 11.5, color: colors.muted),
               ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(13),
                 decoration: BoxDecoration(
-                  color: EsokColors.surface,
+                  color: colors.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: EsokColors.line),
+                  border: Border.all(color: colors.line),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -776,7 +785,7 @@ class _ImportSheet extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
-                        color: EsokColors.ink,
+                        color: colors.ink,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -788,7 +797,7 @@ class _ImportSheet extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.55,
-                        color: EsokColors.muted,
+                        color: colors.muted,
                       ),
                     ),
                   ],
@@ -798,7 +807,7 @@ class _ImportSheet extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: EsokColors.lateSurface,
+                  color: colors.lateSurface,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -811,7 +820,7 @@ class _ImportSheet extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11.5,
                     height: 1.65,
-                    color: EsokColors.lateInk,
+                    color: colors.lateInk,
                   ),
                 ),
               ),
@@ -821,8 +830,8 @@ class _ImportSheet extends StatelessWidget {
                 child: FilledButton(
                   onPressed: () => Navigator.of(context).pop(true),
                   style: FilledButton.styleFrom(
-                    backgroundColor: EsokColors.accent,
-                    foregroundColor: EsokColors.fabText,
+                    backgroundColor: colors.accent,
+                    foregroundColor: colors.fabText,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(11),
                     ),

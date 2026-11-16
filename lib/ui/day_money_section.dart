@@ -31,6 +31,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final store = context.watch<MoneyStore>();
     if (_revision != store.revision || _date != widget.date) {
       _load(store);
@@ -40,7 +41,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
       margin: const EdgeInsets.only(top: 22),
       padding: const EdgeInsets.only(top: 18),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: EsokColors.lineStrong)),
+        border: Border(top: BorderSide(color: colors.lineStrong)),
       ),
       child: FutureBuilder<List<MoneyTransaction>>(
         future: _future,
@@ -84,7 +85,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                         fontSize: 10.5,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.09,
-                        color: EsokColors.muted,
+                        color: colors.muted,
                       ),
                     ),
                   ),
@@ -95,7 +96,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: EsokColors.accent,
+                        color: colors.accent,
                       ),
                     ),
                   ),
@@ -112,13 +113,13 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                       style: TextStyle(
                         fontSize: 27,
                         fontWeight: FontWeight.w600,
-                        color: EsokColors.disabled,
+                        color: colors.disabled,
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
                     Text(
                       'belum ada transaksi',
-                      style: TextStyle(fontSize: 12, color: EsokColors.muted),
+                      style: TextStyle(fontSize: 12, color: colors.muted),
                     ),
                   ],
                 )
@@ -135,13 +136,13 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                         letterSpacing: -0.02,
                         color: hasIncome
                             ? (big < 0
-                                  ? EsokColors.negative
+                                  ? colors.negative
                                   : big > 0
-                                  ? EsokColors.positive
-                                  : EsokColors.ink)
+                                  ? colors.positive
+                                  : colors.ink)
                             : (big > 0
-                                  ? EsokColors.negative
-                                  : EsokColors.ink),
+                                  ? colors.negative
+                                  : colors.ink),
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
@@ -149,7 +150,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                       hasIncome ? 'selisih' : 'keluar',
                       style: TextStyle(
                         fontSize: 12,
-                        color: EsokColors.muted,
+                        color: colors.muted,
                       ),
                     ),
                   ],
@@ -163,7 +164,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                       TextSpan(
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: EsokColors.muted,
+                          color: colors.muted,
                         ),
                         children: [
                           const TextSpan(text: 'Masuk '),
@@ -171,7 +172,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                             text: rupiahText(income),
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: EsokColors.positive,
+                              color: colors.positive,
                             ),
                           ),
                         ],
@@ -181,7 +182,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                       TextSpan(
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: EsokColors.muted,
+                          color: colors.muted,
                         ),
                         children: [
                           const TextSpan(text: 'Keluar '),
@@ -189,7 +190,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                             text: rupiahText(expense),
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: EsokColors.negative,
+                              color: colors.negative,
                             ),
                           ),
                         ],
@@ -211,7 +212,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                                   store.categoryName(entry.key),
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: EsokColors.inkSoft,
+                                    color: colors.inkSoft,
                                   ),
                                 ),
                               ),
@@ -219,7 +220,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                                 numberText(entry.value),
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: EsokColors.negative,
+                                  color: colors.negative,
                                   fontFeatures: [FontFeature.tabularFigures()],
                                 ),
                               ),
@@ -230,13 +231,13 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                             borderRadius: BorderRadius.circular(2),
                             child: Container(
                               height: 3,
-                              color: EsokColors.line,
+                              color: colors.line,
                               child: FractionallySizedBox(
                                 alignment: Alignment.centerLeft,
                                 widthFactor: (entry.value.abs() / maxValue)
                                     .clamp(0.0, 1.0),
                                 child: Container(
-                                  color: EsokColors.barFill,
+                                  color: colors.barFill,
                                 ),
                               ),
                             ),
@@ -270,12 +271,12 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                     ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(11),
-                      border: Border.all(color: EsokColors.lineStrong),
+                      border: Border.all(color: colors.lineStrong),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add, size: 15, color: EsokColors.ink),
+                        Icon(Icons.add, size: 15, color: colors.ink),
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
@@ -286,7 +287,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: EsokColors.ink,
+                              color: colors.ink,
                             ),
                           ),
                         ),

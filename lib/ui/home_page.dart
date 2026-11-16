@@ -16,11 +16,10 @@ import '../util/format.dart';
 import '../util/sound_fx.dart';
 import '../widget/widget_sync.dart';
 import 'calendar_sheet.dart';
-import 'chevron.dart';
 import 'day_money_section.dart';
 import 'day_review_sheet.dart';
-import 'floating_add_button.dart';
 import 'patch_notes.dart';
+import 'tab_layout.dart';
 import 'task_editor.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
@@ -153,7 +152,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           content: const Text('Tugas dihapus.'),
           action: SnackBarAction(
             label: 'Urungkan',
-            textColor: EsokColors.canvas,
+            textColor: EsokColors.of(context).canvas,
             onPressed: () async {
               await store.restore(task);
               await TaskNotifier.instance.schedule(task);
@@ -284,221 +283,90 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final store = context.watch<TaskStore>();
     final selected = store.selectedDate;
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 6, 10, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        'Oh My Esok',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Pengaturan',
-                    icon: Icon(
-                      Icons.more_horiz,
-                      size: 20,
-                      color: EsokColors.muted,
-                    ),
-                    color: EsokColors.surface,
-                    surfaceTintColor: Colors.transparent,
-                    onSelected: (value) {
-                      if (value == 'alarms') {
-                        TaskNotifier.instance.requestExactAlarms();
-                      } else if (value == 'battery') {
-                        _openBatterySettings();
-                      } else if (value == 'widget') {
-                        _pinWidget();
-                      } else if (value == 'release_notes') {
-                        _openReleaseNotes();
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'alarms',
-                        child: Text('Alarm & pengingat'),
-                      ),
-                      PopupMenuItem(
-                        value: 'battery',
-                        child: Text('Baterai tanpa batas'),
-                      ),
-                      PopupMenuItem(
-                        value: 'widget',
-                        child: Text('Pasang widget'),
-                      ),
-                      PopupMenuItem(
-                        value: 'release_notes',
-                        child: Text('Catatan rilis'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: _DateNav(
-                date: selected,
-                count: store.tasks.length,
-                canGoBack: store.canGoPrevious,
-                onBack: () =>
-                    _jumpTo(selected.subtract(const Duration(days: 1))),
-                onForward: () =>
-                    _jumpTo(selected.add(const Duration(days: 1))),
-                onTapDate: _openCalendar,
-              ),
-            ),
-            Expanded(
-              child: PageView.builder(
-                controller: _controller,
-                itemCount: _basePage * 2 + 1,
-                onPageChanged: (index) {
-                  context.read<TaskStore>().selectDate(_dateForPage(index));
-                },
-                itemBuilder: (context, index) {
-                  final date = _dateForPage(index);
-                  return _DayPane(
-                    key: ValueKey(index),
-                    date: date,
-                    revision: store.revision,
-                    atEarliest: date == store.earliestAllowedDate,
-                    onToggle: _toggle,
-                    onOpen: (task) => _openEditor(task: task),
-                    onAdd: () => _openEditor(date: date),
-                    onCloseDay: () => _openDayReview(date),
-                    onJumpToday: () => _jumpTo(today()),
-                    onJumpNext: () =>
-                        _jumpTo(date.add(const Duration(days: 1))),
-                    onOpenMoney: widget.onOpenMoney,
-                  );
-                },
-              ),
-            ),
-          ],
+    return EsokTabLayout(
+      headerAction: PopupMenuButton<String>(
+        tooltip: 'Pengaturan',
+        icon: Icon(
+          Icons.more_horiz,
+          size: 20,
+          color: colors.muted,
         ),
-      ),
-      floatingActionButton: EsokFloatingAddButton(
-        bottomLift: EsokFloatingAddButton.liftOf(context),
-        tooltip: 'Tambah tugas',
-        onPressed: () => _openEditor(date: store.selectedDate),
-      ),
-    );
-  }
-}
-
-class _DateNav extends StatelessWidget {
-  const _DateNav({
-    required this.date,
-    required this.count,
-    required this.canGoBack,
-    required this.onBack,
-    required this.onForward,
-    required this.onTapDate,
-  });
-
-  final DateTime date;
-  final int count;
-  final bool canGoBack;
-  final VoidCallback onBack;
-  final VoidCallback onForward;
-  final VoidCallback onTapDate;
-
-  @override
-  Widget build(BuildContext context) {
-    final sub = '${weekdayName(date)} · ${taskCountLabel(count)}';
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Row(
-        children: [
-          _NavButton(left: true, enabled: canGoBack, onTap: onBack),
-          Expanded(
-            child: InkWell(
-              onTap: onTapDate,
-              borderRadius: BorderRadius.circular(11),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Column(
-                  children: [
-                    Text(
-                      positionLabel(date).toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.09,
-                        color: EsokColors.muted,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      dateTitle(date),
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                        letterSpacing: -0.02,
-                        color: EsokColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      sub,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: EsokColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        color: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        onSelected: (value) {
+          if (value == 'alarms') {
+            TaskNotifier.instance.requestExactAlarms();
+          } else if (value == 'battery') {
+            _openBatterySettings();
+          } else if (value == 'widget') {
+            _pinWidget();
+          } else if (value == 'release_notes') {
+            _openReleaseNotes();
+          }
+        },
+        itemBuilder: (context) => const [
+          PopupMenuItem(
+            value: 'alarms',
+            child: Text('Alarm & pengingat'),
           ),
-          _NavButton(left: false, onTap: onForward),
+          PopupMenuItem(
+            value: 'battery',
+            child: Text('Baterai tanpa batas'),
+          ),
+          PopupMenuItem(
+            value: 'widget',
+            child: Text('Pasang widget'),
+          ),
+          PopupMenuItem(
+            value: 'release_notes',
+            child: Text('Catatan rilis'),
+          ),
         ],
       ),
-    );
-  }
-}
-
-class _NavButton extends StatelessWidget {
-  const _NavButton({
-    required this.left,
-    required this.onTap,
-    this.enabled = true,
-  });
-
-  final bool left;
-  final VoidCallback onTap;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.32,
-      child: InkResponse(
-        onTap: enabled ? onTap : null,
-        radius: 22,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(child: EsokChevron(left: left, size: 18)),
-        ),
+      child: Column(
+        children: [
+          EsokPeriodHeader(
+            title: dateTitle(selected),
+            caption: positionLabel(selected),
+            detail: '${weekdayName(selected)} · ${taskCountLabel(store.tasks.length)}',
+            previousLabel: 'Hari sebelumnya',
+            nextLabel: 'Hari berikutnya',
+            onPrevious: store.canGoPrevious
+                ? () => _jumpTo(selected.subtract(const Duration(days: 1)))
+                : null,
+            onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
+            onSelect: _openCalendar,
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: _basePage * 2 + 1,
+              onPageChanged: (index) {
+                context.read<TaskStore>().selectDate(_dateForPage(index));
+              },
+              itemBuilder: (context, index) {
+                final date = _dateForPage(index);
+                return _DayPane(
+                  key: ValueKey(index),
+                  date: date,
+                  revision: store.revision,
+                  atEarliest: date == store.earliestAllowedDate,
+                  onToggle: _toggle,
+                  onOpen: (task) => _openEditor(task: task),
+                  onAdd: () => _openEditor(date: date),
+                  onCloseDay: () => _openDayReview(date),
+                  onJumpToday: () => _jumpTo(today()),
+                  onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
+                  onOpenMoney: widget.onOpenMoney,
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -571,6 +439,7 @@ class _DayPaneState extends State<_DayPane> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return FutureBuilder<_DayData>(
       future: _future,
       builder: (context, snapshot) {
@@ -584,25 +453,42 @@ class _DayPaneState extends State<_DayPane> {
 
         return ListView(
           padding: EdgeInsets.fromLTRB(
-            24,
-            18,
-            24,
-            EsokFloatingAddButton.scrollBottomOf(context),
+            EsokTabLayout.gutter,
+            4,
+            EsokTabLayout.gutter,
+            EsokTabLayout.scrollBottomOf(context),
           ),
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: widget.onCloseDay,
-                style: TextButton.styleFrom(
-                  foregroundColor: EsokColors.ink,
-                  minimumSize: const Size(48, 48),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                EsokEntryButton(
+                  label: 'Tambah catatan',
+                  onPressed: widget.onAdd,
                 ),
-                icon: const Icon(Icons.fact_check_outlined, size: 18),
-                label: const Text('Tutup hari'),
-              ),
+                TextButton.icon(
+                  onPressed: widget.onCloseDay,
+                  style: TextButton.styleFrom(
+                    foregroundColor: colors.ink,
+                    minimumSize: const Size(48, 48),
+                  ),
+                  icon: const Icon(Icons.fact_check_outlined, size: 18),
+                  label: const Text('Tutup hari'),
+                ),
+              ],
             ),
-            if (tasks.isEmpty) _EmptyState(onAdd: widget.onAdd),
+            const SizedBox(height: 8),
+            if (tasks.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Belum ada catatan.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
             for (var index = 0; index < tasks.length; index++)
               _TaskRow(
                 task: tasks[index],
@@ -646,13 +532,14 @@ class _TaskRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final titleStyle = TextStyle(
       fontSize: 17,
       height: 1.3,
-      color: task.isDone ? EsokColors.muted : EsokColors.ink,
+      color: task.isDone ? colors.muted : colors.ink,
       decoration: task.isDone ? TextDecoration.lineThrough : null,
       decorationThickness: 1,
-      decorationColor: EsokColors.muted,
+      decorationColor: colors.muted,
     );
 
     return Column(
@@ -676,12 +563,12 @@ class _TaskRow extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: task.isDone
-                            ? EsokColors.done
+                            ? colors.done
                             : Colors.transparent,
                         border: Border.all(
                           color: task.isDone
-                              ? EsokColors.done
-                              : EsokColors.muted,
+                              ? colors.done
+                              : colors.muted,
                           width: 1.5,
                         ),
                       ),
@@ -689,7 +576,7 @@ class _TaskRow extends StatelessWidget {
                           ? Icon(
                               Icons.check,
                               size: 13,
-                              color: EsokColors.fabText,
+                              color: colors.fabText,
                             )
                           : null,
                     ),
@@ -717,7 +604,7 @@ class _TaskRow extends StatelessWidget {
                           timeText(task.scheduledTime),
                           style: TextStyle(
                             fontSize: 13,
-                            color: EsokColors.muted,
+                            color: colors.muted,
                             fontFeatures: [FontFeature.tabularFigures()],
                           ),
                         ),
@@ -742,10 +629,11 @@ class _LateNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: EsokColors.lateSurface,
+        color: colors.lateSurface,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -755,14 +643,14 @@ class _LateNote extends StatelessWidget {
             height: 6,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: EsokColors.accent,
+              color: colors.accent,
             ),
           ),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
               '$count tugas belum dicentang',
-              style: TextStyle(fontSize: 12, color: EsokColors.lateInk),
+              style: TextStyle(fontSize: 12, color: colors.lateInk),
             ),
           ),
         ],
@@ -833,9 +721,10 @@ class _BottomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final prefix = boldPrefix;
     return Material(
-      color: EsokColors.soft,
+      color: colors.soft,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -850,7 +739,7 @@ class _BottomCard extends StatelessWidget {
                   text: TextSpan(
                     style: TextStyle(
                       fontSize: 12,
-                      color: EsokColors.inkSoft,
+                      color: colors.inkSoft,
                     ),
                     children: [
                       if (prefix != null)
@@ -872,46 +761,12 @@ class _BottomCard extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.03,
-                  color: EsokColors.accent,
+                  color: colors.accent,
                 ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onAdd});
-
-  final VoidCallback onAdd;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 30, bottom: 18),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Belum ada jadwal.',
-              style: TextStyle(fontSize: 14, color: EsokColors.muted),
-            ),
-          ),
-          TextButton(
-            onPressed: onAdd,
-            style: TextButton.styleFrom(
-              foregroundColor: EsokColors.accent,
-              textStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            child: const Text('Tambah satu'),
-          ),
-        ],
       ),
     );
   }

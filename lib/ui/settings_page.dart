@@ -16,6 +16,7 @@ import 'data_page.dart';
 import 'manage_accounts.dart';
 import 'manage_categories.dart';
 import 'sound_page.dart';
+import 'tab_layout.dart';
 import 'theme.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -196,7 +197,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         child: Container(
           decoration: BoxDecoration(
-            color: EsokColors.canvas,
+            color: EsokColors.of(sheetContext).canvas,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
@@ -212,7 +213,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 14),
                     decoration: BoxDecoration(
-                      color: EsokColors.handle,
+                      color: EsokColors.of(sheetContext).handle,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -222,7 +223,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: EsokColors.ink,
+                    color: EsokColors.of(sheetContext).ink,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -231,12 +232,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   obscureText: obscure,
                   autocorrect: false,
                   enableSuggestions: false,
-                  style: TextStyle(fontSize: 14, color: EsokColors.ink),
+                  style: TextStyle(fontSize: 14, color: EsokColors.of(sheetContext).ink),
                   decoration: InputDecoration(
                     hintText: hint,
-                    hintStyle: TextStyle(fontSize: 13, color: EsokColors.muted),
+                    hintStyle: TextStyle(fontSize: 13, color: EsokColors.of(sheetContext).muted),
                     filled: true,
-                    fillColor: EsokColors.soft,
+                    fillColor: EsokColors.of(sheetContext).soft,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -259,8 +260,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     onPressed: () =>
                         Navigator.of(sheetContext).pop(controller.text),
                     style: FilledButton.styleFrom(
-                      backgroundColor: EsokColors.accent,
-                      foregroundColor: EsokColors.onAccent,
+                      backgroundColor: EsokColors.of(sheetContext).accent,
+                      foregroundColor: EsokColors.of(sheetContext).onAccent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(11),
                       ),
@@ -297,7 +298,7 @@ class _SettingsPageState extends State<SettingsPage> {
           style: TextStyle(
             fontSize: 13,
             height: 1.65,
-            color: EsokColors.muted,
+            color: EsokColors.of(context).muted,
           ),
         ),
       ),
@@ -327,178 +328,164 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final settings = context.watch<SettingsStore>();
     final store = context.watch<MoneyStore>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    EsokColors.useDark(isDark);
     final expenseCount = store.expenseCategories.length;
     final incomeCount = store.incomeCategories.length;
     final accountCount = store.activeAccounts.length;
 
-    return Scaffold(
-      backgroundColor: EsokColors.canvas,
-      body: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            10,
-            24,
-            MediaQuery.paddingOf(context).bottom + 16,
-          ),
-          children: [
-            Text(
-              'Setelan',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.02,
-                color: EsokColors.ink,
-              ),
-            ),
-            const _SectionLabel('Tampilan'),
-            const SizedBox(height: 2),
-            Text(
-              'Tema',
-              style: TextStyle(
-                fontSize: 14.5,
-                color: EsokColors.ink,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              'Ikuti setelan Android secara default',
-              style: TextStyle(fontSize: 11, color: EsokColors.muted),
-            ),
-            const SizedBox(height: 12),
-            _ThemeSelector(
-              value: settings.themeMode,
-              onChanged: (mode) => context
-                  .read<SettingsStore>()
-                  .setThemeMode(mode),
-            ),
-            const _SectionLabel('Notifikasi'),
-            _SettingsRow(
-              title: 'Pengingat awal',
-              subtitle: _leadLabel,
-              onTap: settings.leadEnabled ? _openLeadDuration : null,
-              trailing: _Toggle(
-                value: settings.leadEnabled,
-                onChanged: _toggleLead,
-              ),
-            ),
-            _SettingsRow(
-              title: 'Alarm presisi',
-              subtitle: 'Diperlukan agar notifikasi tepat waktu',
-              trailing: _Trailing('Atur ›'),
-              onTap: _openExactAlarm,
-            ),
-            _SettingsRow(
-              title: 'Optimasi baterai',
-              subtitle: 'Agar One UI tidak menahan pengingat',
-              trailing: _Trailing('Atur ›'),
-              onTap: _openBattery,
-            ),
-            const _SectionLabel('Suara'),
-            _SettingsRow(
-              title: 'Efek suara',
-              subtitle: 'Bunyi saat saldo berubah',
-              trailing: _Toggle(
-                value: settings.soundEnabled,
-                onChanged: _toggleSoundEnabled,
-              ),
-            ),
-            _SettingsRow(
-              title: 'Suara & Notifikasi',
-              subtitle: 'Nada pengingat, apresiasi, dan saldo',
-              trailing: const _Trailing('›'),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SoundPage()),
-              ),
-            ),
-            const _SectionLabel('Data'),
-            _SettingsRow(
-              title: 'Kategori',
-              trailing: _Trailing('$expenseCount · $incomeCount ›'),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      const ManageCategoriesPage(initialKind: 'expense'),
-                ),
-              ),
-            ),
-            _SettingsRow(
-              title: 'Sumber dana',
-              trailing: _Trailing('$accountCount ›'),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const ManageAccountsPage(),
-                ),
-              ),
-            ),
-            _SettingsRow(
-              title: 'Ekspor & impor',
-              trailing: _Trailing('›'),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const DataPage()),
-              ),
-            ),
-            _SettingsRow(
-              title: 'Cadangan otomatis',
-              subtitle: _backupLabel,
-              trailing: _backupBusy
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const _Trailing('Sekarang ›'),
-              onTap: _backupNow,
-            ),
-            const _SectionLabel('Pindai struk'),
-            _SettingsRow(
-              title: 'API key Gemini',
-              subtitle: settings.aiReady
-                  ? 'Tersimpan di perangkat ini'
-                  : 'Belum diisi · pakai API key milikmu sendiri',
-              trailing: const _Trailing('Atur ›'),
-              onTap: _editAiKey,
-            ),
-            _SettingsRow(
-              title: 'Model',
-              subtitle: settings.aiModel,
-              trailing: const _Trailing('Atur ›'),
-              onTap: _editAiModel,
-            ),
-            const _SectionLabel('Widget'),
-            _SettingsRow(
-              title: 'Sembunyikan nominal',
-              subtitle: 'Berlaku di widget uang',
-              trailing: _Toggle(
-                value: settings.hideAmounts,
-                onChanged: _toggleHideAmounts,
-              ),
-            ),
-            const _SectionLabel('Tentang'),
-            _SettingsRow(
-              title: 'Pembaruan aplikasi',
-              subtitle: 'Versi $_version',
-              trailing: const _Trailing('Periksa ›'),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
-              ),
-            ),
-            const _SettingsRow(
-              title: 'Oh My Esok',
-              subtitle: 'Dikembangkan dari Esok oleh notSeraphimXD',
-            ),
-            _SettingsRow(
-              title: 'Lisensi font',
-              trailing: const _Trailing('OFL 1.1 ›'),
-              onTap: _showFontLicense,
-            ),
-          ],
+    return EsokTabLayout(
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+          EsokTabLayout.gutter,
+          0,
+          EsokTabLayout.gutter,
+          EsokTabLayout.scrollBottomOf(context),
         ),
+        children: [
+          const _SectionLabel('Tampilan'),
+          const SizedBox(height: 2),
+          Text(
+            'Tema',
+            style: TextStyle(
+              fontSize: 14.5,
+              color: colors.ink,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'Ikuti setelan Android secara default',
+            style: TextStyle(fontSize: 11, color: colors.muted),
+          ),
+          const SizedBox(height: 12),
+          _ThemeSelector(
+            value: settings.themeMode,
+            onChanged: (mode) => context
+                .read<SettingsStore>()
+                .setThemeMode(mode),
+          ),
+          const _SectionLabel('Notifikasi'),
+          _SettingsRow(
+            title: 'Pengingat awal',
+            subtitle: _leadLabel,
+            onTap: settings.leadEnabled ? _openLeadDuration : null,
+            trailing: _Toggle(
+              value: settings.leadEnabled,
+              onChanged: _toggleLead,
+            ),
+          ),
+          _SettingsRow(
+            title: 'Alarm presisi',
+            subtitle: 'Diperlukan agar notifikasi tepat waktu',
+            trailing: _Trailing('Atur ›'),
+            onTap: _openExactAlarm,
+          ),
+          _SettingsRow(
+            title: 'Optimasi baterai',
+            subtitle: 'Agar One UI tidak menahan pengingat',
+            trailing: _Trailing('Atur ›'),
+            onTap: _openBattery,
+          ),
+          const _SectionLabel('Suara'),
+          _SettingsRow(
+            title: 'Efek suara',
+            subtitle: 'Bunyi saat saldo berubah',
+            trailing: _Toggle(
+              value: settings.soundEnabled,
+              onChanged: _toggleSoundEnabled,
+            ),
+          ),
+          _SettingsRow(
+            title: 'Suara & Notifikasi',
+            subtitle: 'Nada pengingat, apresiasi, dan saldo',
+            trailing: const _Trailing('›'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const SoundPage()),
+            ),
+          ),
+          const _SectionLabel('Data'),
+          _SettingsRow(
+            title: 'Kategori',
+            trailing: _Trailing('$expenseCount · $incomeCount ›'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    const ManageCategoriesPage(initialKind: 'expense'),
+              ),
+            ),
+          ),
+          _SettingsRow(
+            title: 'Sumber dana',
+            trailing: _Trailing('$accountCount ›'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ManageAccountsPage(),
+              ),
+            ),
+          ),
+          _SettingsRow(
+            title: 'Ekspor & impor',
+            trailing: _Trailing('›'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const DataPage()),
+            ),
+          ),
+          _SettingsRow(
+            title: 'Cadangan otomatis',
+            subtitle: _backupLabel,
+            trailing: _backupBusy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const _Trailing('Sekarang ›'),
+            onTap: _backupNow,
+          ),
+          const _SectionLabel('Pindai struk'),
+          _SettingsRow(
+            title: 'API key Gemini',
+            subtitle: settings.aiReady
+                ? 'Tersimpan di perangkat ini'
+                : 'Belum diisi · pakai API key milikmu sendiri',
+            trailing: const _Trailing('Atur ›'),
+            onTap: _editAiKey,
+          ),
+          _SettingsRow(
+            title: 'Model',
+            subtitle: settings.aiModel,
+            trailing: const _Trailing('Atur ›'),
+            onTap: _editAiModel,
+          ),
+          const _SectionLabel('Widget'),
+          _SettingsRow(
+            title: 'Sembunyikan nominal',
+            subtitle: 'Berlaku di widget uang',
+            trailing: _Toggle(
+              value: settings.hideAmounts,
+              onChanged: _toggleHideAmounts,
+            ),
+          ),
+          const _SectionLabel('Tentang'),
+          _SettingsRow(
+            title: 'Pembaruan aplikasi',
+            subtitle: 'Versi $_version',
+            trailing: const _Trailing('Periksa ›'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
+            ),
+          ),
+          const _SettingsRow(
+            title: 'Oh My Esok',
+            subtitle: 'Dikembangkan dari Esok oleh notSeraphimXD',
+          ),
+          _SettingsRow(
+            title: 'Lisensi font',
+            trailing: const _Trailing('OFL 1.1 ›'),
+            onTap: _showFontLicense,
+          ),
+        ],
       ),
     );
   }
@@ -512,6 +499,7 @@ class _ThemeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     const modes = [
       (ThemeMode.light, 'Terang'),
       (ThemeMode.system, 'Ikut sistem'),
@@ -520,7 +508,7 @@ class _ThemeSelector extends StatelessWidget {
     const radius = BorderRadius.all(Radius.circular(8));
 
     return Material(
-      color: EsokColors.soft,
+      color: colors.soft,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.all(4),
@@ -539,7 +527,7 @@ class _ThemeSelector extends StatelessWidget {
                   child: Ink(
                     decoration: BoxDecoration(
                       color: mode == value
-                          ? EsokColors.selected
+                          ? colors.accentContainer
                           : Colors.transparent,
                       borderRadius: radius,
                     ),
@@ -563,8 +551,8 @@ class _ThemeSelector extends StatelessWidget {
                                 letterSpacing: 0,
                                 fontWeight: FontWeight.w600,
                                 color: mode == value
-                                    ? EsokColors.ink
-                                    : EsokColors.muted,
+                                    ? colors.action
+                                    : colors.muted,
                               ),
                             ),
                           ),
@@ -589,6 +577,7 @@ class _Toggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final disabled = MediaQuery.of(context).disableAnimations;
     return GestureDetector(
       onTap: () => onChanged(!value),
@@ -600,7 +589,7 @@ class _Toggle extends StatelessWidget {
         width: 40,
         height: 23,
         decoration: BoxDecoration(
-          color: value ? EsokColors.positive : EsokColors.line,
+          color: value ? colors.action : colors.line,
           borderRadius: BorderRadius.circular(12),
         ),
         child: AnimatedAlign(
@@ -614,7 +603,7 @@ class _Toggle extends StatelessWidget {
             height: 18,
             margin: const EdgeInsets.symmetric(horizontal: 2.5),
             decoration: BoxDecoration(
-              color: EsokColors.surface,
+              color: value ? colors.onAction : colors.surface,
               shape: BoxShape.circle,
               boxShadow: const [
                 BoxShadow(
@@ -646,12 +635,13 @@ class _SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return InkWell(
       onTap: onTap,
       child: Container(
         constraints: const BoxConstraints(minHeight: 58),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: EsokColors.line)),
+          border: Border(bottom: BorderSide(color: colors.line)),
         ),
         child: Row(
           children: [
@@ -662,7 +652,7 @@ class _SettingsRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(fontSize: 14.5, color: EsokColors.ink),
+                    style: TextStyle(fontSize: 14.5, color: colors.ink),
                   ),
                   if (subtitle != null) ...[
                     const SizedBox(height: 3),
@@ -671,7 +661,7 @@ class _SettingsRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.4,
-                        color: EsokColors.muted,
+                        color: colors.muted,
                       ),
                     ),
                   ],
@@ -693,9 +683,10 @@ class _Trailing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Text(
       text,
-      style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
+      style: TextStyle(fontSize: 11.5, color: colors.muted),
     );
   }
 }
@@ -707,6 +698,7 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 8),
       child: Text(
@@ -715,7 +707,7 @@ class _SectionLabel extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.09,
-          color: EsokColors.muted,
+          color: colors.muted,
         ),
       ),
     );
@@ -730,9 +722,10 @@ class _Sheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: EsokColors.canvas,
+        color: colors.canvas,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 22),
@@ -748,7 +741,7 @@ class _Sheet extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
-                  color: EsokColors.handle,
+                  color: colors.handle,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -758,7 +751,7 @@ class _Sheet extends StatelessWidget {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: EsokColors.ink,
+                color: colors.ink,
               ),
             ),
             const SizedBox(height: 12),
@@ -783,6 +776,7 @@ class _SheetChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -795,14 +789,14 @@ class _SheetChoice extends StatelessWidget {
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
               size: 18,
-              color: selected ? EsokColors.accent : EsokColors.muted,
+              color: selected ? colors.accent : colors.muted,
             ),
             const SizedBox(width: 12),
             Text(
               label,
               style: TextStyle(
                 fontSize: 14,
-                color: selected ? EsokColors.ink : EsokColors.inkSoft,
+                color: selected ? colors.ink : colors.inkSoft,
               ),
             ),
           ],

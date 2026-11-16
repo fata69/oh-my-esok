@@ -43,7 +43,7 @@ class _EsokShellState extends State<EsokShell> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlay,
       child: Scaffold(
-        backgroundColor: EsokColors.canvas,
+        backgroundColor: EsokColors.of(context).canvas,
         // Keep the list painting behind the capsule. Scaffold reports the
         // measured bar height in the bottom padding of the body's MediaQuery.
         extendBody: true,
@@ -127,17 +127,18 @@ class _FloatingTabBar extends StatelessWidget {
 
     return SafeArea(
       top: false,
-      minimum: EdgeInsets.only(
-        bottom: MediaQuery.systemGestureInsetsOf(context).bottom,
-      ),
+      // The OS navigation bar inset already protects both system modes.
+      // The larger gesture-detection zone would lift this tap-only control.
+      maintainBottomViewPadding: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
         child: Align(
           alignment: Alignment.bottomCenter,
           heightFactor: 1,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
             child: ClipRRect(
+              key: const ValueKey('floating-navigation'),
               borderRadius: _radius,
               child: solid
                   ? capsule
@@ -168,10 +169,13 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final palette = EsokColors.of(context);
     final inverted = selected && highContrast;
     final foreground = inverted
         ? colors.surface
-        : selected || highContrast
+        : selected
+        ? palette.action
+        : highContrast
         ? colors.onSurface
         : colors.onSurfaceVariant;
     final interactionColor = selected
@@ -190,7 +194,7 @@ class _NavItem extends StatelessWidget {
         color: inverted
             ? colors.onSurface
             : selected
-            ? colors.primaryContainer
+            ? palette.accentContainer
             : Colors.transparent,
         shape: const RoundedRectangleBorder(borderRadius: radius),
         animationDuration: Duration.zero,
