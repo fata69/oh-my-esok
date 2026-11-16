@@ -7,6 +7,8 @@ import '../util/sound_library.dart';
 
 class SettingsStore extends ChangeNotifier {
   static const _themeKey = 'theme_mode';
+  static const _accentKey = 'accent_id';
+  static const _accentIds = {'blue', 'copper', 'rose'};
   static const _leadEnabledKey = 'lead_enabled';
   static const _leadMinutesKey = 'lead_minutes';
   static const _hideAmountsKey = 'hide_amounts';
@@ -26,6 +28,7 @@ class SettingsStore extends ChangeNotifier {
   static const defaultAiModel = 'gemini-3.5-flash';
 
   ThemeMode _themeMode = ThemeMode.system;
+  String _accentId = 'blue';
   bool _leadEnabled = true;
   int _leadMinutes = 60;
   bool _hideAmounts = false;
@@ -41,6 +44,7 @@ class SettingsStore extends ChangeNotifier {
   String _aiModel = defaultAiModel;
 
   ThemeMode get themeMode => _themeMode;
+  String get accentId => _accentId;
   bool get leadEnabled => _leadEnabled;
   int get leadMinutes => _leadMinutes;
   bool get hideAmounts => _hideAmounts;
@@ -93,6 +97,10 @@ class SettingsStore extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
+    final storedAccent = prefs.get(_accentKey);
+    _accentId = storedAccent is String && _accentIds.contains(storedAccent)
+        ? storedAccent
+        : 'blue';
     switch (prefs.getString(_themeKey)) {
       case 'light':
         _themeMode = ThemeMode.light;
@@ -152,6 +160,19 @@ class SettingsStore extends ChangeNotifier {
       ThemeMode.dark => 'dark',
       ThemeMode.system => 'system',
     });
+  }
+
+  Future<void> setAccentId(String value) async {
+    if (!_accentIds.contains(value)) {
+      throw ArgumentError.value(value, 'value', 'Unknown accent');
+    }
+    if (_accentId == value) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString(_accentKey, value)) {
+      throw StateError('Accent preference could not be saved.');
+    }
+    _accentId = value;
+    notifyListeners();
   }
 
   Future<void> setLeadEnabled(bool enabled) async {
