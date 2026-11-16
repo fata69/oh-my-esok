@@ -29,6 +29,13 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '1.9.4',
+      date: '16 Nov 2026',
+      notes: [
+        'Widget tugas bisa di-scroll, jadi semua catatan bisa dilihat dan dicentang tanpa membuka aplikasi.',
+      ],
+    ),
+    (
       version: '1.9.3',
       date: '16 Nov 2026',
       notes: [

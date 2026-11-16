@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Paint
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +19,13 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 class TaskWidgetProvider : AppWidgetProvider() {
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            refreshAll(context)
+        }
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -27,7 +33,12 @@ class TaskWidgetProvider : AppWidgetProvider() {
     ) {
         for (appWidgetId in appWidgetIds) {
             appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId))
+            appWidgetManager.notifyAppWidgetViewDataChanged(
+                appWidgetId,
+                R.id.widget_list,
+            )
         }
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -37,6 +48,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         newOptions: Bundle,
     ) {
         appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId))
+        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
     }
 
     companion object {
@@ -48,7 +60,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         private const val MIN_SCALE = 0.85f
         private const val MAX_SCALE = 1.9f
 
-        private data class Metrics(
+        internal data class Metrics(
             val labelSp: Float,
             val counterSp: Float,
             val titleSp: Float,
@@ -57,10 +69,17 @@ class TaskWidgetProvider : AppWidgetProvider() {
             val paddingDp: Int,
             val rowHeightDp: Int,
             val checkSizeDp: Int,
-            val maxRows: Int,
         )
 
-        private fun metricsFor(widthDp: Int, heightDp: Int): Metrics {
+        internal data class TaskDay(
+            val date: String,
+            val label: String,
+            val tasks: JSONArray,
+            val total: Int,
+            val done: Int,
+        )
+
+        internal fun metricsFor(widthDp: Int, heightDp: Int): Metrics {
             val widthScale = widthDp / REFERENCE_WIDTH_DP
             val heightScale = heightDp / REFERENCE_HEIGHT_DP
             val weighted = widthScale * 0.6f + heightScale * 0.4f
@@ -75,10 +94,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
             val paddingDp = (16f * scale).roundToInt().coerceAtLeast(10)
             val rowHeightDp = (44f * scale).roundToInt().coerceAtLeast(36)
 
-            val headerHeightDp = labelSp * 1.6f + 8f
-            val availableDp = heightDp - paddingDp * 2 - headerHeightDp
-            val maxRows = (availableDp / rowHeightDp).toInt().coerceIn(1, 8)
-
             return Metrics(
                 labelSp = labelSp,
                 counterSp = counterSp,
@@ -88,8 +103,22 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 paddingDp = paddingDp,
                 rowHeightDp = rowHeightDp,
                 checkSizeDp = rowHeightDp,
-                maxRows = maxRows,
             )
+        }
+
+        internal fun metricsForWidget(context: Context, appWidgetId: Int): Metrics {
+            val options = try {
+                AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
+            } catch (error: Exception) {
+                Bundle()
+            }
+            val widthDp = options
+                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+                .takeIf { it > 0 } ?: DEFAULT_WIDTH_DP
+            val heightDp = options
+                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+                .takeIf { it > 0 } ?: DEFAULT_HEIGHT_DP
+            return metricsFor(widthDp, heightDp)
         }
 
         private fun dp(context: Context, value: Int): Int =
@@ -108,9 +137,14 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 TypedValue.COMPLEX_UNIT_SP,
                 metrics.counterSp,
             )
+            views.setTextViewTextSize(
+                R.id.widget_empty,
+                TypedValue.COMPLEX_UNIT_SP,
+                metrics.emptySp,
+            )
         }
 
-        private fun applyRow(row: RemoteViews, metrics: Metrics) {
+        internal fun applyRow(row: RemoteViews, metrics: Metrics) {
             row.setTextViewTextSize(
                 R.id.task_title,
                 TypedValue.COMPLEX_UNIT_SP,
@@ -140,6 +174,36 @@ class TaskWidgetProvider : AppWidgetProvider() {
             }
         }
 
+        internal fun selectedDay(context: Context): TaskDay? {
+            val raw = HomeWidgetPlugin.getData(context).getString("tasks_json", "{}") ?: "{}"
+            val root = try {
+                JSONObject(raw)
+            } catch (error: Exception) {
+                JSONObject()
+            }
+            val dates = root.keys().asSequence().sorted().toList()
+            for (key in dates) {
+                val day = root.optJSONObject(key) ?: continue
+                val total = day.optInt("total", 0)
+                if (total <= 0) continue
+                val tasks = day.optJSONArray("tasks") ?: JSONArray()
+                var done = 0
+                for (index in 0 until tasks.length()) {
+                    if (tasks.optJSONObject(index)?.optBoolean("done", false) == true) {
+                        done++
+                    }
+                }
+                return TaskDay(
+                    date = key,
+                    label = day.optString("label", ""),
+                    tasks = tasks,
+                    total = total,
+                    done = done,
+                )
+            }
+            return null
+        }
+
         fun refreshAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(
@@ -147,170 +211,64 @@ class TaskWidgetProvider : AppWidgetProvider() {
             )
             for (id in ids) {
                 manager.updateAppWidget(id, buildViews(context, id))
+                manager.notifyAppWidgetViewDataChanged(id, R.id.widget_list)
             }
         }
 
         fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
-            val options = try {
-                AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
-            } catch (error: Exception) {
-                Bundle()
-            }
-            val widthDp = options
-                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
-                .takeIf { it > 0 } ?: DEFAULT_WIDTH_DP
-            val heightDp = options
-                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
-                .takeIf { it > 0 } ?: DEFAULT_HEIGHT_DP
-            val metrics = metricsFor(widthDp, heightDp)
-
+            val metrics = metricsForWidget(context, appWidgetId)
             val views = RemoteViews(context.packageName, R.layout.task_widget)
             applyFrame(context, views, metrics)
-            val ink = context.getColor(R.color.widget_ink)
+
             val muted = context.getColor(R.color.widget_muted)
             val doneColor = context.getColor(R.color.widget_positive)
+            val day = selectedDay(context)
 
-            val prefs = HomeWidgetPlugin.getData(context)
-            val raw = prefs.getString("tasks_json", "{}") ?: "{}"
-            val root = try {
-                JSONObject(raw)
-            } catch (error: Exception) {
-                JSONObject()
+            val serviceIntent = Intent(context, TaskWidgetService::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
             }
-            val dates = root.keys().asSequence().sorted().toList()
-            var selected: JSONObject? = null
-            var selectedDate = ""
-            for (key in dates) {
-                val day = root.optJSONObject(key) ?: continue
-                if (day.optInt("total", 0) > 0) {
-                    selected = day
-                    selectedDate = key
-                    break
-                }
+            views.setRemoteAdapter(R.id.widget_list, serviceIntent)
+            views.setEmptyView(R.id.widget_list, R.id.widget_empty)
+
+            var templateFlags = PendingIntent.FLAG_UPDATE_CURRENT
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                templateFlags = templateFlags or PendingIntent.FLAG_MUTABLE
             }
-            val items = selected?.optJSONArray("tasks") ?: JSONArray()
-            val total = selected?.optInt("total", items.length()) ?: 0
-            var done = 0
-            var shown = 0
-            val dayLabel = selected?.optString("label", "") ?: ""
-
-            views.removeAllViews(R.id.widget_rows)
-
-            for (index in 0 until items.length()) {
-                val item = items.optJSONObject(index) ?: continue
-                if (item.optBoolean("done", false)) done++
-            }
-
-            val maxRows = minOf(3, metrics.maxRows)
-            for (index in 0 until minOf(items.length(), maxRows)) {
-                val item = items.optJSONObject(index) ?: continue
-                val isDone = item.optBoolean("done", false)
-                shown++
-
-                val row = RemoteViews(context.packageName, R.layout.task_widget_item)
-                applyRow(row, metrics)
-                row.setTextViewText(R.id.task_title, item.optString("title"))
-                row.setTextViewText(
-                    R.id.task_time,
-                    item.optString("time").replace(":", "."),
-                )
-                if (isDone) {
-                    row.setTextColor(R.id.task_title, muted)
-                    row.setInt(
-                        R.id.task_title,
-                        "setPaintFlags",
-                        Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG,
-                    )
-                    row.setImageViewResource(R.id.task_check, R.drawable.widget_check_on)
-                } else {
-                    row.setTextColor(R.id.task_title, ink)
-                    row.setImageViewResource(R.id.task_check, R.drawable.widget_check_off)
-                }
-
-                val taskId = item.optString("id")
-                val toggleIntent = Intent(context, TaskToggleReceiver::class.java).apply {
-                    action = TaskToggleReceiver.ACTION_TOGGLE
-                    putExtra(TaskToggleReceiver.EXTRA_TASK_ID, taskId)
-                    putExtra(TaskToggleReceiver.EXTRA_DONE, !isDone)
-                }
-                val togglePending = PendingIntent.getBroadcast(
+            views.setPendingIntentTemplate(
+                R.id.widget_list,
+                PendingIntent.getActivity(
                     context,
-                    taskId.hashCode(),
-                    toggleIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-                row.setOnClickPendingIntent(R.id.task_check, togglePending)
-
-                val openIntent = Intent(context, MainActivity::class.java).apply {
-                    data = Uri.parse("jadwal://task/$taskId")
-                    action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
-                val openPending = PendingIntent.getActivity(
-                    context,
-                    taskId.hashCode() + 7,
-                    openIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-                row.setOnClickPendingIntent(R.id.task_body, openPending)
-
-                views.addView(R.id.widget_rows, row)
-            }
-
-            if (items.length() > shown) {
-                val more = RemoteViews(context.packageName, R.layout.task_widget_more)
-                more.setTextViewText(
-                    R.id.widget_more,
-                    "+${items.length() - shown} lagi",
-                )
-                more.setTextViewTextSize(
-                    R.id.widget_more,
-                    TypedValue.COMPLEX_UNIT_SP,
-                    metrics.timeSp,
-                )
-                views.addView(R.id.widget_rows, more)
-            }
-
-            if (shown == 0) {
-                val empty = RemoteViews(context.packageName, R.layout.task_widget_empty)
-                empty.setTextViewText(R.id.widget_empty_text, "Tidak ada catatan")
-                empty.setTextViewTextSize(
-                    R.id.widget_empty_text,
-                    TypedValue.COMPLEX_UNIT_SP,
-                    metrics.emptySp,
-                )
-                views.addView(R.id.widget_rows, empty)
-            }
-
-            if (selected == null) {
-                views.setTextViewText(R.id.widget_label, "TIDAK ADA CATATAN")
-                views.setTextColor(R.id.widget_label, muted)
-            } else if (done == total) {
-                views.setTextViewText(R.id.widget_label, "✓ Semua selesai")
-                views.setTextColor(R.id.widget_label, doneColor)
-            } else {
-                views.setTextViewText(
-                    R.id.widget_label,
-                    dayLabel.uppercase(Locale("id", "ID")),
-                )
-                views.setTextColor(R.id.widget_label, muted)
-            }
-            views.setTextViewText(
-                R.id.widget_counter,
-                if (selected == null) "" else "$done/$total",
+                    200 + appWidgetId,
+                    Intent(context, TaskWidgetActionActivity::class.java),
+                    templateFlags,
+                ),
             )
 
-            val headerIntent = if (selectedDate.isNotEmpty()) {
-                Intent(context, MainActivity::class.java).apply {
-                    data = Uri.parse("jadwal://day/$selectedDate")
-                    action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
+            if (day == null) {
+                views.setTextViewText(R.id.widget_label, "TIDAK ADA CATATAN")
+                views.setTextColor(R.id.widget_label, muted)
+                views.setTextViewText(R.id.widget_counter, "")
             } else {
-                Intent(context, MainActivity::class.java).apply {
-                    action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                if (day.done == day.total) {
+                    views.setTextViewText(R.id.widget_label, "✓ Semua selesai")
+                    views.setTextColor(R.id.widget_label, doneColor)
+                } else {
+                    views.setTextViewText(
+                        R.id.widget_label,
+                        day.label.uppercase(Locale("id", "ID")),
+                    )
+                    views.setTextColor(R.id.widget_label, muted)
                 }
+                views.setTextViewText(R.id.widget_counter, "${day.done}/${day.total}")
+            }
+
+            val headerIntent = Intent(context, MainActivity::class.java).apply {
+                if (day != null) {
+                    data = Uri.parse("jadwal://day/${day.date}")
+                }
+                action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             views.setOnClickPendingIntent(
                 R.id.widget_header,

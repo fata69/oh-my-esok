@@ -49,7 +49,7 @@ void main() {
         home: const Scaffold(
           body: Align(
             alignment: Alignment.bottomCenter,
-            child: PatchNotesSheet(version: '1.9.3', buildNumber: '14'),
+            child: PatchNotesSheet(version: '1.9.4', buildNumber: '15'),
           ),
         ),
       ),
@@ -57,11 +57,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Catatan rilis'), findsOneWidget);
-    expect(find.text('Versi 1.9.3 (14)'), findsOneWidget);
+    expect(find.text('Versi 1.9.4 (15)'), findsOneWidget);
     expect(find.text('Terbaru'), findsOneWidget);
     expect(
       find.text(
-        'Suara khusus saat semua tugas di satu hari selesai, bisa diatur di Setelan → Suara.',
+        'Widget tugas bisa di-scroll, jadi semua catatan bisa dilihat dan dicentang tanpa membuka aplikasi.',
       ),
       findsOneWidget,
     );
