@@ -39,9 +39,9 @@ class WidgetSync {
         };
       }
 
-      await HomeWidget.saveWidgetData<String>(
-        'tasks_json',
+      await _saveTaskSnapshot(
         jsonEncode(taskDays),
+        reportErrors: reportErrors,
       );
       await HomeWidget.updateWidget(qualifiedAndroidName: androidProvider);
 
@@ -136,6 +136,16 @@ class WidgetSync {
     }
   }
 
+  static Future<void> _saveTaskSnapshot(
+    String json, {
+    required bool reportErrors,
+  }) async {
+    final saved = await HomeWidget.saveWidgetData<String>('tasks_json', json);
+    if (reportErrors && saved != true) {
+      throw StateError('Task widget snapshot could not be saved');
+    }
+  }
+
   static Future<bool> drainPendingToggles(
     TaskStore store, {
     bool reportErrors = false,
@@ -150,6 +160,11 @@ class WidgetSync {
         return false;
       }
 
+      if (reportErrors &&
+          decoded.entries.any((entry) => entry.value is! bool)) {
+        throw const FormatException('Invalid widget checkmark');
+      }
+
       var changed = false;
       for (final entry in decoded.entries) {
         final id = entry.key.toString();
@@ -157,7 +172,13 @@ class WidgetSync {
         await store.setDone(id, done);
         changed = true;
       }
-      await HomeWidget.saveWidgetData<String>('pending_toggles', '{}');
+      final cleared = await HomeWidget.saveWidgetData<String>(
+        'pending_toggles',
+        '{}',
+      );
+      if (reportErrors && cleared != true) {
+        throw StateError('Widget queue could not be cleared');
+      }
       return changed;
     } catch (error, stack) {
       debugPrint('WidgetSync.drainPendingToggles failed: $error\n$stack');

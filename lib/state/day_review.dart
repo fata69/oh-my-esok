@@ -49,12 +49,12 @@ class DayMoveResult {
 /// Callbacks keep the workflow testable without notification or widget plugins.
 class DayReviewService {
   DayReviewService({
-    required TaskStore tasks,
+    required this._tasks,
     required this.transactionsForDate,
     required this.reconcileWidget,
     required this.rescheduleReminder,
     required this.pushWidget,
-  }) : _tasks = tasks;
+  });
 
   final TaskStore _tasks;
   final Future<List<MoneyTransaction>> Function(DateTime) transactionsForDate;

@@ -34,10 +34,13 @@ class _DayReviewSheetState extends State<DayReviewSheet>
     with WidgetsBindingObserver {
   late Future<DayReview> _future;
   bool _busy = false;
+  bool _prompting = false;
   bool _reloadOnReturn = false;
   String? _notice;
   String? _pendingSyncId;
   Set<DayReviewIssue> _issues = const {};
+
+  bool get _locked => _busy || _prompting;
 
   @override
   void initState() {
@@ -55,7 +58,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    if (_busy) {
+    if (_locked) {
       _reloadOnReturn = true;
     } else {
       _reload();
@@ -63,13 +66,17 @@ class _DayReviewSheetState extends State<DayReviewSheet>
   }
 
   void _reload() {
-    setState(() => _future = widget.service.load(widget.date));
+    final next = widget.service.load(widget.date);
+    setState(() {
+      _future = next;
+    });
   }
 
   void _finishAction() {
     if (!mounted) return;
     setState(() {
       _busy = false;
+      _prompting = false;
       if (_reloadOnReturn) {
         _reloadOnReturn = false;
         _future = widget.service.load(widget.date);
@@ -80,8 +87,8 @@ class _DayReviewSheetState extends State<DayReviewSheet>
   String _dateLabel(DateTime date) => '${dateTitle(date)} ${date.year}';
 
   Future<void> _reschedule(Task task) async {
-    if (_busy || _pendingSyncId != null) return;
-    setState(() => _busy = true);
+    if (_locked || _pendingSyncId != null) return;
+    setState(() => _prompting = true);
     try {
       final now = today();
       final later = task.date.isAfter(now) ? task.date : now;
@@ -147,6 +154,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
       );
       if (confirmed != true || !mounted) return;
 
+      setState(() => _busy = true);
       final result = await widget.service.reschedule(
         id: task.id,
         from: task.date,
@@ -172,7 +180,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
 
   Future<void> _retrySync() async {
     final id = _pendingSyncId;
-    if (_busy || id == null) return;
+    if (_locked || id == null) return;
     setState(() => _busy = true);
     try {
       final issues = await widget.service.synchronize(id);
@@ -232,7 +240,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
                     child: Text('Pukul ${timeText(task.scheduledTime)}'),
                   ),
                 TextButton.icon(
-                  onPressed: _busy || _pendingSyncId != null
+                  onPressed: _locked || _pendingSyncId != null
                       ? null
                       : () => _reschedule(task),
                   style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -253,7 +261,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
   Widget _buildNotice() {
     final color = Theme.of(context).colorScheme;
     final messages = [
-      if (_notice != null) _notice!,
+      ?_notice,
       if (_issues.contains(DayReviewIssue.reminder))
         'Pengingat belum diperbarui.',
       if (_issues.contains(DayReviewIssue.widget)) 'Widget belum diperbarui.',
@@ -275,7 +283,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
             Text(messages.join(' ')),
             if (_pendingSyncId != null)
               TextButton(
-                onPressed: _busy ? null : _retrySync,
+                onPressed: _locked ? null : _retrySync,
                 style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 child: const Text('Coba sinkronkan lagi'),
               ),
@@ -289,7 +297,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return PopScope(
-      canPop: !_busy,
+      canPop: !_locked,
       child: Material(
         color: colors.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -319,7 +327,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
                         ),
                       ),
                       IconButton(
-                        onPressed: _busy
+                        onPressed: _locked
                             ? null
                             : () => Navigator.of(context).pop(),
                         tooltip: 'Tutup',
@@ -355,7 +363,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
                               children: [
                                 const Text('Ringkasan belum bisa dimuat.'),
                                 TextButton(
-                                  onPressed: _busy ? null : _reload,
+                                  onPressed: _locked ? null : _reload,
                                   style: TextButton.styleFrom(
                                     minimumSize: const Size(48, 48),
                                   ),
@@ -373,7 +381,9 @@ class _DayReviewSheetState extends State<DayReviewSheet>
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
                   child: FilledButton(
-                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                    onPressed: _locked
+                        ? null
+                        : () => Navigator.of(context).pop(),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(48, 48),
                     ),
