@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -20,7 +22,7 @@ val validateForkReleaseSigning = tasks.register("validateForkReleaseSigning") {
             "Release signing requires these environment variables: ${missing.joinToString()}. " +
                 "Oh My Esok release builds never use the debug key."
         }
-        val keystore = java.io.File(releaseSigningEnvironment.getValue("OH_MY_ESOK_KEYSTORE")!!)
+        val keystore = File(releaseSigningEnvironment.getValue("OH_MY_ESOK_KEYSTORE")!!)
         check(keystore.isAbsolute && keystore.isFile) {
             "OH_MY_ESOK_KEYSTORE must point to an existing absolute keystore path."
         }
