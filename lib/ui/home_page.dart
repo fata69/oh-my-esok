@@ -177,7 +177,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _openFromWidget(Uri? uri) async {
-    if (uri == null || uri.scheme != 'jadwal') return;
+    if (uri == null || uri.scheme != 'ohmyesok') return;
 
     if (uri.host == 'money') {
       if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'new') {
@@ -230,7 +230,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return;
       }
       await HomeWidget.requestPinWidget(
-        androidName: WidgetSync.androidProvider,
+        qualifiedAndroidName: WidgetSync.androidProvider,
       );
     } catch (error) {
       _showMessage('Widget belum bisa dipasang.');

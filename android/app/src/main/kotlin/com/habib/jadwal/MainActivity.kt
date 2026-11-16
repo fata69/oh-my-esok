@@ -127,7 +127,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private val backupFolder = "Esok"
+    private val backupFolder = "Oh My Esok"
 
     private fun collection(): Uri? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null

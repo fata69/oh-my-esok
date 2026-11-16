@@ -54,7 +54,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _lastBackup = at;
     });
     if (ok) {
-      _message('Cadangan tersimpan di Download/Esok');
+      _message('Cadangan tersimpan di Download/Oh My Esok');
       return;
     }
     final message = AutoBackup.lastError ?? 'Gagal menulis cadangan.';
@@ -76,7 +76,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final at = _lastBackup;
     if (at == null) return 'Belum ada · ketuk untuk membuat';
     final stamp = DateFormat('d MMM, HH.mm', 'id_ID').format(at);
-    return 'Terakhir $stamp · Download/Esok';
+    return 'Terakhir $stamp · Download/Oh My Esok';
   }
 
   Future<void> _openLeadDuration() async {

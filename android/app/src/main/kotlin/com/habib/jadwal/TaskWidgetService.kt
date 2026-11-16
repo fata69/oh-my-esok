@@ -83,7 +83,7 @@ private class TaskWidgetFactory(
                 TaskWidgetActionActivity.EXTRA_ACTION,
                 TaskWidgetActionActivity.ACTION_OPEN,
             )
-            putExtra(TaskWidgetActionActivity.EXTRA_URI, "jadwal://task/$taskId")
+            putExtra(TaskWidgetActionActivity.EXTRA_URI, "ohmyesok://task/$taskId")
         }
         row.setOnClickFillInIntent(R.id.task_body, openFill)
         row.setOnClickFillInIntent(R.id.task_row, openFill)

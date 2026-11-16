@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backup_service.dart';
 
-/// Cadangan otomatis ke `Download/Esok/esok-backup.json`.
+/// Cadangan otomatis ke `Download/Oh My Esok/oh-my-esok-backup.json`.
 ///
 /// Ditulis lewat MediaStore, jadi berkasnya bertahan walau aplikasi
 /// di-uninstall dan bisa dibaca lagi setelah instal ulang.
@@ -14,7 +14,7 @@ class AutoBackup {
   AutoBackup._();
 
   static const _channel = MethodChannel('esok/settings');
-  static const fileName = 'esok-backup.json';
+  static const fileName = 'oh-my-esok-backup.json';
   static const _checksumKey = 'backup_checksum';
   static const _timeKey = 'backup_at';
 
@@ -46,7 +46,7 @@ class AutoBackup {
           }) ??
           false;
       if (!ok) {
-        lastError = 'Gagal menulis ke Download/Esok.';
+        lastError = 'Gagal menulis ke Download/Oh My Esok.';
         return false;
       }
 

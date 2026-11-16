@@ -41,7 +41,7 @@ class EsokApp extends StatelessWidget {
       child: Consumer<SettingsStore>(
         builder: (context, settings, _) {
           return MaterialApp(
-            title: 'Esok',
+            title: 'Oh My Esok',
             debugShowCheckedModeBanner: false,
             theme: EsokTheme.light(),
             darkTheme: EsokTheme.dark(),
@@ -196,7 +196,7 @@ class _RestoreSheet extends StatelessWidget {
                   ? 'Cadangan hanya berisi kategori atau sumber dana. '
                         'Pulihkan dan ganti kategori serta sumber dana yang ada?'
                   : 'Ada $tasks catatan dan $transactions transaksi dari '
-                        'cadangan terakhir di Download/Esok. Pulihkan sekarang?',
+                        'cadangan terakhir di Download/Oh My Esok. Pulihkan sekarang?',
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.6,

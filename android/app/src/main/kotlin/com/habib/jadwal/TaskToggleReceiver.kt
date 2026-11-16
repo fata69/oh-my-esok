@@ -205,7 +205,7 @@ class TaskToggleReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        const val ACTION_TOGGLE = "com.habib.jadwal.ACTION_TOGGLE"
+        const val ACTION_TOGGLE = "io.github.fata69.ohmyesok.ACTION_TOGGLE"
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_DONE = "done"
         private var player: MediaPlayer? = null

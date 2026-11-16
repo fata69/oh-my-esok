@@ -15,7 +15,8 @@ import '../util/sound_library.dart';
 class WidgetSync {
   WidgetSync._();
 
-  static const androidProvider = 'TaskWidgetProvider';
+  // Kotlin classes keep their upstream namespace; the installed app ID differs.
+  static const androidProvider = 'com.habib.jadwal.TaskWidgetProvider';
 
   static Future<void> push() async {
     try {
@@ -42,7 +43,7 @@ class WidgetSync {
         'tasks_json',
         jsonEncode(taskDays),
       );
-      await HomeWidget.updateWidget(androidName: androidProvider);
+      await HomeWidget.updateWidget(qualifiedAndroidName: androidProvider);
 
       final now = today();
       final moneyDao = MoneyTransactionDao(db);
@@ -123,9 +124,11 @@ class WidgetSync {
         'sound_complete_file',
         complete.file ?? '',
       );
-      await HomeWidget.updateWidget(androidName: 'MoneyWidgetProvider');
       await HomeWidget.updateWidget(
-        androidName: 'MoneyWidgetBarProvider',
+        qualifiedAndroidName: 'com.habib.jadwal.MoneyWidgetProvider',
+      );
+      await HomeWidget.updateWidget(
+        qualifiedAndroidName: 'com.habib.jadwal.MoneyWidgetBarProvider',
       );
     } catch (error, stack) {
       debugPrint('WidgetSync.push failed: $error\n$stack');
