@@ -28,6 +28,7 @@ class _SettingsPageState extends State<SettingsPage> {
   static const _channel = MethodChannel('esok/settings');
   String _version = '—';
   DateTime? _lastBackup;
+  bool _backupBusy = false;
 
   @override
   void initState() {
@@ -43,18 +44,35 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _backupNow() async {
+    if (_backupBusy) return;
+    setState(() => _backupBusy = true);
     final ok = await AutoBackup.runIfChanged(force: true);
     final at = await AutoBackup.lastBackupAt();
     if (!mounted) return;
-    setState(() => _lastBackup = at);
-    _message(
-      ok
-          ? 'Cadangan disimpan di Download/Esok'
-          : 'Gagal menulis cadangan ke Download/Esok',
+    setState(() {
+      _backupBusy = false;
+      _lastBackup = at;
+    });
+    if (ok) {
+      _message('Cadangan tersimpan di Download/Esok');
+      return;
+    }
+    final message = AutoBackup.lastError ?? 'Gagal menulis cadangan.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: SnackBarAction(
+          label: 'Simpan manual',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const DataPage()),
+          ),
+        ),
+      ),
     );
   }
 
   String get _backupLabel {
+    if (_backupBusy) return 'Menyimpan…';
     final at = _lastBackup;
     if (at == null) return 'Belum ada · ketuk untuk membuat';
     final stamp = DateFormat('d MMM, HH.mm', 'id_ID').format(at);
@@ -421,7 +439,13 @@ class _SettingsPageState extends State<SettingsPage> {
             _SettingsRow(
               title: 'Cadangan otomatis',
               subtitle: _backupLabel,
-              trailing: const _Trailing('Sekarang ›'),
+              trailing: _backupBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const _Trailing('Sekarang ›'),
               onTap: _backupNow,
             ),
             const _SectionLabel('Pindai struk'),

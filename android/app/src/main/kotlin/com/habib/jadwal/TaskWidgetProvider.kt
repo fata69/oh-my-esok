@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.widget.RemoteViews
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
 import org.json.JSONArray
 import org.json.JSONObject
@@ -240,12 +241,9 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 )
                 row.setOnClickPendingIntent(R.id.task_check, togglePending)
 
-                val openIntent = Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("jadwal://task/$taskId"),
-                    context,
-                    MainActivity::class.java,
-                ).apply {
+                val openIntent = Intent(context, MainActivity::class.java).apply {
+                    data = Uri.parse("jadwal://task/$taskId")
+                    action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
                 val openPending = PendingIntent.getActivity(
@@ -303,16 +301,14 @@ class TaskWidgetProvider : AppWidgetProvider() {
             )
 
             val headerIntent = if (selectedDate.isNotEmpty()) {
-                Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("jadwal://day/$selectedDate"),
-                    context,
-                    MainActivity::class.java,
-                ).apply {
+                Intent(context, MainActivity::class.java).apply {
+                    data = Uri.parse("jadwal://day/$selectedDate")
+                    action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
             } else {
                 Intent(context, MainActivity::class.java).apply {
+                    action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
             }

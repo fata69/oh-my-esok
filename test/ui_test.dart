@@ -49,7 +49,7 @@ void main() {
         home: const Scaffold(
           body: Align(
             alignment: Alignment.bottomCenter,
-            child: PatchNotesSheet(version: '1.9.0', buildNumber: '11'),
+            child: PatchNotesSheet(version: '1.9.1', buildNumber: '12'),
           ),
         ),
       ),
@@ -57,11 +57,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Catatan rilis'), findsOneWidget);
-    expect(find.text('Versi 1.9.0 (11)'), findsOneWidget);
+    expect(find.text('Versi 1.9.1 (12)'), findsOneWidget);
     expect(find.text('Terbaru'), findsOneWidget);
     expect(
       find.text(
-        'Pindai AI mengisi arah Keluar/Masuk dan bisa memilih baris dari mutasi ganda.',
+        'Rute widget memakai action HomeWidget: +/badan widget uang dan judul widget tugas membuka layar yang benar.',
       ),
       findsOneWidget,
     );

@@ -29,6 +29,14 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '1.9.1',
+      date: '16 Nov 2026',
+      notes: [
+        'Rute widget memakai action HomeWidget: +/badan widget uang dan judul widget tugas membuka layar yang benar.',
+        'Cadangan otomatis memberi umpan balik, memverifikasi berkas, dan menyediakan jalur simpan manual.',
+      ],
+    ),
+    (
       version: '1.9.0',
       date: '16 Nov 2026',
       notes: [

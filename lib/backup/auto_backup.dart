@@ -18,6 +18,8 @@ class AutoBackup {
   static const _checksumKey = 'backup_checksum';
   static const _timeKey = 'backup_at';
 
+  static String? lastError;
+
   static Future<DateTime?> lastBackupAt() async {
     final prefs = await SharedPreferences.getInstance();
     final millis = prefs.getInt(_timeKey);
@@ -26,6 +28,7 @@ class AutoBackup {
   }
 
   static Future<bool> runIfChanged({bool force = false}) async {
+    lastError = null;
     try {
       final data = await BackupService.collect();
       final json = const JsonEncoder.withIndent(
@@ -42,12 +45,28 @@ class AutoBackup {
             'content': json,
           }) ??
           false;
-      if (!ok) return false;
+      if (!ok) {
+        lastError = 'Gagal menulis ke Download/Esok.';
+        return false;
+      }
+
+      final modified = await _channel.invokeMethod<int>('backupModifiedAt', {
+        'name': fileName,
+      });
+      if (modified == null) {
+        lastError = 'Berkas cadangan tidak ditemukan setelah ditulis.';
+        return false;
+      }
 
       await prefs.setString(_checksumKey, checksum);
       await prefs.setInt(_timeKey, DateTime.now().millisecondsSinceEpoch);
       return true;
+    } on PlatformException catch (error) {
+      lastError = error.message ?? 'Gagal menulis cadangan.';
+      debugPrint('AutoBackup gagal: ${error.code} ${error.message}');
+      return false;
     } catch (error, stack) {
+      lastError = 'Gagal membuat cadangan: $error';
       debugPrint('AutoBackup gagal: $error\n$stack');
       return false;
     }

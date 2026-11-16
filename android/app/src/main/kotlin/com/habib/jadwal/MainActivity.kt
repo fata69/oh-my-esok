@@ -76,8 +76,29 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
                     Thread {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                            runOnUiThread {
+                                result.error(
+                                    "unsupported_sdk",
+                                    "Cadangan otomatis butuh Android 10 atau lebih baru.",
+                                    null,
+                                )
+                            }
+                            return@Thread
+                        }
                         val ok = writeBackup(name, content)
-                        runOnUiThread { result.success(ok) }
+                        val exists = backupModifiedAt(name) != null
+                        runOnUiThread {
+                            if (ok && exists) {
+                                result.success(true)
+                            } else {
+                                result.error(
+                                    "write_failed",
+                                    "Gagal menulis atau memverifikasi berkas cadangan.",
+                                    null,
+                                )
+                            }
+                        }
                     }.start()
                 }
 
@@ -145,7 +166,9 @@ class MainActivity : FlutterActivity() {
             contentResolver.insert(downloads, values) ?: return false
         }
         return try {
-            contentResolver.openOutputStream(uri, "wt")?.use {
+            val stream = contentResolver.openOutputStream(uri, "wt")
+                ?: return false
+            stream.use {
                 it.write(content.toByteArray(Charsets.UTF_8))
             }
             true

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.RemoteViews
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
 import org.json.JSONObject
 import java.text.NumberFormat
@@ -88,20 +89,14 @@ private fun buildMoneyWidgetViews(context: Context, layoutId: Int): RemoteViews 
     views.setTextViewText(R.id.money_today, amount(today))
     views.setTextViewText(R.id.money_month, amount(month))
 
-    val openApp = Intent(
-        Intent.ACTION_VIEW,
-        Uri.parse("jadwal://money"),
-        context,
-        MainActivity::class.java,
-    ).apply {
+    val openApp = Intent(context, MainActivity::class.java).apply {
+        data = Uri.parse("jadwal://money")
+        action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
-    val openCatat = Intent(
-        Intent.ACTION_VIEW,
-        Uri.parse("jadwal://money/new"),
-        context,
-        MainActivity::class.java,
-    ).apply {
+    val openCatat = Intent(context, MainActivity::class.java).apply {
+        data = Uri.parse("jadwal://money/new")
+        action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
     val rootPending = PendingIntent.getActivity(
