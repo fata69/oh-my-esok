@@ -29,6 +29,13 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '1.9.2',
+      date: '16 Nov 2026',
+      notes: [
+        'Bunyi centang di widget mengikuti nada yang dipilih, termasuk suara impor dan pilihan Diam.',
+      ],
+    ),
+    (
       version: '1.9.1',
       date: '16 Nov 2026',
       notes: [

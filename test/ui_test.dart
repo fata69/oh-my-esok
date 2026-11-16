@@ -49,7 +49,7 @@ void main() {
         home: const Scaffold(
           body: Align(
             alignment: Alignment.bottomCenter,
-            child: PatchNotesSheet(version: '1.9.1', buildNumber: '12'),
+            child: PatchNotesSheet(version: '1.9.2', buildNumber: '13'),
           ),
         ),
       ),
@@ -57,11 +57,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Catatan rilis'), findsOneWidget);
-    expect(find.text('Versi 1.9.1 (12)'), findsOneWidget);
+    expect(find.text('Versi 1.9.2 (13)'), findsOneWidget);
     expect(find.text('Terbaru'), findsOneWidget);
     expect(
       find.text(
-        'Rute widget memakai action HomeWidget: +/badan widget uang dan judul widget tugas membuka layar yang benar.',
+        'Bunyi centang di widget mengikuti nada yang dipilih, termasuk suara impor dan pilihan Diam.',
       ),
       findsOneWidget,
     );

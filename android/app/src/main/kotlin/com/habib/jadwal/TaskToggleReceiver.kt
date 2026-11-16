@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import es.antonborri.home_widget.HomeWidgetPlugin
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 class TaskToggleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -80,23 +81,84 @@ class TaskToggleReceiver : BroadcastReceiver() {
 
     /**
      * Bunyi dimainkan di sini, bukan di Dart, supaya tetap terdengar saat
-     * aplikasi sedang tidak terbuka. Konfigurasi nada dikirim oleh WidgetSync.
+     * aplikasi sedang tidak terbuka. Sumber utama adalah SharedPreferences
+     * Flutter agar pilihan terbaru langsung terpakai; data widget hanya
+     * cadangan untuk versi lama.
      */
     private fun playToggleSound(context: Context, done: Boolean) {
-        val prefs = HomeWidgetPlugin.getData(context)
-        if (!prefs.getBoolean("sound_enabled", true)) return
+        val widgetPrefs = HomeWidgetPlugin.getData(context)
+        val appPrefs = context.getSharedPreferences(
+            "FlutterSharedPreferences",
+            Context.MODE_PRIVATE,
+        )
+        val enabled = appPrefs.getBoolean(
+            "flutter.sound_enabled",
+            widgetPrefs.getBoolean("sound_enabled", true),
+        )
+        if (!enabled) return
 
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         if (audio?.ringerMode == AudioManager.RINGER_MODE_SILENT) return
 
-        val key = if (done) "sound_check_raw" else "sound_uncheck_raw"
-        val name = prefs.getString(key, null)?.takeIf { it.isNotEmpty() } ?: return
-        val resId = context.resources.getIdentifier(name, "raw", context.packageName)
-        if (resId == 0) return
+        val suffix = if (done) "check" else "uncheck"
+        val selectedId = appPrefs.getString(
+            if (done) "flutter.sound_check_id" else "flutter.sound_uncheck_id",
+            null,
+        ) ?: if (done) appPrefs.getString("flutter.sound_done_id", null) else null
+
+        var rawName = ""
+        var filePath = ""
+        if (selectedId != null) {
+            when {
+                selectedId == "none" -> return
+                selectedId.startsWith("file:") -> {
+                    filePath = selectedId.removePrefix("file:").trim()
+                }
+                selectedId.startsWith("asset:") -> {
+                    rawName = selectedId.removePrefix("asset:")
+                        .substringAfterLast('/')
+                        .substringBeforeLast('.')
+                        .trim()
+                }
+            }
+        }
+
+        if (rawName.isEmpty() && filePath.isEmpty()) {
+            rawName = widgetPrefs.getString("sound_${suffix}_raw", null)
+                ?.trim()
+                .orEmpty()
+            filePath = widgetPrefs.getString("sound_${suffix}_file", null)
+                ?.trim()
+                .orEmpty()
+        }
+        if (rawName.isEmpty() && filePath.isEmpty()) {
+            rawName = if (done) "chime" else "pop"
+        }
+
+        if (filePath.isNotEmpty() && !File(filePath).isFile) {
+            filePath = ""
+        }
+        if (rawName.isEmpty() && filePath.isEmpty()) return
 
         try {
             player?.release()
-            val created = MediaPlayer.create(context, resId) ?: return
+            player = null
+
+            val created = if (filePath.isNotEmpty()) {
+                MediaPlayer().apply {
+                    setDataSource(filePath)
+                    prepare()
+                }
+            } else {
+                val resId = context.resources.getIdentifier(
+                    rawName,
+                    "raw",
+                    context.packageName,
+                )
+                if (resId == 0) return
+                MediaPlayer.create(context, resId)
+            } ?: return
+
             player = created
             created.setOnCompletionListener {
                 it.release()
@@ -104,6 +166,7 @@ class TaskToggleReceiver : BroadcastReceiver() {
             }
             created.start()
         } catch (error: Exception) {
+            player?.release()
             player = null
         }
     }

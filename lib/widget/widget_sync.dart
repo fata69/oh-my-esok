@@ -80,14 +80,33 @@ class WidgetSync {
           SoundLibrary.builtIn[1].id;
       final uncheckId =
           prefs.getString('sound_uncheck_id') ?? SoundLibrary.builtIn[2].id;
+      final imported = _decodeImportedSounds(prefs.getString('sound_imports'));
+      final check = SoundLibrary.resolve(
+        checkId,
+        imported,
+        fallback: SoundLibrary.builtIn[1],
+      );
+      final uncheck = SoundLibrary.resolve(
+        uncheckId,
+        imported,
+        fallback: SoundLibrary.builtIn[2],
+      );
       await HomeWidget.saveWidgetData<bool>('sound_enabled', soundEnabled);
       await HomeWidget.saveWidgetData<String>(
         'sound_check_raw',
-        SoundLibrary.resolve(checkId, const []).raw ?? 'chime',
+        check.raw ?? '',
+      );
+      await HomeWidget.saveWidgetData<String>(
+        'sound_check_file',
+        check.file ?? '',
       );
       await HomeWidget.saveWidgetData<String>(
         'sound_uncheck_raw',
-        SoundLibrary.resolve(uncheckId, const []).raw ?? 'pop',
+        uncheck.raw ?? '',
+      );
+      await HomeWidget.saveWidgetData<String>(
+        'sound_uncheck_file',
+        uncheck.file ?? '',
       );
       await HomeWidget.updateWidget(androidName: 'MoneyWidgetProvider');
       await HomeWidget.updateWidget(
@@ -118,6 +137,20 @@ class WidgetSync {
     } catch (error, stack) {
       debugPrint('WidgetSync.drainPendingToggles failed: $error\n$stack');
       return false;
+    }
+  }
+
+  static List<SoundOption> _decodeImportedSounds(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return decoded
+          .whereType<Map>()
+          .map((item) => SoundOption.fromJson(Map<String, Object?>.from(item)))
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
     }
   }
 }
