@@ -67,13 +67,21 @@ void main() {
     await openReview(
       tester, scan: _unknownDirection, onClose: (value) => result = value,
     );
-    expect(tester.widget<FilledButton>(find.byKey(
-      const ValueKey('scan-apply'),
-    )).onPressed, isNull);
-    await tester.tap(find.byKey(const ValueKey('scan-kind-income')));
-    await tester.ensureVisible(find.byKey(const ValueKey('scan-apply')));
-    await tester.tap(find.byKey(const ValueKey('scan-apply')));
+    final apply = find.byKey(const ValueKey('scan-apply'));
+    final income = find.byKey(const ValueKey('scan-kind-income'));
+    expect(tester.widget<FilledButton>(apply).onPressed, isNull);
+    expect(tester.widget<ChoiceChip>(income).selected, isFalse);
+
+    await tester.tap(income);
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChoiceChip>(income).selected, isTrue);
+    expect(tester.widget<FilledButton>(apply).onPressed, isNotNull);
+    expect(result, isNull);
+
+    await tester.ensureVisible(apply);
+    await tester.tap(apply);
     await tester.pumpAndSettle();
     expect(result?.kind, 'income');
+    expect(find.text('Periksa hasil pindai'), findsNothing);
   });
 }
