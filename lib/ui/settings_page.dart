@@ -292,7 +292,8 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) => _Sheet(
         title: 'Lisensi font',
         child: Text(
-          'Astoria digunakan hanya sebagai sumber desain wordmark dan tidak dibundel ke APK. Wordmark di aplikasi adalah jalur vektor.',
+          'Plus Jakarta Sans · SIL Open Font License 1.1.\n'
+          'Hak cipta 2020 The Plus Jakarta Sans Project Authors.',
           style: TextStyle(
             fontSize: 13,
             height: 1.65,
@@ -493,7 +494,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             _SettingsRow(
               title: 'Lisensi font',
-              trailing: _Trailing('Astoria · personal ›'),
+              trailing: const _Trailing('OFL 1.1 ›'),
               onTap: _showFontLicense,
             ),
           ],

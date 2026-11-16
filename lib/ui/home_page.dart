@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -298,15 +297,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: const EdgeInsets.fromLTRB(24, 6, 10, 0),
               child: Row(
                 children: [
-                  SvgPicture.asset(
-                    'assets/brand/esok-wordmark.svg',
-                    height: 26,
-                    colorFilter: ColorFilter.mode(
-                      EsokColors.ink,
-                      BlendMode.srcIn,
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        'Oh My Esok',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
-                  const Spacer(),
                   PopupMenuButton<String>(
                     tooltip: 'Pengaturan',
                     icon: Icon(
