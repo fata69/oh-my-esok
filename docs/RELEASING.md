@@ -34,6 +34,12 @@ features. Include the commit, APK SHA-256, certificate, device/API, observed
 results and any limitations. Route failures to the owning UI/UX or middleware
 chat, integrate fixes, and repeat the affected checks on the new candidate.
 
+The `main` ruleset requires a pull request, resolved conversations, an
+up-to-date branch, and the `QA / Android` status on its candidate commit.
+Keep it pending while testing. Record success on the exact PR head only after
+the QA evidence above is complete, whether the build ran in Actions or locally.
+Do not bypass the rule or reuse a success status after changing the candidate.
+
 For the OTA path, install a lower-version fork APK signed by the same key and
 verify updating to the candidate preserves synthetic data. Cancelling or
 rejecting an installer must preserve the old version. Corrupt, wrong-ID and
