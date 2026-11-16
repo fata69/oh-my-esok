@@ -14,9 +14,25 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.security.MessageDigest
+import java.lang.ref.WeakReference
 
 class UpdateBridge(private val activity: Activity, messenger: BinaryMessenger) {
+    companion object {
+        private var currentActivity: WeakReference<Activity>? = null
+        @Volatile private var pendingConfirmation: Intent? = null
+
+        fun confirmWhenActive(confirmation: Intent): Boolean {
+            pendingConfirmation = confirmation
+            val owner = currentActivity?.get() ?: return false
+            if (!owner.hasWindowFocus() || owner.isFinishing || owner.isDestroyed) return false
+            owner.startActivity(confirmation)
+            pendingConfirmation = null
+            return true
+        }
+    }
+
     init {
+        currentActivity = WeakReference(activity)
         MethodChannel(messenger, "ohmyesok/update").setMethodCallHandler { call, result ->
             when (call.method) {
                 "canInstall" -> result.success(Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls())
@@ -33,6 +49,18 @@ class UpdateBridge(private val activity: Activity, messenger: BinaryMessenger) {
                 "checkApk", "install" -> Thread {
                     try {
                         val apk = checkedFile(call)
+                        val pending = pendingConfirmation
+                        if (call.method == "install" && pending != null) {
+                            activity.runOnUiThread {
+                                try {
+                                    require(confirmWhenActive(pending)) { "Buka aplikasi untuk melanjutkan pemasangan." }
+                                    result.success(null)
+                                } catch (_: Exception) {
+                                    result.error("confirmation", "Konfirmasi Android tidak dapat dibuka. Coba lagi.", null)
+                                }
+                            }
+                            return@Thread
+                        }
                         if (call.method == "install") install(apk)
                         activity.runOnUiThread { result.success(null) }
                     } catch (error: Exception) {

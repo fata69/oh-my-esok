@@ -218,7 +218,8 @@ class UpdateController extends ChangeNotifier {
         } else {
           final status = await _bridge.invokeMethod<String>('installStatus');
           _publish(UpdatePhase.ready, status == 'failed'
-            ? 'Pemasangan dibatalkan atau ditolak Android. Kamu bisa mencoba lagi.' : null);
+            ? 'Pemasangan dibatalkan atau ditolak Android. Kamu bisa mencoba lagi.'
+            : status == 'awaiting_user' ? 'Ketuk Pasang untuk melanjutkan konfirmasi Android.' : null);
         }
       } catch (error) {
         _publish(UpdatePhase.failed, _error(error));

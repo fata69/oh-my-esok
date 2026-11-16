@@ -19,7 +19,9 @@ class UpdateInstallReceiver : BroadcastReceiver() {
                 }
                 try {
                     requireNotNull(confirmation)
-                    context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    if (!UpdateBridge.confirmWhenActive(confirmation)) {
+                        preferences.edit().putString("status", "awaiting_user").apply()
+                    }
                 } catch (_: Exception) {
                     preferences.edit().putString("status", "failed").apply()
                 }
