@@ -83,9 +83,16 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int _pageForDate(DateTime date) => _basePage + daysBetween(today(), date);
 
   Future<void> _jumpTo(DateTime date) async {
+    if (!mounted) return;
     final page = _pageForDate(date).clamp(0, _basePage * 2);
     if (!_controller.hasClients) {
       await context.read<TaskStore>().selectDate(date);
+      return;
+    }
+    if (MediaQuery.reduceMotionOf(context) ||
+        MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context)) {
+      _controller.jumpToPage(page);
       return;
     }
     await _controller.animateToPage(

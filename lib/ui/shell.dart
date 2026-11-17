@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -120,6 +121,7 @@ class _TabPaneState extends State<_TabPane> {
   Widget build(BuildContext context) {
     final reduced =
         MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.reduceMotionOf(context) ||
         MediaQuery.accessibleNavigationOf(context);
     return Offstage(
       offstage: !widget.active && (reduced || !_visible),
@@ -136,9 +138,13 @@ class _TabPaneState extends State<_TabPane> {
                   : Duration(milliseconds: widget.active ? 240 : 160),
               curve: Curves.easeOutCubic,
               onEnd: () {
-                if (mounted && !widget.active && _visible) {
-                  setState(() => _visible = false);
-                }
+                if (widget.active || !_visible) return;
+                // A zero-duration change can finish while the child builds.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && !widget.active && _visible) {
+                    setState(() => _visible = false);
+                  }
+                });
               },
               child: AnimatedSlide(
                 offset: widget.active ? Offset.zero : const Offset(.018, 0),
@@ -174,13 +180,23 @@ class _AboveDock extends StatelessWidget {
   }
 }
 
-class _FloatingTabBar extends StatelessWidget {
+class _FloatingTabBar extends StatefulWidget {
   const _FloatingTabBar({
     required this.index,
     required this.onChanged,
     this.action,
   });
 
+  final int index;
+  final ValueChanged<int> onChanged;
+  final (String, VoidCallback)? action;
+
+  @override
+  State<_FloatingTabBar> createState() => _FloatingTabBarState();
+}
+
+class _FloatingTabBarState extends State<_FloatingTabBar>
+    with SingleTickerProviderStateMixin {
   static const _forceSolid = bool.fromEnvironment('ESOK_SOLID_NAV');
   static const _radius = BorderRadius.all(Radius.circular(40));
   static final _blur = ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10);
@@ -191,23 +207,69 @@ class _FloatingTabBar extends StatelessWidget {
     ('Setelan', Icons.settings_outlined),
   ];
 
-  final int index;
-  final ValueChanged<int> onChanged;
-  final (String, VoidCallback)? action;
+  static const _addSize = 52.0;
+  static const _gap = 8.0;
+  static const _revealDistance = 26.0;
+  static const _enter = SpringDescription(mass: 1, stiffness: 800, damping: 44);
+  static const _exit = SpringDescription(mass: 1, stiffness: 800, damping: 57);
+  late final _reveal = AnimationController.unbounded(
+    vsync: this,
+    value: _target,
+  );
+
+  bool _solid = false;
+  double get _target => widget.action == null ? 0 : 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final solid =
+        _forceSolid ||
+        MediaQuery.highContrastOf(context) ||
+        MediaQuery.accessibleNavigationOf(context) ||
+        MediaQuery.reduceMotionOf(context) ||
+        MediaQuery.disableAnimationsOf(context);
+    if (solid && !_solid) _reveal.value = _target;
+    _solid = solid;
+  }
+
+  @override
+  void didUpdateWidget(covariant _FloatingTabBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((oldWidget.action == null) == (widget.action == null)) return;
+    if (_solid) {
+      _reveal.value = _target;
+      return;
+    }
+    // One spring drives the space and the circle. Retarget from live position
+    // and velocity so interrupting a tab switch keeps the glass in motion.
+    _reveal.animateWith(
+      SpringSimulation(
+        _target == 1 ? _enter : _exit,
+        _reveal.value,
+        _target,
+        _reveal.velocity,
+        tolerance: const Tolerance(distance: .005, velocity: .08),
+        snapToEnd: true,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _reveal.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final highContrast = MediaQuery.highContrastOf(context);
-    final solid =
-        _forceSolid ||
-        highContrast ||
-        MediaQuery.accessibleNavigationOf(context) ||
-        MediaQuery.disableAnimationsOf(context);
+    final solid = _solid;
     final tint = colors.surfaceContainerLow;
     // A bright list item behind the dark bar needs a stronger scrim.
     final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
-    final primary = action;
+    final primary = widget.action;
     final edge = highContrast ? colors.outline : colors.outlineVariant;
     final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
     final capsule = DecoratedBox(
@@ -225,9 +287,9 @@ class _FloatingTabBar extends StatelessWidget {
                 child: _NavItem(
                   label: _tabs[i].$1,
                   icon: _tabs[i].$2,
-                  selected: index == i,
+                  selected: widget.index == i,
                   highContrast: highContrast,
-                  onTap: () => onChanged(i),
+                  onTap: () => widget.onChanged(i),
                 ),
               ),
           ],
@@ -235,47 +297,27 @@ class _FloatingTabBar extends StatelessWidget {
       ),
     );
 
-    // Keep the circle whole throughout the transition. The capsule paints
-    // over it while they overlap, so it can emerge from behind the edge.
-    final accessory = ExcludeSemantics(
-      excluding: primary == null,
-      child: IgnorePointer(
-        ignoring: primary == null,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: primary == null ? 0 : 1),
-          duration: solid ? Duration.zero : const Duration(milliseconds: 420),
-          curve: primary == null ? Curves.easeInCubic : Curves.easeOutBack,
-          builder: (context, progress, child) => Opacity(
-            opacity: progress.clamp(0, 1),
-            child: Transform.translate(
-              offset: Offset(-30 * (1 - progress), 0),
-              child: Transform.scale(scale: .90 + .10 * progress, child: child),
-            ),
+    final button = ClipOval(
+      child: BackdropFilter(
+        filter: solid ? ui.ImageFilter.blur() : _blur,
+        child: Container(
+          key: primary == null ? null : const ValueKey('bottom-create'),
+          width: _addSize,
+          height: _addSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: solid ? tint : tint.withValues(alpha: tintOpacity),
+            border: Border.all(color: edge),
           ),
-          child: ClipOval(
-            child: BackdropFilter(
-              filter: solid ? ui.ImageFilter.blur() : _blur,
-              child: Container(
-                key: primary == null ? null : const ValueKey('bottom-create'),
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: solid ? tint : tint.withValues(alpha: tintOpacity),
-                  border: Border.all(color: edge),
-                ),
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: IconButton(
-                    tooltip: primary?.$1 ?? 'Tambah',
-                    onPressed: primary?.$2,
-                    icon: const Icon(Icons.add_rounded, size: 25),
-                    style: IconButton.styleFrom(
-                      foregroundColor: ink,
-                      shape: const CircleBorder(),
-                    ),
-                  ),
-                ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: IconButton(
+              tooltip: primary?.$1 ?? 'Tambah',
+              onPressed: primary?.$2,
+              icon: const Icon(Icons.add_rounded, size: 25),
+              style: IconButton.styleFrom(
+                foregroundColor: ink,
+                shape: const CircleBorder(),
               ),
             ),
           ),
@@ -295,34 +337,57 @@ class _FloatingTabBar extends StatelessWidget {
           heightFactor: 1,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.centerRight,
-              children: [
-                Positioned(right: 0, child: accessory),
-                Row(
+            child: AnimatedBuilder(
+              animation: _reveal,
+              child: ClipRRect(
+                key: const ValueKey('floating-navigation'),
+                borderRadius: _radius,
+                child: solid
+                    ? capsule
+                    : BackdropFilter(filter: _blur, child: capsule),
+              ),
+              builder: (context, nav) {
+                final progress = _reveal.value.clamp(0.0, 1.0);
+                final offset = (_revealDistance * (_reveal.value - 1)).clamp(
+                  -_revealDistance,
+                  2.0,
+                );
+                final hidden = primary == null || progress <= .001;
+                // The bar covers the intact circle until its right edge
+                // emerges. Keep its 52 dp size and the dock's centerline.
+                return Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.centerRight,
                   children: [
-                    Expanded(
-                      child: ClipRRect(
-                        key: const ValueKey('floating-navigation'),
-                        borderRadius: _radius,
-                        child: solid
-                            ? capsule
-                            : BackdropFilter(filter: _blur, child: capsule),
+                    Positioned(
+                      right: 0,
+                      child: ExcludeSemantics(
+                        excluding: hidden,
+                        child: IgnorePointer(
+                          ignoring: hidden,
+                          child: Opacity(
+                            opacity: progress,
+                            child: Transform.translate(
+                              offset: Offset(offset, 0),
+                              child: button,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    AnimatedContainer(
-                      key: const ValueKey('create-accessory-slot'),
-                      width: primary == null ? 0 : 60,
-                      height: 52,
-                      duration: solid
-                          ? Duration.zero
-                          : const Duration(milliseconds: 340),
-                      curve: Curves.easeInOutCubic,
+                    Row(
+                      children: [
+                        Expanded(child: nav!),
+                        SizedBox(
+                          key: const ValueKey('create-accessory-slot'),
+                          width: (_addSize + _gap) * progress,
+                          height: _addSize,
+                        ),
+                      ],
                     ),
                   ],
-                ),
-              ],
+                );
+              },
             ),
           ),
         ),
@@ -332,7 +397,7 @@ class _FloatingTabBar extends StatelessWidget {
 }
 
 Color _dockInk(Brightness brightness) => brightness == Brightness.dark
-    ? const Color(0xFF9DBDFF)
+    ? const Color(0xFFF0F0F0)
     : const Color(0xFF1558D4);
 
 class _NavItem extends StatelessWidget {
@@ -356,7 +421,7 @@ class _NavItem extends StatelessWidget {
     final dark = colors.brightness == Brightness.dark;
     final selectedInk = _dockInk(colors.brightness);
     final selectedTint = dark
-        ? const Color(0xFF242D40)
+        ? const Color(0xFF292929)
         : const Color(0xFFEAF0FA);
     final inverted = selected && highContrast;
     final foreground = inverted

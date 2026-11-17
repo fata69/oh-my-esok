@@ -147,7 +147,7 @@ void main() {
       expect(Scaffold.of(tester.element(label)).widget.backgroundColor, canvas);
     }
 
-    const dark = (Color(0xFF111111), Color(0xFFEEEEEE), Color(0xFFB4B4B4));
+    const dark = (Color(0xFF000000), Color(0xFFEEEEEE), Color(0xFFB4B4B4));
     const light = (Color(0xFFFCFCFC), Color(0xFF202020), Color(0xFF646464));
     await verifyLedger(dark.$1, dark.$2, dark.$3);
     for (final (mode, expected) in [
@@ -352,15 +352,19 @@ void main() {
     'dock accessory animates without losing tab state or hit targets',
     (tester) async {
       tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(412, 892);
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+      tester.view.viewPadding = tester.view.padding;
       addTearDown(tester.view.reset);
       await launch(tester);
       final nav = find.byKey(const ValueKey('floating-navigation'));
       final slot = find.byKey(const ValueKey('create-accessory-slot'));
       final initial = tester.getSize(nav).width;
+      expect(tester.getSize(nav).height, 56);
+      expect(tester.getRect(nav).bottom, closeTo(844 - 24 - 6, .01));
       await tester.tap(find.bySemanticsLabel('Laporan').hitTestable());
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 130));
+      await tester.pump(const Duration(milliseconds: 65));
       expect(tester.getSize(slot).width, inExclusiveRange(0, 60));
       expect(tester.getSize(nav).width, greaterThan(initial));
       expect(find.byKey(const ValueKey('bottom-create')), findsNothing);
@@ -369,14 +373,44 @@ void main() {
       expect(tester.getSize(slot).width, 0);
       await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 130));
+      await tester.pump(const Duration(milliseconds: 65));
       expect(tester.getSize(slot).width, inExclusiveRange(0, 60));
-      await tester.pumpAndSettle();
+      final openWidth = tester.getSize(slot).width;
+      await tester.tap(find.bySemanticsLabel('Setelan').hitTestable());
+      await tester.pump();
+      expect(tester.getSize(slot).width, closeTo(openWidth, .01));
+      await tester.pump(const Duration(milliseconds: 50));
+      final reverseWidth = tester.getSize(slot).width;
+      expect(reverseWidth, lessThan(openWidth));
+      await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
+      await tester.pump();
+      expect(tester.getSize(slot).width, closeTo(reverseWidth, .01));
+      await tester.pump(const Duration(milliseconds: 300));
       expect(tester.getSize(slot).width, 60);
       expect(find.text('Pengeluaran terakhir').hitTestable(), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('dock honours reduced motion and settles immediately', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(reduceMotion: true);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await launch(tester);
+    final slot = find.byKey(const ValueKey('create-accessory-slot'));
+    await tester.tap(find.bySemanticsLabel('Laporan').hitTestable());
+    await tester.pump();
+    expect(tester.getSize(slot).width, 0);
+    await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
+    await tester.pump();
+    expect(tester.getSize(slot).width, 60);
+    expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
+  });
 
   testWidgets('capture the actual dock emergence motion', (tester) async {
     tester.view.devicePixelRatio = 1;

@@ -317,20 +317,22 @@ class _BalanceBlock extends StatelessWidget {
                 ),
               ),
             ),
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const ManageAccountsPage(),
                 ),
               ),
-              child: Text(
-                'KELOLA ›',
-                style: TextStyle(
-                  fontSize: 10.5,
+              style: TextButton.styleFrom(
+                foregroundColor: colors.ink,
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: colors.accent,
                 ),
               ),
+              child: const Text('Kelola dompet'),
             ),
           ],
         ),
