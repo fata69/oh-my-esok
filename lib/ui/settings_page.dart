@@ -518,6 +518,11 @@ class _SettingsPageState extends State<SettingsPage> {
           _SettingsGroup(
             label: 'Tentang',
             children: [
+              const _SettingsRow(
+                title: 'Oh My Esok',
+                icon: Icons.info_outline,
+                subtitle: 'Dikembangkan dan dikelola oleh Fata (@fata69)',
+              ),
               _SettingsRow(
                 title: 'Pembaruan aplikasi',
                 icon: Icons.system_update_outlined,
@@ -526,11 +531,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
                 ),
-              ),
-              const _SettingsRow(
-                title: 'Oh My Esok',
-                icon: Icons.info_outline,
-                subtitle: 'Dikembangkan dari Esok oleh notSeraphimXD',
               ),
               _SettingsRow(
                 title: 'Lisensi font',

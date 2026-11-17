@@ -288,12 +288,6 @@ class PatchNotesSheet extends StatelessWidget {
                   isLatest: i == 0,
                 ),
               ],
-              const SizedBox(height: 24),
-              Text(
-                'Dikembangkan dari Esok oleh notSeraphimXD.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
-              ),
             ],
           ),
         ),

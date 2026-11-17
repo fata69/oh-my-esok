@@ -1,13 +1,15 @@
 # Oh My Esok
 
-Fork pengembangan dari [Esok](https://github.com/notSeraphimXD/esok), dibuat oleh
-**notSeraphimXD**. Riwayat dan kredit proyek asal dipertahankan.
+Catatan harian dan buku kas dalam satu aplikasi Android. Oh My Esok dikembangkan
+dan dikelola oleh [Fata (@fata69)](https://github.com/fata69).
+
+Oh My Esok adalah fork dari [Esok](https://github.com/notSeraphimXD/esok), proyek
+asli karya **notSeraphimXD**. Riwayat Git proyek asal dipertahankan.
 
 Oh My Esok memiliki ID Android `io.github.fata69.ohmyesok`, sehingga dapat dipasang
 berdampingan dengan Esok. Untuk memindahkan data, ekspor JSON dari Esok lalu
 pilih berkas tersebut lewat **Setelan → Data → Impor** di Oh My Esok.
 
-Catatan harian dan buku kas dalam satu aplikasi Android.
 Tanpa akun; catatan dan buku kas disimpan di HP. Pindai struk bersifat opsional
 dan mengirim gambar pilihan ke Gemini menggunakan API key pengguna.
 
@@ -79,4 +81,4 @@ assets/  font, ikon kategori, suara
 
 - SQLite adalah sumber kebenaran. Widget menerima salinan JSON, dan centang dari widget diterapkan ke database saat aplikasi dibuka.
 - Versi database 5 — menambah kolom rincian barang pada transaksi.
-- Kredit dan riwayat Esok dipertahankan. Plus Jakarta Sans disertakan dengan [OFL](assets/fonts/plus-jakarta-sans/OFL.txt).
+- Plus Jakarta Sans disertakan dengan [OFL](assets/fonts/plus-jakarta-sans/OFL.txt).
