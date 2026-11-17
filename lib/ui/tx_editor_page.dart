@@ -547,7 +547,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
             // Choose the dock's placement once for this viewport, irrespective
             // of insets from Android's keyboard.
             final safeHeight = media.size.height - media.viewPadding.vertical;
-            final docked = safeHeight >= keypadHeight + 220;
+            final docked = safeHeight >= keypadHeight + 168;
             final reduceMotion =
                 media.reduceMotion ||
                 media.disableAnimations ||
