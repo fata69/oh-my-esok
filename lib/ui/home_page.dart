@@ -216,10 +216,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (!mounted) return;
         await Navigator.of(context).push<String>(
           MaterialPageRoute<String>(
-            builder: (_) => TxEditorPage(
-              initialDate: today(),
-              initialKind: 'expense',
-            ),
+            builder: (_) =>
+                TxEditorPage(initialDate: today(), initialKind: 'expense'),
           ),
         );
       } else {
@@ -299,11 +297,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return EsokTabLayout(
       headerAction: PopupMenuButton<String>(
         tooltip: 'Pengaturan',
-        icon: Icon(
-          Icons.more_horiz,
-          size: 20,
-          color: colors.muted,
-        ),
+        icon: Icon(Icons.more_horiz, size: 20, color: colors.muted),
         color: colors.surface,
         surfaceTintColor: Colors.transparent,
         onSelected: (value) {
@@ -318,22 +312,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           }
         },
         itemBuilder: (context) => const [
-          PopupMenuItem(
-            value: 'alarms',
-            child: Text('Alarm & pengingat'),
-          ),
-          PopupMenuItem(
-            value: 'battery',
-            child: Text('Baterai tanpa batas'),
-          ),
-          PopupMenuItem(
-            value: 'widget',
-            child: Text('Pasang widget'),
-          ),
-          PopupMenuItem(
-            value: 'release_notes',
-            child: Text('Catatan rilis'),
-          ),
+          PopupMenuItem(value: 'alarms', child: Text('Alarm & pengingat')),
+          PopupMenuItem(value: 'battery', child: Text('Baterai tanpa batas')),
+          PopupMenuItem(value: 'widget', child: Text('Pasang widget')),
+          PopupMenuItem(value: 'release_notes', child: Text('Catatan rilis')),
         ],
       ),
       child: Column(
@@ -341,7 +323,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           EsokPeriodHeader(
             title: dateTitle(selected),
             caption: positionLabel(selected),
-            detail: '${weekdayName(selected)} · ${taskCountLabel(store.tasks.length)}',
+            detail: weekdayName(selected),
             previousLabel: 'Hari sebelumnya',
             nextLabel: 'Hari berikutnya',
             onPrevious: store.canGoPrevious
@@ -465,19 +447,30 @@ class _DayPaneState extends State<_DayPane> {
             EsokTabLayout.scrollBottomOf(context),
           ),
           children: [
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton.icon(
-                onPressed: widget.onCloseDay,
-                style: TextButton.styleFrom(
-                  foregroundColor: colors.ink,
-                  minimumSize: const Size(48, 48),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    'Agenda',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
-                icon: const Icon(Icons.fact_check_outlined, size: 18),
-                label: const Text('Tutup hari'),
-              ),
+                TextButton.icon(
+                  onPressed: widget.onCloseDay,
+                  style: TextButton.styleFrom(
+                    foregroundColor: colors.ink,
+                    minimumSize: const Size(48, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  icon: const Icon(Icons.fact_check_outlined, size: 16),
+                  label: const Text('Tutup hari'),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
             if (tasks.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -485,14 +478,28 @@ class _DayPaneState extends State<_DayPane> {
                   'Belum ada catatan.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: Text(
+                  '${tasks.length - undone} dari ${tasks.length} selesai',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ),
-            for (var index = 0; index < tasks.length; index++)
-              _TaskRow(
-                task: tasks[index],
-                showDivider: index != tasks.length - 1,
-                onToggle: () => widget.onToggle(tasks[index]),
-                onOpen: () => widget.onOpen(tasks[index]),
-              ),
+              for (final (index, task) in tasks.indexed)
+                EsokGroupedRow(
+                  key: ValueKey(task.id),
+                  first: index == 0,
+                  last: index == tasks.length - 1,
+                  child: _TaskRow(
+                    task: task,
+                    showDivider: index != tasks.length - 1,
+                    onToggle: () => widget.onToggle(task),
+                    onOpen: () => widget.onOpen(task),
+                  ),
+                ),
+            ],
             if (isPast && undone > 0) ...[
               const SizedBox(height: 20),
               _LateNote(count: undone),
@@ -530,8 +537,15 @@ class _TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final titleStyle = TextStyle(
-      fontSize: 17,
+    final duration =
+        MediaQuery.disableAnimationsOf(context) ||
+            MediaQuery.reduceMotionOf(context) ||
+            MediaQuery.accessibleNavigationOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 100);
+    final titleStyle = Theme.of(context).textTheme.bodyLarge!.copyWith(
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
       height: 1.3,
       color: task.isDone ? colors.muted : colors.ink,
       decoration: task.isDone ? TextDecoration.lineThrough : null,
@@ -545,67 +559,65 @@ class _TaskRow extends StatelessWidget {
           label: '${task.title}, ${task.isDone ? 'selesai' : 'belum selesai'}',
           child: Row(
             children: [
-              GestureDetector(
+              InkWell(
                 onTap: onToggle,
-                behavior: HitTestBehavior.opaque,
                 child: SizedBox(
                   width: 48,
-                  height: 64,
+                  height: 56,
                   child: Center(
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
+                      duration: duration,
                       curve: Curves.easeOutQuart,
                       width: 22,
                       height: 22,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: task.isDone
-                            ? colors.done
-                            : Colors.transparent,
+                        color: task.isDone ? colors.done : Colors.transparent,
                         border: Border.all(
-                          color: task.isDone
-                              ? colors.done
-                              : colors.muted,
+                          color: task.isDone ? colors.done : colors.muted,
                           width: 1.5,
                         ),
                       ),
                       child: task.isDone
-                          ? Icon(
-                              Icons.check,
-                              size: 13,
-                              color: colors.fabText,
-                            )
+                          ? Icon(Icons.check, size: 13, color: colors.fabText)
                           : null,
                     ),
                   ),
                 ),
               ),
               Expanded(
-                child: GestureDetector(
+                child: InkWell(
                   onTap: onOpen,
-                  behavior: HitTestBehavior.opaque,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 64),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeOutQuart,
-                            style: titleStyle,
-                            child: Text(task.title),
+                    constraints: const BoxConstraints(minHeight: 56),
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(
+                        0,
+                        8,
+                        12,
+                        8,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: AnimatedDefaultTextStyle(
+                              duration: duration,
+                              curve: Curves.easeOutQuart,
+                              style: titleStyle,
+                              child: Text(task.title),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          timeText(task.scheduledTime),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: colors.muted,
-                            fontFeatures: [FontFeature.tabularFigures()],
+                          const SizedBox(width: 12),
+                          Text(
+                            timeText(task.scheduledTime),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colors.muted,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -613,7 +625,7 @@ class _TaskRow extends StatelessWidget {
             ],
           ),
         ),
-        if (showDivider) const Divider(height: 1),
+        if (showDivider) const Divider(height: 1, indent: 48, endIndent: 12),
       ],
     );
   }
@@ -734,10 +746,7 @@ class _BottomCard extends StatelessWidget {
               Expanded(
                 child: RichText(
                   text: TextSpan(
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.inkSoft,
-                      ),
+                    style: TextStyle(fontSize: 12, color: colors.inkSoft),
                     children: [
                       if (prefix != null)
                         TextSpan(

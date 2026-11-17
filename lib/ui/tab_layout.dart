@@ -1,6 +1,60 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'chevron.dart';
+import 'theme.dart';
+
+/// A quiet surface for one related group of content, with room for row ink.
+class EsokContentGroup extends StatelessWidget {
+  const EsokContentGroup({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _groupColor(context),
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+  }
+}
+
+Color _groupColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFF141414)
+    : const Color(0xFFF3F3F5);
+
+/// Separate list children share one silhouette while still building lazily.
+class EsokGroupedRow extends StatelessWidget {
+  const EsokGroupedRow({
+    super.key,
+    required this.first,
+    required this.last,
+    required this.child,
+  });
+
+  final bool first;
+  final bool last;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = Radius.circular(16);
+    return Material(
+      color: _groupColor(context),
+      borderRadius: BorderRadius.vertical(
+        top: first ? radius : Radius.zero,
+        bottom: last ? radius : Radius.zero,
+      ),
+      clipBehavior: first || last ? Clip.antiAlias : Clip.none,
+      child: child,
+    );
+  }
+}
 
 class EsokTabLayout extends StatelessWidget {
   const EsokTabLayout({super.key, this.headerAction, required this.child});
@@ -84,52 +138,65 @@ class EsokPeriodHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = EsokColors.of(context);
+    final compact = MediaQuery.sizeOf(context).height < 480;
     final period = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: compact ? 0 : 6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (caption != null) ...[
+          if (!compact && caption != null) ...[
             Text(
               caption!,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 2),
           ],
-          Semantics(
-            header: true,
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                height: 1.2,
+          Row(
+            children: [
+              Flexible(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontSize: 23,
+                      fontWeight: FontWeight.w700,
+                      height: 1.14,
+                      letterSpacing: -.5,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (onSelect != null) ...[
+                const SizedBox(width: 7),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: colors.muted,
+                ),
+              ],
+            ],
           ),
-          if (detail != null) ...[
+          if (!compact && detail != null) ...[
             const SizedBox(height: 3),
-            Text(
-              detail!,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text(detail!, style: theme.textTheme.bodyMedium),
           ],
         ],
       ),
     );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         EsokTabLayout.gutter,
-        8,
+        compact ? 0 : 8,
         EsokTabLayout.gutter,
-        8,
+        compact ? 0 : 8,
       ),
       child: Row(
         children: [
-          _PeriodArrow(label: previousLabel, left: true, onTap: onPrevious),
           Expanded(
             child: onSelect == null
                 ? period
@@ -139,7 +206,24 @@ class EsokPeriodHeader extends StatelessWidget {
                     child: period,
                   ),
           ),
-          _PeriodArrow(label: nextLabel, left: false, onTap: onNext),
+          const SizedBox(width: 10),
+          Material(
+            color: colors.soft,
+            borderRadius: BorderRadius.circular(24),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PeriodArrow(
+                  label: previousLabel,
+                  left: true,
+                  onTap: onPrevious,
+                ),
+                Container(width: 1, height: 18, color: colors.line),
+                _PeriodArrow(label: nextLabel, left: false, onTap: onNext),
+              ],
+            ),
+          ),
         ],
       ),
     );

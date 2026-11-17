@@ -179,13 +179,32 @@ class MoneyPage extends StatelessWidget {
                       date: DateTime.parse(entry.key),
                       net: store.netForDay(entry.value),
                     ),
-                    for (final transaction in entry.value)
-                      _TransactionRow(
-                        transaction: transaction,
-                        store: store,
-                        onTap: transaction.kind == 'adjustment'
-                            ? () {}
-                            : () => _showActions(context, store, transaction),
+                    for (final (index, transaction) in entry.value.indexed)
+                      EsokGroupedRow(
+                        key: ValueKey(transaction.id),
+                        first: index == 0,
+                        last: index == entry.value.length - 1,
+                        child: Column(
+                          children: [
+                            if (index > 0)
+                              const Divider(
+                                height: 1,
+                                indent: 54,
+                                endIndent: 12,
+                              ),
+                            _TransactionRow(
+                              transaction: transaction,
+                              store: store,
+                              onTap: transaction.kind == 'adjustment'
+                                  ? null
+                                  : () => _showActions(
+                                      context,
+                                      store,
+                                      transaction,
+                                    ),
+                            ),
+                          ],
+                        ),
                       ),
                   ],
               ],
@@ -268,8 +287,9 @@ class _BalanceBlock extends StatelessWidget {
         Text(
           numberText(total),
           style: TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.w600,
+            fontSize: 39,
+            fontWeight: FontWeight.w700,
+            height: 1.1,
             letterSpacing: -0.03,
             color: totalColor,
             fontFeatures: const [FontFeature.tabularFigures()],
@@ -282,7 +302,7 @@ class _BalanceBlock extends StatelessWidget {
           children: [
             Text.rich(
               TextSpan(
-                style: TextStyle(fontSize: 11.5, color: colors.muted),
+                style: TextStyle(fontSize: 12.5, color: colors.muted),
                 children: [
                   const TextSpan(text: 'Masuk '),
                   TextSpan(
@@ -297,7 +317,7 @@ class _BalanceBlock extends StatelessWidget {
             ),
             Text.rich(
               TextSpan(
-                style: TextStyle(fontSize: 11.5, color: colors.muted),
+                style: TextStyle(fontSize: 12.5, color: colors.muted),
                 children: [
                   const TextSpan(text: 'Keluar '),
                   TextSpan(
@@ -358,16 +378,23 @@ class _BalanceBlock extends StatelessWidget {
             ),
           )
         else
-          for (final account in accounts)
-            _AccountBalanceRow(
-              account: account,
-              balance: store.balanceForAccount(account.id),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const ManageAccountsPage(),
+          EsokContentGroup(
+            children: [
+              for (final (index, account) in accounts.indexed) ...[
+                if (index > 0)
+                  const Divider(height: 1, indent: 52, endIndent: 12),
+                _AccountBalanceRow(
+                  account: account,
+                  balance: store.balanceForAccount(account.id),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ManageAccountsPage(),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              ],
+            ],
+          ),
         if (allOpeningZero && total < 0)
           GestureDetector(
             onTap: () => Navigator.of(context).push(
@@ -406,15 +433,11 @@ class _AccountBalanceRow extends StatelessWidget {
         ? '?'
         : account.name.substring(0, 1).toUpperCase();
     final color = balance < 0 ? colors.negative : colors.ink;
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: Container(
         constraints: const BoxConstraints(minHeight: 52),
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: colors.line)),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: _LedgerColumns(
           details: Row(
             children: [
@@ -443,11 +466,15 @@ class _AccountBalanceRow extends StatelessWidget {
                   children: [
                     Text(
                       account.name,
-                      style: TextStyle(fontSize: 14, color: colors.ink),
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: colors.ink,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     Text(
                       accountTypeLabel(account.type),
-                      style: TextStyle(fontSize: 10.5, color: colors.muted),
+                      style: TextStyle(fontSize: 11.5, color: colors.muted),
                     ),
                   ],
                 ),
@@ -483,31 +510,28 @@ class _DayHeader extends StatelessWidget {
         ? colors.positive
         : colors.muted;
     return Padding(
-      padding: const EdgeInsets.only(top: 22, bottom: 7),
-      child: Container(
-        padding: const EdgeInsets.only(bottom: 7),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: colors.line)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                moneyDayLabel(date),
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              ),
+      padding: const EdgeInsets.only(top: 13, bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              moneyDayLabel(date),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
-            Text(
+          ),
+          Flexible(
+            child: Text(
               signedNumberText(net),
+              textAlign: TextAlign.end,
               style: TextStyle(
                 fontSize: 11.5,
                 color: color,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -522,7 +546,7 @@ class _TransactionRow extends StatelessWidget {
 
   final MoneyTransaction transaction;
   final MoneyStore store;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   bool get _isAdjustment => transaction.kind == 'adjustment';
 
@@ -565,14 +589,10 @@ class _TransactionRow extends StatelessWidget {
     final amountColor = transaction.isTransfer || _isAdjustment
         ? colors.inkSoft
         : colors.ink;
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: colors.line)),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: _LedgerColumns(
           details: Row(
             children: [
@@ -605,14 +625,18 @@ class _TransactionRow extends StatelessWidget {
                       _title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 14, color: colors.ink),
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: colors.ink,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       _subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: colors.muted),
+                      style: TextStyle(fontSize: 11.5, color: colors.muted),
                     ),
                   ],
                 ),
