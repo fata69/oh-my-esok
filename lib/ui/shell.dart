@@ -197,7 +197,7 @@ class _FloatingTabBar extends StatefulWidget {
 }
 
 class _FloatingTabBarState extends State<_FloatingTabBar>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _forceSolid = bool.fromEnvironment('ESOK_SOLID_NAV');
   static const _radius = BorderRadius.all(Radius.circular(40));
   static final _blur = ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10);
@@ -218,9 +218,19 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   static const _revealDistance = 26.0;
   static const _enter = SpringDescription(mass: 1, stiffness: 800, damping: 44);
   static const _exit = SpringDescription(mass: 1, stiffness: 800, damping: 57);
+  // Critically damped so the selection lands on the destination without bounce.
+  static const _glide = SpringDescription(
+    mass: 1,
+    stiffness: 1156,
+    damping: 68,
+  );
   late final _reveal = AnimationController.unbounded(
     vsync: this,
     value: _target,
+  );
+  late final _indicator = AnimationController.unbounded(
+    vsync: this,
+    value: widget.index.toDouble(),
   );
 
   bool _solid = false;
@@ -235,13 +245,34 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
         MediaQuery.accessibleNavigationOf(context) ||
         MediaQuery.reduceMotionOf(context) ||
         MediaQuery.disableAnimationsOf(context);
-    if (solid && !_solid) _reveal.value = _target;
+    if (solid && !_solid) {
+      _reveal.value = _target;
+      _indicator.value = widget.index.toDouble();
+    }
     _solid = solid;
   }
 
   @override
   void didUpdateWidget(covariant _FloatingTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.index != oldWidget.index) {
+      final destination = widget.index.toDouble();
+      if (_solid) {
+        _indicator.value = destination;
+      } else {
+        // Carry the velocity forward when a tap interrupts the glide.
+        _indicator.animateWith(
+          SpringSimulation(
+            _glide,
+            _indicator.value,
+            destination,
+            _indicator.velocity,
+            tolerance: const Tolerance(distance: .006, velocity: .2),
+            snapToEnd: true,
+          ),
+        );
+      }
+    }
     if ((oldWidget.action == null) == (widget.action == null)) return;
     if (_solid) {
       _reveal.value = _target;
@@ -263,6 +294,7 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
 
   @override
   void dispose() {
+    _indicator.dispose();
     _reveal.dispose();
     super.dispose();
   }
@@ -289,19 +321,26 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
         child: Stack(
           children: [
             Positioned.fill(
-              child: AnimatedAlign(
-                alignment: Alignment(
-                  2 * widget.index / (_tabs.length - 1) - 1,
-                  0,
-                ),
-                duration: solid
-                    ? Duration.zero
-                    : const Duration(milliseconds: 210),
-                curve: Curves.easeOutCubic,
+              child: AnimatedBuilder(
+                animation: _indicator,
+                builder: (context, pill) {
+                  final stops = _tabs.length - 1;
+                  // Use tab units so the pill stays aligned when + changes
+                  // the available width at the same time.
+                  final position = _indicator.value.clamp(
+                    0.0,
+                    stops.toDouble(),
+                  );
+                  return Align(
+                    alignment: Alignment(2 * position / stops - 1, 0),
+                    child: pill,
+                  );
+                },
                 child: FractionallySizedBox(
                   widthFactor: 1 / _tabs.length,
                   heightFactor: 1,
                   child: DecoratedBox(
+                    key: const ValueKey('dock-selection'),
                     decoration: BoxDecoration(
                       color: highContrast
                           ? colors.onSurface

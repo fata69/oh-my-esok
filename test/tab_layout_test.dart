@@ -392,6 +392,38 @@ void main() {
     },
   );
 
+  testWidgets('dock selection keeps its momentum on a quick reverse tap', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    await launch(tester);
+    final nav = find.byKey(const ValueKey('floating-navigation'));
+    final selection = find.byKey(const ValueKey('dock-selection'));
+    final hari = find.bySemanticsLabel('Hari').hitTestable();
+    final uang = find.bySemanticsLabel('Uang').hitTestable();
+    final dockBefore = tester.getRect(nav);
+    final start = tester.getCenter(hari);
+    final destination = tester.getCenter(uang);
+
+    await tester.tap(uang);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    final midway = tester.getCenter(selection);
+    expect(midway.dx, inExclusiveRange(start.dx, destination.dx));
+    expect(midway.dy, closeTo(start.dy, .01));
+
+    await tester.tap(hari);
+    await tester.pump();
+    expect(tester.getCenter(selection).dx, closeTo(midway.dx, .01));
+    await tester.pump(const Duration(milliseconds: 8));
+    expect(tester.getCenter(selection).dx, greaterThan(midway.dx));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getCenter(selection).dx, closeTo(start.dx, .01));
+    expect(tester.getRect(nav), dockBefore);
+  });
+
   testWidgets('dock honours reduced motion and settles immediately', (
     tester,
   ) async {
@@ -409,6 +441,13 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
     await tester.pump();
     expect(tester.getSize(slot).width, 60);
+    expect(
+      tester.getCenter(find.byKey(const ValueKey('dock-selection'))).dx,
+      closeTo(
+        tester.getCenter(find.bySemanticsLabel('Uang').hitTestable()).dx,
+        .01,
+      ),
+    );
     expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
   });
 

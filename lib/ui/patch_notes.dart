@@ -29,6 +29,16 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.5',
+      date: '17 Nov 2026',
+      notes: [
+        'Penanda tab meluncur di dalam navbar dan tetap mulus saat arah ketukan berubah.',
+        'Tab Uang memisahkan saldo, dompet, dan riwayat. Filter jenis dan urutan hanya mengubah riwayat.',
+        'Dompet dan kategori punya pilihan ikon yang tersimpan, termasuk saat cadangan dipulihkan.',
+        'Hari menampilkan progres agenda, Setelan dikelompokkan, dan warna aksen mengikuti garis ikon.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.4',
       date: '17 Nov 2026',
       notes: [
