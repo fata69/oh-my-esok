@@ -482,16 +482,17 @@ class _TxEditorPageState extends State<TxEditorPage> {
               canSave: _canSave,
               saving: _saving,
               scanning: _scanning,
+              onCancel: () => Navigator.of(context).pop(),
               onScan: _scanReceipt,
               onSave: _save,
             ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final categoryRows = (categories.length + 4) ~/ 4;
-            final categoryHeight = (categoryRows * 78.0 - 8)
-                .clamp(70.0, (constraints.maxHeight - 470).clamp(148.0, 226.0))
-                .toDouble();
+            final categoryHeight = (constraints.maxHeight - 510).clamp(
+              158.0,
+              226.0,
+            );
             final categoryGrid = Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _CategoryGrid(
@@ -509,29 +510,15 @@ class _TxEditorPageState extends State<TxEditorPage> {
               SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Text(
-                      _isEditing ? 'Ubah' : 'Catat',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: EsokColors.ink,
-                      ),
+                child: Center(
+                  child: Text(
+                    _isEditing ? 'Ubah' : 'Catat',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: EsokColors.ink,
                     ),
-                    Positioned(
-                      left: 12,
-                      child: IconButton(
-                        tooltip: 'Batal',
-                        onPressed: _saving
-                            ? null
-                            : () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                        color: EsokColors.muted,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               Padding(
@@ -741,15 +728,12 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     child: const Text('Hapus transaksi'),
                   ),
                 ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
             ];
 
             // Keep the note field mounted when the Android keyboard resizes
             // the viewport. Replacing this subtree would drop its focus.
-            return SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              child: Column(children: children),
-            );
+            return SingleChildScrollView(child: Column(children: children));
           },
         ),
       ),
@@ -1462,6 +1446,7 @@ class _BottomActions extends StatelessWidget {
     required this.canSave,
     required this.saving,
     required this.scanning,
+    required this.onCancel,
     required this.onScan,
     required this.onSave,
   });
@@ -1469,6 +1454,7 @@ class _BottomActions extends StatelessWidget {
   final bool canSave;
   final bool saving;
   final bool scanning;
+  final VoidCallback onCancel;
   final VoidCallback onScan;
   final VoidCallback onSave;
 
@@ -1477,73 +1463,85 @@ class _BottomActions extends StatelessWidget {
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(11),
     );
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: EsokColors.canvas,
-        border: Border(top: BorderSide(color: EsokColors.line)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: scanning || saving ? null : onScan,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: EsokColors.ink,
-                    disabledForegroundColor: EsokColors.muted,
-                    minimumSize: const Size(0, 48),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    side: BorderSide(color: EsokColors.lineStrong),
-                    shape: shape,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (scanning)
-                        const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        const Icon(Icons.document_scanner_outlined, size: 18),
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: Semantics(
-                          liveRegion: scanning,
-                          child: Text(scanning ? 'Memindai…' : 'Pindai struk'),
+    final compactIcon = MediaQuery.textScalerOf(context).scale(13) <= 17;
+    final padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 8);
+    const minimum = Size(0, 48);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 7,
+              child: TextButton(
+                onPressed: scanning || saving ? null : onScan,
+                style: TextButton.styleFrom(
+                  foregroundColor: EsokColors.ink,
+                  disabledForegroundColor: EsokColors.muted,
+                  minimumSize: minimum,
+                  padding: padding,
+                  textStyle: const TextStyle(fontSize: 13),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (scanning) ...[
+                      const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 5),
+                    ] else if (compactIcon) ...[
+                      const Icon(Icons.document_scanner_outlined, size: 16),
+                      const SizedBox(width: 5),
+                    ],
+                    Flexible(
+                      child: Semantics(
+                        liveRegion: scanning,
+                        child: Text(
+                          scanning ? 'Memindai…' : 'Pindai struk',
+                          textAlign: TextAlign.center,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton(
-                  onPressed: canSave && !saving ? onSave : null,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
                     ),
-                    backgroundColor: EsokColors.accent,
-                    foregroundColor: EsokColors.onAccent,
-                    disabledBackgroundColor: EsokColors.soft,
-                    disabledForegroundColor: EsokColors.disabled,
-                    shape: shape,
-                  ),
-                  child: Text(saving ? 'Menyimpan…' : 'Simpan'),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              flex: 5,
+              child: OutlinedButton(
+                onPressed: saving ? null : onCancel,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: EsokColors.ink,
+                  minimumSize: minimum,
+                  padding: padding,
+                  side: BorderSide(color: EsokColors.lineStrong),
+                  shape: shape,
+                ),
+                child: const Text('Batal'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 8,
+              child: FilledButton(
+                onPressed: canSave && !saving ? onSave : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: EsokColors.accent,
+                  foregroundColor: EsokColors.onAccent,
+                  disabledBackgroundColor: EsokColors.soft,
+                  disabledForegroundColor: EsokColors.disabled,
+                  minimumSize: minimum,
+                  padding: padding,
+                  shape: shape,
+                ),
+                child: Text(saving ? 'Menyimpan…' : 'Simpan'),
+              ),
+            ),
+          ],
         ),
       ),
     );
