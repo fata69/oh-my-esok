@@ -245,15 +245,25 @@ void main() {
         await _reveal(tester, _inside(key, _scrub));
         await tester.ensureVisible(find.byKey(key));
         await tester.pumpAndSettle();
-        final widget = tester.widget<BarChart>(
-          find.descendant(of: find.byKey(key), matching: find.byType(BarChart)),
+        final chartFinder = find.descendant(
+          of: find.byKey(key),
+          matching: find.byType(BarChart),
         );
+        final widget = tester.widget<BarChart>(chartFinder);
+        final plotHeight = tester.getSize(chartFinder).height;
         final colors = Theme.of(tester.element(find.byKey(key))).colorScheme;
         final luminance = colors.surface.computeLuminance();
         for (final rod in widget.data.barGroups.expand(
           (group) => group.barRods,
         )) {
           if (rod.toY == 0) continue;
+          final rounding = rod.borderRadius!;
+          final radius = rounding.topLeft.y + rounding.bottomLeft.y;
+          final drawnHeight =
+              rod.toY.abs() /
+              (widget.data.maxY - widget.data.minY) *
+              plotHeight;
+          expect(radius, lessThanOrEqualTo(drawnHeight + .01));
           final other = rod.color!.computeLuminance();
           final contrast = (luminance > other)
               ? (luminance + .05) / (other + .05)

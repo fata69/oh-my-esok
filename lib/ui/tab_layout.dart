@@ -1,7 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'chevron.dart';
-import 'theme.dart';
 
 class EsokTabLayout extends StatelessWidget {
   const EsokTabLayout({super.key, this.headerAction, required this.child});
@@ -167,34 +166,6 @@ class _PeriodArrow extends StatelessWidget {
         opacity: onTap == null ? 0.32 : 1,
         child: EsokChevron(left: left, size: 16),
       ),
-    );
-  }
-}
-
-class EsokEntryButton extends StatelessWidget {
-  const EsokEntryButton({
-    super.key,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
-    return FilledButton.icon(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(48, 48),
-        backgroundColor: colors.ink,
-        foregroundColor: colors.canvas,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      icon: const Icon(Icons.add, size: 18),
-      label: Text(label),
     );
   }
 }

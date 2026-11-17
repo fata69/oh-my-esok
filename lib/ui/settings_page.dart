@@ -458,10 +458,10 @@ class _SettingsPageState extends State<SettingsPage> {
             trailing: const _Trailing('Atur ›'),
             onTap: _editAiModel,
           ),
-          const _SectionLabel('Widget'),
+          const _SectionLabel('Privasi'),
           _SettingsRow(
             title: 'Sembunyikan nominal',
-            subtitle: 'Berlaku di widget uang',
+            subtitle: 'Berlaku di widget uang dan Laporan',
             trailing: _Toggle(
               value: settings.hideAmounts,
               onChanged: _toggleHideAmounts,

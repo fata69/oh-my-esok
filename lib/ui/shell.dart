@@ -7,7 +7,6 @@ import 'home_page.dart';
 import 'money_page.dart';
 import 'reports_page.dart';
 import 'settings_page.dart';
-import 'tab_layout.dart';
 import 'theme.dart';
 
 class EsokShell extends StatefulWidget {
@@ -57,7 +56,7 @@ class _EsokShellState extends State<EsokShell> {
               child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
             ),
             const _AboveDock(child: MoneyPage()),
-            const ReportsPage(),
+            const _AboveDock(child: ReportsPage()),
             const SettingsPage(),
           ],
         ),
@@ -142,47 +141,80 @@ class _FloatingTabBar extends StatelessWidget {
     final tint = colors.surfaceContainerLow;
     // A bright list item behind the dark bar needs a stronger scrim.
     final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
-    final capsule = DecoratedBox(
-      decoration: BoxDecoration(
-        color: solid ? tint : tint.withValues(alpha: tintOpacity),
-        borderRadius: _radius,
-        border: Border.all(
-          color: highContrast ? colors.outline : colors.outlineVariant,
+    Widget glass({
+      Key? key,
+      required BorderRadius radius,
+      required Color surface,
+      required Widget child,
+    }) {
+      final layer = DecoratedBox(
+        decoration: BoxDecoration(
+          color: solid ? surface : surface.withValues(alpha: tintOpacity),
+          borderRadius: radius,
+          border: Border.all(
+            color: highContrast ? colors.outline : colors.outlineVariant,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            for (var i = 0; i < _tabs.length; i++)
-              Expanded(
-                child: _NavItem(
-                  label: _tabs[i].$1,
-                  icon: _tabs[i].$2,
-                  selected: index == i,
-                  highContrast: highContrast,
-                  onTap: () => onChanged(i),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
+        child: child,
+      );
+      return ClipRRect(
+        key: key,
+        borderRadius: radius,
+        child: solid ? layer : BackdropFilter(filter: _blur, child: layer),
+      );
+    }
+
     final navigation = ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),
-      child: ClipRRect(
+      child: glass(
         key: const ValueKey('floating-navigation'),
-        borderRadius: _radius,
-        child: solid ? capsule : BackdropFilter(filter: _blur, child: capsule),
+        radius: _radius,
+        surface: tint,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            children: [
+              for (var i = 0; i < _tabs.length; i++)
+                Expanded(
+                  child: _NavItem(
+                    label: _tabs[i].$1,
+                    icon: _tabs[i].$2,
+                    selected: index == i,
+                    highContrast: highContrast,
+                    onTap: () => onChanged(i),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
     final primary = action;
+    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
     final button = primary == null
         ? null
-        : EsokEntryButton(
+        : SizedBox.square(
             key: const ValueKey('bottom-create'),
-            label: primary.$1,
-            onPressed: primary.$2,
+            dimension: 52,
+            child: glass(
+              radius: BorderRadius.circular(26),
+              surface: Color.alphaBlend(
+                ink.withValues(alpha: highContrast ? 0 : .09),
+                tint,
+              ),
+              child: Material(
+                type: MaterialType.transparency,
+                child: IconButton(
+                  tooltip: primary.$1,
+                  onPressed: primary.$2,
+                  icon: const Icon(Icons.add_rounded, size: 25),
+                  style: IconButton.styleFrom(
+                    foregroundColor: ink,
+                    shape: const CircleBorder(),
+                  ),
+                ),
+              ),
+            ),
           );
 
     return SafeArea(
@@ -199,9 +231,7 @@ class _FloatingTabBar extends StatelessWidget {
               ? navigation
               : LayoutBuilder(
                   builder: (context, constraints) {
-                    final labelSize = MediaQuery.textScalerOf(context)
-                        .scale(14);
-                    if (constraints.maxWidth >= 410 + 10 * labelSize) {
+                    if (constraints.maxWidth >= 424) {
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -234,6 +264,10 @@ class _FloatingTabBar extends StatelessWidget {
   }
 }
 
+Color _dockInk(Brightness brightness) => brightness == Brightness.dark
+    ? const Color(0xFF9DBDFF)
+    : const Color(0xFF1558D4);
+
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
@@ -253,9 +287,7 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final dark = colors.brightness == Brightness.dark;
-    final selectedInk = dark
-        ? const Color(0xFF9DBDFF)
-        : const Color(0xFF1558D4);
+    final selectedInk = _dockInk(colors.brightness);
     final selectedTint = dark
         ? const Color(0xFF242D40)
         : const Color(0xFFEAF0FA);

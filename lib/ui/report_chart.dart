@@ -123,11 +123,16 @@ class _ReportFlowChartState extends State<ReportFlowChart> {
                 48.0,
                 MediaQuery.textScalerOf(context).scale(34),
               );
-              final columns = (box.maxWidth / minWidth).floor().clamp(
+              final plotWidth = box.maxWidth - _axisGutterOf(context);
+              final widthAvailable = plotWidth >= minWidth * points.length
+                  ? plotWidth
+                  : box.maxWidth;
+              final columns = (widthAvailable / minWidth).floor().clamp(
                 1,
                 points.length,
               );
-              final width = (box.maxWidth / columns).floorToDouble();
+              // Keep equal cells offset by the axis gutter when they all fit.
+              final width = (widthAvailable / columns).floorToDouble();
               return Wrap(
                 children: [
                   for (var i = 0; i < points.length; i++)
@@ -187,6 +192,9 @@ class _ReportFlowChartState extends State<ReportFlowChart> {
     );
   }
 }
+
+double _axisGutterOf(BuildContext context) =>
+    8 + math.min(86.0, MediaQuery.textScalerOf(context).scale(48));
 
 /// Exact amounts stay available as text, independently of the plot.
 class ReportAmounts extends StatelessWidget {
@@ -290,10 +298,7 @@ class _FlowPlot extends StatelessWidget {
       MediaQuery.textScalerOf(context).scale(11) * 10,
     );
     final axisPadding = MediaQuery.textScalerOf(context).scale(8);
-    final axisWidth = math.min(
-      86.0,
-      MediaQuery.textScalerOf(context).scale(48),
-    );
+    final axisWidth = _axisGutterOf(context) - 8;
     final last = points.length - 1;
 
     return Column(
@@ -326,7 +331,13 @@ class _FlowPlot extends StatelessWidget {
                         final gap = width * .12;
                         final barWidth = separate ? (width - gap) / 2 : width;
                         BarChartRodData rod(double value, Color color) {
-                          final round = Radius.circular(barWidth / 2);
+                          // fl_chart extends rods shorter than their radius.
+                          // Cap the radius so a small amount keeps its scale.
+                          final trueHeight =
+                              value.abs() / (axis.high - axis.low) * plotHeight;
+                          final round = Radius.circular(
+                            math.min(barWidth / 2, trueHeight),
+                          );
                           return BarChartRodData(
                             toY: value,
                             width: barWidth,

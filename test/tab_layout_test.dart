@@ -203,12 +203,12 @@ void main() {
       final list = find.byType(ListView).first;
       expect(tester.getRect(list).bottom, lessThan(tester.getRect(create).top));
       expect(tester.getRect(create).bottom, lessThan(tester.getRect(nav).top));
-      expect(tester.getSize(create).height, greaterThanOrEqualTo(48));
+      expect(tester.getSize(create), const Size.square(52));
     }
 
     verifyHeader(HomePage);
     verifyDock();
-    expect(find.text('Tambah catatan').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Tambah catatan').hitTestable(), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
     final date = find.text(dateTitle(today()));
     final dateSize = tester.widget<Text>(date).style?.fontSize;
@@ -231,7 +231,7 @@ void main() {
     await select(tester, 'Uang');
     verifyHeader(MoneyPage);
     verifyDock();
-    expect(find.text('Catat transaksi').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
     final now = today();
     expect(
@@ -334,7 +334,7 @@ void main() {
     expect(create.hitTestable(), findsNothing);
   });
 
-  testWidgets('render the build 17 dock on production Hari and Uang', (
+  testWidgets('render the glass dock on production Hari, Uang and Laporan', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -346,7 +346,7 @@ void main() {
     for (final mode in [ThemeMode.light, ThemeMode.dark]) {
       await settings.setThemeMode(mode);
       await tester.pumpAndSettle();
-      for (final tab in ['Hari', 'Uang']) {
+      for (final tab in ['Hari', 'Uang', 'Laporan']) {
         await select(tester, tab);
         final boundary = tester.renderObject<RenderRepaintBoundary>(
           find.byKey(const ValueKey('preview-boundary')),
