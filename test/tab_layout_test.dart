@@ -10,6 +10,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:jadwal/app.dart';
 import 'package:jadwal/data/account.dart';
 import 'package:jadwal/data/account_dao.dart';
+import 'package:jadwal/data/category.dart';
 import 'package:jadwal/data/category_dao.dart';
 import 'package:jadwal/data/money_transaction.dart';
 import 'package:jadwal/data/money_transaction_dao.dart';
@@ -27,6 +28,7 @@ import 'package:jadwal/ui/tx_editor_page.dart';
 import 'package:jadwal/util/format.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -62,6 +64,7 @@ void main() {
   Future<SettingsStore> launch(
     WidgetTester tester, {
     int notes = 0,
+    int categoryCount = 0,
     bool preview = false,
   }) async {
     // Only the native I/O boundaries use test data. The shell, pages, stores,
@@ -101,7 +104,7 @@ void main() {
           ),
       ], []),
     );
-    final db = _LedgerDatabase(preview: preview);
+    final db = _LedgerDatabase(preview: preview, categoryCount: categoryCount);
     final money = MoneyStore(
       CategoryDao(db),
       AccountDao(db),
@@ -592,6 +595,105 @@ void main() {
     expect(total, findsNWidgets(occurrences));
   });
 
+  testWidgets(
+    'Catat shows more categories and creates or changes icons in place',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      await launch(tester, categoryCount: 12);
+      await select(tester, 'Uang');
+      await tester.tap(find.byTooltip('Catat transaksi'));
+      await tester.pumpAndSettle();
+
+      final grid = find.byKey(const ValueKey('transaction-categories'));
+      final firstTile = find.text('Kategori 1');
+      expect(firstTile.hitTestable(), findsOneWidget);
+      expect(tester.getSize(grid).height, inExclusiveRange(150, 180));
+      await tester.tap(find.text('Baru').hitTestable());
+      await tester.pumpAndSettle();
+
+      final name = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'Nama kategori baru',
+      );
+      await tester.enterText(name, 'Jajan baru');
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+      expect(find.text('7').hitTestable(), findsNothing);
+      await tester.tap(find.text('Pilih ikon').hitTestable());
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Makanan').hitTestable());
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(name).controller!.text, 'Jajan baru');
+      await tester.tap(find.text('Tambah').hitTestable());
+      await tester.pumpAndSettle();
+
+      final store = tester
+          .element(find.byType(TxEditorPage))
+          .read<MoneyStore>();
+      MoneyCategory created() => store.expenseCategories.singleWhere(
+        (category) => category.name == 'Jajan baru',
+      );
+      expect(created().iconId, 'makan');
+      await tester.tap(find.text('Ubah ikon').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Minuman').hitTestable());
+      await tester.pumpAndSettle();
+      expect(created().iconId, 'minuman');
+    },
+  );
+
+  testWidgets(
+    'Catat keeps the amount keypad mounted through Android IME insets',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 24);
+      tester.view.padding = tester.view.viewPadding;
+      addTearDown(tester.view.reset);
+      await launch(tester, categoryCount: 12);
+      await select(tester, 'Uang');
+      await tester.tap(find.byTooltip('Catat transaksi'));
+      await tester.pumpAndSettle();
+
+      final keypad = find.byKey(const ValueKey('transaction-keypad'));
+      final mountedKeypad = tester.element(keypad);
+      final grid = find.byKey(const ValueKey('transaction-categories'));
+      final categoryHeight = tester.getSize(grid).height;
+      final note = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'Catatan',
+      );
+      await tester.enterText(note, 'Beli makan');
+      for (final bottom in [300.0, 120.0, 8.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: bottom);
+        tester.view.padding = const FakeViewPadding(top: 24);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(tester.element(keypad), same(mountedKeypad));
+        expect(tester.getSize(grid).height, categoryHeight);
+        expect(find.text('7').hitTestable(), findsNothing);
+        expect(find.text('Simpan').hitTestable(), findsNothing);
+      }
+      tester.view.resetViewInsets();
+      await tester.pump();
+      expect(find.text('7').hitTestable(), findsNothing);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 8);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(find.text('7').hitTestable(), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      tester.view.resetViewInsets();
+      tester.view.padding = tester.view.viewPadding;
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(tester.element(keypad), same(mountedKeypad));
+      expect(tester.widget<TextField>(note).controller!.text, 'Beli makan');
+      await tester.tap(find.text('7').hitTestable());
+      await tester.pump();
+      expect(find.text('Rp 7'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('capture the actual dock emergence motion', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(412, 892);
@@ -666,9 +768,63 @@ void main() {
 }
 
 class _LedgerDatabase implements Database {
-  _LedgerDatabase({required this.preview});
+  _LedgerDatabase({required this.preview, required int categoryCount})
+    : _categories = [
+        for (var i = 0; i < categoryCount; i++)
+          MoneyCategory(
+            id: 'category-$i',
+            name: 'Kategori ${i + 1}',
+            kind: 'expense',
+            sortOrder: i,
+            archived: false,
+            createdAt: i,
+          ).toMap(),
+      ];
 
   final bool preview;
+  final List<Map<String, Object?>> _categories;
+
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(
+    String sql, [
+    List<Object?>? arguments,
+  ]) async {
+    if (!sql.startsWith('SELECT MAX(sort_order)')) {
+      throw ArgumentError.value(sql);
+    }
+    return [
+      {'m': _categories.length - 1},
+    ];
+  }
+
+  @override
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    String? nullColumnHack,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
+    if (table != 'categories') throw ArgumentError.value(table);
+    _categories.add(values);
+    return 1;
+  }
+
+  @override
+  Future<int> update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
+    if (table != 'categories') throw ArgumentError.value(table);
+    final index = _categories.indexWhere(
+      (row) => row['id'] == whereArgs?.single,
+    );
+    if (index == -1) return 0;
+    _categories[index] = {..._categories[index], ...values};
+    return 1;
+  }
 
   @override
   Future<List<Map<String, Object?>>> query(
@@ -694,7 +850,7 @@ class _LedgerDatabase implements Database {
           createdAt: 0,
         ).toMap(),
       ],
-      'categories' => [],
+      'categories' => _categories,
       'transactions' => [
         if (whereArgs == null || whereArgs.contains(dateKey(today())))
           MoneyTransaction(

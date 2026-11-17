@@ -3,7 +3,38 @@ import 'package:material_ui/material_ui.dart';
 import 'money_icon_catalog.dart';
 import 'theme.dart';
 
-typedef _IconChoice = ({String? id});
+typedef MoneyIconChoice = ({String? id});
+
+Future<MoneyIconChoice?> showMoneyIconPicker(
+  BuildContext context, {
+  required MoneyIconSet iconSet,
+  required String? value,
+  required MoneyIconSpec automatic,
+  String? categoryKind,
+}) {
+  final media = MediaQuery.of(context);
+  FocusScope.of(context).unfocus();
+  return showModalBottomSheet<MoneyIconChoice>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: EsokColors.of(context).canvas,
+    barrierColor: EsokColors.scrim,
+    sheetAnimationStyle: media.disableAnimations || media.reduceMotion
+        ? AnimationStyle.noAnimation
+        : null,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => _MoneyIconPickerSheet(
+      iconSet: iconSet,
+      value: value,
+      automatic: automatic,
+      categoryKind: categoryKind,
+    ),
+  );
+}
 
 /// A compact field that keeps the catalog out of the form until requested.
 class MoneyIconField extends StatelessWidget {
@@ -25,27 +56,12 @@ class MoneyIconField extends StatelessWidget {
   final String? categoryKind;
 
   Future<void> _open(BuildContext context) async {
-    final palette = EsokColors.of(context);
-    FocusScope.of(context).unfocus();
-    final choice = await showModalBottomSheet<_IconChoice>(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: palette.canvas,
-      barrierColor: EsokColors.scrim,
-      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
-          ? AnimationStyle.noAnimation
-          : null,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _MoneyIconPickerSheet(
-        iconSet: iconSet,
-        value: value,
-        automatic: automatic,
-        categoryKind: categoryKind,
-      ),
+    final choice = await showMoneyIconPicker(
+      context,
+      iconSet: iconSet,
+      value: value,
+      automatic: automatic,
+      categoryKind: categoryKind,
     );
     if (choice != null && context.mounted) onChanged(choice.id);
   }
@@ -56,10 +72,23 @@ class MoneyIconField extends StatelessWidget {
     final current = iconSet.find(value);
     final label = current?.label ?? 'Otomatis';
     if (compact) {
-      return IconButton(
-        tooltip: 'Pilih ikon kategori · $label',
-        onPressed: () => _open(context),
-        icon: MoneyIconGlyph(spec: current ?? automatic, size: 19),
+      return Tooltip(
+        message: label,
+        child: TextButton.icon(
+          onPressed: () => _open(context),
+          style: TextButton.styleFrom(
+            foregroundColor: palette.ink,
+            backgroundColor: palette.soft,
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+          icon: MoneyIconGlyph(spec: current ?? automatic, size: 17),
+          label: Text(current == null ? 'Pilih ikon' : 'Ubah ikon'),
+        ),
       );
     }
     return Semantics(
@@ -173,9 +202,10 @@ class _MoneyIconPickerSheet extends StatelessWidget {
                               spec: entry ?? automatic,
                               label: entry?.label ?? 'Otomatis',
                               selected: entry?.id == current?.id,
-                              onTap: () => Navigator.pop<_IconChoice>(context, (
-                                id: entry?.id,
-                              )),
+                              onTap: () => Navigator.pop<MoneyIconChoice>(
+                                context,
+                                (id: entry?.id),
+                              ),
                             ),
                           ),
                       ],

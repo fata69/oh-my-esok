@@ -29,6 +29,15 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.7',
+      date: '17 Nov 2026',
+      notes: [
+        'Pilih ikon saat membuat kategori atau ubah ikon kategori langsung dari Catat.',
+        'Catat menampilkan dua baris kategori dan sebagian baris berikutnya saat pilihan masih bisa digulir.',
+        'Keypad angka kembali dari bawah setelah keyboard teks menutup, tanpa melepas draf catatan atau kategori.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.6',
       date: '17 Nov 2026',
       notes: [

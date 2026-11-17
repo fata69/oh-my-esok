@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -50,6 +51,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
   late final TextEditingController _noteController;
   bool _creatingCategory = false;
   final _categoryNameController = TextEditingController();
+  final _categoryScroll = ScrollController(keepScrollOffset: false);
+  bool _addingCategory = false;
   String? _draftCategoryIconId;
   String? _categoryError;
   bool _saving = false;
@@ -82,6 +85,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   void dispose() {
     _noteController.dispose();
     _categoryNameController.dispose();
+    _categoryScroll.dispose();
     super.dispose();
   }
 
@@ -118,6 +122,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   void _pressKey(String key) {
+    FocusManager.instance.primaryFocus?.unfocus();
     HapticFeedback.lightImpact();
     if (key == 'back') {
       setState(() => _amount = _amount ~/ 10);
@@ -140,6 +145,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   void _changeKind(String kind) {
+    if (_addingCategory) return;
     _manualKindChosen = true;
     if (_kind == kind) return;
     setState(() {
@@ -232,14 +238,17 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
   Future<void> _addCategoryInline() async {
     final name = _categoryNameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty || _addingCategory) return;
+    final kind = _kind;
+    setState(() => _addingCategory = true);
     try {
       final category = await context.read<MoneyStore>().addCategory(
         name,
-        _kind,
+        kind,
         iconId: _draftCategoryIconId,
       );
-      if (!mounted) return;
+      if (!mounted || _kind != kind || !_creatingCategory) return;
+      FocusScope.of(context).unfocus();
       setState(() {
         _categoryId = category.id;
         _creatingCategory = false;
@@ -247,10 +256,48 @@ class _TxEditorPageState extends State<TxEditorPage> {
         _categoryError = null;
         _categoryNameController.clear();
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            _categoryScroll.hasClients &&
+            _categoryId == category.id) {
+          _categoryScroll.jumpTo(_categoryScroll.position.maxScrollExtent);
+        }
+      });
     } on NameConflictException {
-      if (!mounted) return;
+      if (!mounted || _kind != kind || !_creatingCategory) return;
       setState(() => _categoryError = 'Kategori itu sudah ada.');
+    } finally {
+      if (mounted) setState(() => _addingCategory = false);
     }
+  }
+
+  Future<void> _changeCategoryIcon(MoneyCategory category) async {
+    final store = context.read<MoneyStore>();
+    final choice = await showMoneyIconPicker(
+      context,
+      iconSet: MoneyIconSet.category,
+      value: category.iconId,
+      automatic: categoryIconSpec(null, categoryId: category.id),
+      categoryKind: category.kind,
+    );
+    if (!mounted || choice == null || choice.id == category.iconId) return;
+    await store.renameCategory(
+      category.id,
+      category.name,
+      iconId: choice.id,
+      clearIcon: choice.id == null,
+    );
+  }
+
+  void _cancelCategory() {
+    if (_addingCategory) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _creatingCategory = false;
+      _draftCategoryIconId = null;
+      _categoryNameController.clear();
+      _categoryError = null;
+    });
   }
 
   bool get _canSave {
@@ -485,59 +532,50 @@ class _TxEditorPageState extends State<TxEditorPage> {
         .where((account) => account.id == _toAccountId)
         .firstOrNull;
 
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final media = MediaQuery.of(context);
+    final keyboardOpen = media.viewInsets.bottom > 0;
     return Scaffold(
       backgroundColor: EsokColors.canvas,
-      bottomNavigationBar: keyboardOpen
-          ? null
-          : _BottomActions(
-              canSave: _canSave,
-              saving: _saving,
-              scanning: _scanning,
-              onCancel: () => Navigator.of(context).pop(),
-              onScan: _scanReceipt,
-              onSave: _save,
-            ),
       body: SafeArea(
+        maintainBottomViewPadding: true,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 520;
             final columns = wide ? 6 : 3;
-            final keyHeight = constraints.maxHeight < 700 ? 48.0 : 52.0;
+            const keyHeight = 48.0;
             final keypadHeight = (12 ~/ columns) * (keyHeight + 7) - 7 + 16;
-            // Keep the entire keypad in view whenever there is also room to
-            // show part of the editable form. Extremely short viewports scroll.
-            final reserveKeypad =
-                !keyboardOpen && constraints.maxHeight >= keypadHeight + 100;
-            final formHeight =
-                constraints.maxHeight - (reserveKeypad ? keypadHeight : 0);
-            final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
-            final extraHeight =
-                (_creatingCategory ? (largeText ? 110 : 56) : 0) +
-                (_categoryError != null ? 24 : 0) +
-                (_hasScanDraft ? (largeText ? 90 : 48) : 0);
-            final categoryHeight = (formHeight - 320 - extraHeight).clamp(
-              70.0,
-              226.0,
-            );
-            final keypad = Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-              child: _Keypad(
-                onKey: _pressKey,
-                columns: columns,
-                keyHeight: keyHeight,
-              ),
-            );
-            final categoryGrid = Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _CategoryGrid(
-                categories: categories,
-                selectedId: _categoryId,
-                onSelect: (id) => setState(() => _categoryId = id),
-                onNew: () => setState(() {
-                  _creatingCategory = true;
-                  _categoryError = null;
-                }),
+            // Choose the dock's placement once for this viewport, irrespective
+            // of insets from Android's keyboard.
+            final safeHeight = media.size.height - media.viewPadding.vertical;
+            final docked = safeHeight >= keypadHeight + 220;
+            final reduceMotion =
+                media.reduceMotion ||
+                media.disableAnimations ||
+                media.accessibleNavigation;
+            final dock = _TransactionDock(
+              visible: !keyboardOpen,
+              reduceMotion: reduceMotion,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: _Keypad(
+                      key: const ValueKey('transaction-keypad'),
+                      onKey: _pressKey,
+                      columns: columns,
+                      keyHeight: keyHeight,
+                    ),
+                  ),
+                  _BottomActions(
+                    canSave: _canSave,
+                    saving: _saving,
+                    scanning: _scanning,
+                    onCancel: () => Navigator.of(context).pop(),
+                    onScan: _scanReceipt,
+                    onSave: _save,
+                  ),
+                ],
               ),
             );
 
@@ -569,30 +607,36 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     style: TextStyle(fontSize: 11),
                   ),
                 ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               if (!_isTransfer) ...[
-                SizedBox(height: categoryHeight, child: categoryGrid),
-                if (_creatingCategory) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _InlineCategory(
-                      controller: _categoryNameController,
-                      kind: _kind,
-                      error: _categoryError,
-                      iconId: _draftCategoryIconId,
-                      onIconChanged: (iconId) =>
-                          setState(() => _draftCategoryIconId = iconId),
-                      onCancel: () => setState(() {
-                        _creatingCategory = false;
-                        _draftCategoryIconId = null;
-                        _categoryNameController.clear();
-                        _categoryError = null;
-                      }),
-                      onSave: _addCategoryInline,
-                    ),
-                  ),
-                ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _creatingCategory
+                      ? _InlineCategory(
+                          controller: _categoryNameController,
+                          kind: _kind,
+                          error: _categoryError,
+                          iconId: _draftCategoryIconId,
+                          saving: _addingCategory,
+                          onIconChanged: (iconId) =>
+                              setState(() => _draftCategoryIconId = iconId),
+                          onCancel: _cancelCategory,
+                          onSave: _addCategoryInline,
+                        )
+                      : _CategorySection(
+                          categories: categories,
+                          selected: selectedCategory,
+                          controller: _categoryScroll,
+                          onSelect: (id) => setState(() => _categoryId = id),
+                          onEditIcon: _changeCategoryIcon,
+                          onNew: () => setState(() {
+                            _creatingCategory = true;
+                            _draftCategoryIconId = null;
+                            _categoryError = null;
+                            _categoryNameController.clear();
+                          }),
+                        ),
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   child: Row(
@@ -764,7 +808,6 @@ class _TxEditorPageState extends State<TxEditorPage> {
                   ],
                 ),
               ),
-              if (!keyboardOpen && !reserveKeypad) keypad,
               if (_isEditing)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
@@ -778,6 +821,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                   ),
                 ),
               const SizedBox(height: 8),
+              if (!docked) dock,
             ];
 
             // Keep the editable scroll view mounted across IME changes so
@@ -786,10 +830,12 @@ class _TxEditorPageState extends State<TxEditorPage> {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.manual,
                     child: Column(children: children),
                   ),
                 ),
-                if (reserveKeypad) keypad,
+                if (docked) dock,
               ],
             );
           },
@@ -1046,48 +1092,110 @@ class _Segments extends StatelessWidget {
   }
 }
 
-class _CategoryGrid extends StatelessWidget {
-  const _CategoryGrid({
+class _CategorySection extends StatelessWidget {
+  const _CategorySection({
     required this.categories,
-    required this.selectedId,
+    required this.selected,
+    required this.controller,
     required this.onSelect,
+    required this.onEditIcon,
     required this.onNew,
   });
 
   final List<MoneyCategory> categories;
-  final String? selectedId;
+  final MoneyCategory? selected;
+  final ScrollController controller;
   final ValueChanged<String> onSelect;
+  final ValueChanged<MoneyCategory> onEditIcon;
   final VoidCallback onNew;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      primary: false,
-      padding: EdgeInsets.zero,
-      itemCount: categories.length + 1,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        mainAxisExtent: 70,
-      ),
-      itemBuilder: (context, index) {
-        if (index == categories.length) {
-          return _CategoryTile(
-            onTap: onNew,
-            selected: false,
-            newTile: true,
-            label: 'Baru',
-          );
-        }
-        final category = categories[index];
-        return _CategoryTile(
-          onTap: () => onSelect(category.id),
-          selected: category.id == selectedId,
-          icon: CategoryIconView(category: category, size: 20),
-          label: category.name,
-        );
-      },
+    const columns = 4;
+    const gap = 6.0;
+    final rowHeight = math.max(
+      60.0,
+      40 + MediaQuery.textScalerOf(context).scale(11) * 1.35,
+    );
+    final rows = (categories.length + columns - 1) ~/ columns;
+    final height = math.min(
+      rows * (rowHeight + gap) - gap,
+      rowHeight * 2.5 + gap * 2,
+    );
+    final action = TextButton.styleFrom(
+      foregroundColor: EsokColors.ink,
+      minimumSize: const Size(48, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      textStyle: const TextStyle(fontSize: 12),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  'Kategori',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                children: [
+                  if (selected case final category?)
+                    TextButton(
+                      onPressed: () => onEditIcon(category),
+                      style: action,
+                      child: const Text('Ubah ikon'),
+                    ),
+                  TextButton.icon(
+                    onPressed: onNew,
+                    style: action,
+                    icon: const Icon(Icons.add, size: 15),
+                    label: const Text('Baru'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (rows == 0)
+          Text(
+            'Belum ada kategori.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          )
+        else
+          SizedBox(
+            key: const ValueKey('transaction-categories'),
+            height: height,
+            child: GridView.builder(
+              controller: controller,
+              primary: false,
+              padding: EdgeInsets.zero,
+              itemCount: categories.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: gap,
+                crossAxisSpacing: gap,
+                mainAxisExtent: rowHeight,
+              ),
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                return _CategoryTile(
+                  onTap: () => onSelect(category.id),
+                  selected: category.id == selected?.id,
+                  icon: CategoryIconView(category: category, size: 20),
+                  label: category.name,
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1096,54 +1204,49 @@ class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     required this.onTap,
     required this.selected,
-    this.icon,
-    this.label,
-    this.newTile = false,
+    required this.icon,
+    required this.label,
   });
 
   final VoidCallback onTap;
   final bool selected;
-  final Widget? icon;
-  final String? label;
-  final bool newTile;
+  final Widget icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-        decoration: BoxDecoration(
-          color: selected ? EsokColors.canvas : EsokColors.soft,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: selected
-                ? EsokColors.ink
-                : newTile
-                ? EsokColors.lineStrong
-                : Colors.transparent,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (newTile)
-              Icon(Icons.add, size: 19, color: EsokColors.muted)
-            else
-              icon ?? const SizedBox.shrink(),
-            const SizedBox(height: 5),
-            Text(
-              label ?? '',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9.5,
-                color: selected ? EsokColors.ink : EsokColors.inkSoft,
-              ),
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          decoration: BoxDecoration(
+            color: selected ? EsokColors.canvas : EsokColors.soft,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: selected ? EsokColors.ink : Colors.transparent,
+              width: selected ? 1.5 : 1,
             ),
-          ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: selected ? EsokColors.ink : EsokColors.inkSoft,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1156,6 +1259,7 @@ class _InlineCategory extends StatelessWidget {
     required this.kind,
     required this.error,
     required this.iconId,
+    required this.saving,
     required this.onIconChanged,
     required this.onCancel,
     required this.onSave,
@@ -1165,6 +1269,7 @@ class _InlineCategory extends StatelessWidget {
   final String kind;
   final String? error;
   final String? iconId;
+  final bool saving;
   final ValueChanged<String?> onIconChanged;
   final VoidCallback onCancel;
   final VoidCallback onSave;
@@ -1173,6 +1278,7 @@ class _InlineCategory extends StatelessWidget {
   Widget build(BuildContext context) {
     final field = TextField(
       controller: controller,
+      enabled: !saving,
       autofocus: true,
       textCapitalization: TextCapitalization.sentences,
       textInputAction: TextInputAction.done,
@@ -1181,14 +1287,6 @@ class _InlineCategory extends StatelessWidget {
       decoration: InputDecoration(
         hintText: 'Nama kategori baru',
         hintStyle: TextStyle(fontSize: 14, color: EsokColors.muted),
-        prefixIcon: MoneyIconField(
-          iconSet: MoneyIconSet.category,
-          categoryKind: kind,
-          value: iconId,
-          automatic: categoryIconSpec(null),
-          onChanged: onIconChanged,
-          compact: true,
-        ),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 10,
@@ -1207,7 +1305,7 @@ class _InlineCategory extends StatelessWidget {
       ),
     );
     final cancel = TextButton(
-      onPressed: onCancel,
+      onPressed: saving ? null : onCancel,
       style: TextButton.styleFrom(
         foregroundColor: EsokColors.muted,
         minimumSize: const Size(48, 48),
@@ -1218,7 +1316,7 @@ class _InlineCategory extends StatelessWidget {
     final save = ValueListenableBuilder<TextEditingValue>(
       valueListenable: controller,
       builder: (context, value, _) => TextButton(
-        onPressed: value.text.trim().isEmpty ? null : onSave,
+        onPressed: saving || value.text.trim().isEmpty ? null : onSave,
         style: TextButton.styleFrom(
           foregroundColor: EsokColors.accent,
           minimumSize: const Size(48, 48),
@@ -1228,41 +1326,42 @@ class _InlineCategory extends StatelessWidget {
         child: const Text('Tambah'),
       ),
     );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final singleRow =
-            constraints.maxWidth >= 300 &&
-            MediaQuery.textScalerOf(context).scale(14) <= 19;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (singleRow)
-              Row(
-                children: [
-                  Expanded(child: field),
-                  const SizedBox(width: 4),
-                  cancel,
-                  save,
-                ],
-              )
-            else ...[
-              field,
-              Wrap(alignment: WrapAlignment.end, children: [cancel, save]),
+    final icon = MoneyIconField(
+      iconSet: MoneyIconSet.category,
+      categoryKind: kind,
+      value: iconId,
+      automatic: categoryIconSpec(null),
+      onChanged: onIconChanged,
+      compact: true,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (MediaQuery.textScalerOf(context).scale(14) <= 19)
+          Row(
+            children: [
+              Expanded(child: field),
+              const SizedBox(width: 8),
+              icon,
             ],
-            if (error != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 3, 0, 2),
-                child: Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    error!,
-                    style: TextStyle(fontSize: 12, color: EsokColors.lateInk),
-                  ),
-                ),
+          )
+        else ...[
+          field,
+          Align(alignment: AlignmentDirectional.centerStart, child: icon),
+        ],
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 3, 0, 2),
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                error!,
+                style: TextStyle(fontSize: 12, color: EsokColors.lateInk),
               ),
-          ],
-        );
-      },
+            ),
+          ),
+        Wrap(alignment: WrapAlignment.end, children: [cancel, save]),
+      ],
     );
   }
 }
@@ -1371,6 +1470,8 @@ class _NoteFieldState extends State<_NoteField> {
               controller: widget.controller,
               focusNode: _focusNode,
               textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _focusNode.unfocus(),
               textAlignVertical: TextAlignVertical.center,
               style: TextStyle(fontSize: 13.5, color: EsokColors.ink),
               decoration: InputDecoration(
@@ -1440,6 +1541,7 @@ class _DateChip extends StatelessWidget {
 
 class _Keypad extends StatelessWidget {
   const _Keypad({
+    super.key,
     required this.onKey,
     required this.columns,
     required this.keyHeight,
@@ -1488,6 +1590,60 @@ class _Keypad extends StatelessWidget {
       ],
     );
   }
+}
+
+class _TransactionDock extends StatefulWidget {
+  const _TransactionDock({
+    required this.visible,
+    required this.reduceMotion,
+    required this.child,
+  });
+
+  final bool visible;
+  final bool reduceMotion;
+  final Widget child;
+
+  @override
+  State<_TransactionDock> createState() => _TransactionDockState();
+}
+
+class _TransactionDockState extends State<_TransactionDock>
+    with SingleTickerProviderStateMixin {
+  late final _reveal = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 160),
+    value: widget.visible ? 1 : 0,
+  );
+  late final _progress = _reveal.drive(CurveTween(curve: Curves.easeOutCubic));
+
+  @override
+  void didUpdateWidget(covariant _TransactionDock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.visible || widget.reduceMotion) {
+      _reveal.value = widget.visible ? 1 : 0;
+    } else if (!oldWidget.visible) {
+      _reveal.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _reveal.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizeTransition(
+    alignment: Alignment.bottomCenter,
+    sizeFactor: _progress,
+    child: FadeTransition(
+      opacity: _progress,
+      child: ExcludeFocus(
+        excluding: !widget.visible,
+        child: IgnorePointer(ignoring: !widget.visible, child: widget.child),
+      ),
+    ),
+  );
 }
 
 class _KeyButton extends StatelessWidget {
