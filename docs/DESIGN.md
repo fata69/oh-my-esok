@@ -6,6 +6,8 @@ Keep **Oh My Esok** as the root header. The floating glass dock has four destina
 
 Dark mode uses a pure black canvas (`#000000`) with neutral charcoal controls and dock material. Keep blue and orange for financial meaning in the content; do not tint the dark canvas, glass, or active tab blue. Retain the light palette.
 
+Keep financial information on one surface: a prominent balance, separate wallet and transaction sections, and simple icons to distinguish ledger entry types. Use familiar list rows and a checkmark for model selection; show the display name and canonical Google ID and make the selected, empty, and failed states clear. Keep the saved choice on cancel or failure. Avoid decorative glass in content.
+
 Keep **Pindai struk** labeled and near **Simpan** at the bottom of the transaction editor. Reserve room for the entire keypad above the action row; the form scrolls independently on small screens and the keypad uses two rows on wide screens. Hide the custom keypad while the native text keyboard has focus and let the form scroll on exceptionally short viewports. The category field and its Batal/Tambah actions sit in one compact row when space allows; a larger text setting can wrap the actions below. Scan results stay editable drafts until Simpan.
 
 Use the offline [build 18 design review](../design-review/oh-my-esok-design.html) as a baseline and compare the local candidate before release. The motion follows [Apple's guidance](https://developer.apple.com/design/human-interface-guidelines/motion) on short, purposeful motion and reduced motion; the arrangement and styling belong to Oh My Esok. Review usual portrait sizes (360, 390, 412 dp at normal text) first; log extreme widths and text scaling as supplemental stress checks.

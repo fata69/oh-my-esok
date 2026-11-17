@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../ai/gemini_model_catalog.dart';
 import '../backup/auto_backup.dart';
 import '../data/database.dart';
 import '../data/task_dao.dart';
@@ -12,6 +13,7 @@ import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../widget/widget_sync.dart';
 import '../update/update_page.dart';
+import 'ai_model_picker.dart';
 import 'data_page.dart';
 import 'manage_accounts.dart';
 import 'manage_categories.dart';
@@ -169,14 +171,25 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _editAiModel() async {
     final settings = context.read<SettingsStore>();
-    final value = await _promptText(
-      title: 'Model Gemini',
-      hint: 'gemini-3.5-flash',
-      initial: settings.aiModel,
-      obscure: false,
+    final apiKey = settings.aiKey.trim();
+    final modelId = await showAiModelPicker(
+      context,
+      currentModel: settings.aiModel,
+      loadModels: apiKey.isEmpty ? null : () => GeminiModelCatalog.list(apiKey),
+      onEditKey: _editAiKey,
     );
-    if (value == null) return;
-    await settings.setAiModel(value);
+    if (!mounted || modelId == null) return;
+    if (settings.aiKey.trim() != apiKey) {
+      _message('API key berubah. Buka lagi daftar model.');
+      return;
+    }
+    try {
+      await settings.setAiModel(modelId);
+    } on GeminiModelCatalogException catch (error) {
+      if (mounted) _message(error.message);
+    } catch (_) {
+      if (mounted) _message('Model Gemini gagal disimpan.');
+    }
   }
 
   Future<String?> _promptText({
@@ -455,7 +468,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _SettingsRow(
             title: 'Model',
             subtitle: settings.aiModel,
-            trailing: const _Trailing('Atur ›'),
+            trailing: const _Trailing('Pilih ›'),
             onTap: _editAiModel,
           ),
           const _SectionLabel('Privasi'),

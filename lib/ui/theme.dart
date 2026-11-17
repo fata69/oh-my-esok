@@ -81,6 +81,15 @@ const _darkPalette = EsokPalette._(
 class EsokColors {
   EsokColors._();
 
+  static Color incomeInk(Brightness brightness) => brightness == Brightness.dark
+      ? const Color(0xFF548CFF)
+      : const Color(0xFF1558D4);
+
+  static Color expenseInk(Brightness brightness) =>
+      brightness == Brightness.dark
+      ? const Color(0xFFFF8836)
+      : const Color(0xFFB64A0B);
+
   /// Use this in widgets so offscreen tabs subscribe to the inherited theme.
   static EsokPalette of(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark

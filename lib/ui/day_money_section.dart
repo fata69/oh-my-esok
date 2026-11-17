@@ -32,6 +32,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
+    final brightness = Theme.of(context).brightness;
     final store = context.watch<MoneyStore>();
     if (_revision != store.revision || _date != widget.date) {
       _load(store);
@@ -140,18 +141,13 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                                   : big > 0
                                   ? colors.positive
                                   : colors.ink)
-                            : (big > 0
-                                  ? colors.negative
-                                  : colors.ink),
+                            : (big > 0 ? colors.negative : colors.ink),
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
                     Text(
                       hasIncome ? 'selisih' : 'keluar',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.muted,
-                      ),
+                      style: TextStyle(fontSize: 12, color: colors.muted),
                     ),
                   ],
                 ),
@@ -162,17 +158,14 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                   children: [
                     Text.rich(
                       TextSpan(
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: colors.muted,
-                        ),
+                        style: TextStyle(fontSize: 11.5, color: colors.muted),
                         children: [
                           const TextSpan(text: 'Masuk '),
                           TextSpan(
                             text: rupiahText(income),
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: colors.positive,
+                              color: EsokColors.incomeInk(brightness),
                             ),
                           ),
                         ],
@@ -180,17 +173,14 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                     ),
                     Text.rich(
                       TextSpan(
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: colors.muted,
-                        ),
+                        style: TextStyle(fontSize: 11.5, color: colors.muted),
                         children: [
                           const TextSpan(text: 'Keluar '),
                           TextSpan(
                             text: rupiahText(expense),
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: colors.negative,
+                              color: EsokColors.expenseInk(brightness),
                             ),
                           ),
                         ],
@@ -236,9 +226,7 @@ class _DayMoneySectionState extends State<DayMoneySection> {
                                 alignment: Alignment.centerLeft,
                                 widthFactor: (entry.value.abs() / maxValue)
                                     .clamp(0.0, 1.0),
-                                child: Container(
-                                  color: colors.barFill,
-                                ),
+                                child: Container(color: colors.barFill),
                               ),
                             ),
                           ),

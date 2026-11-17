@@ -29,6 +29,16 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.4',
+      date: '17 Nov 2026',
+      notes: [
+        'Tema Gelap memakai latar AMOLED hitam dan kontrol abu netral.',
+        'Tombol tambah muncul dari sisi navbar tanpa mengubah ukuran dan posisi dock.',
+        'Cari dan pilih model pindai dari daftar Google di Setelan.',
+        'Riwayat lebih mudah dipindai, dan ekspor membedakan tabel CSV dari cadangan JSON.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.3',
       date: '17 Nov 2026',
       notes: [

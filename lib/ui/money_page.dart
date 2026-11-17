@@ -156,9 +156,18 @@ class MoneyPage extends StatelessWidget {
               ),
               children: [
                 _BalanceBlock(store: store),
+                const SizedBox(height: 24),
+                Semantics(
+                  header: true,
+                  child: Text(
+                    'Transaksi',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
                 if (grouped.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 24),
+                    padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       'Belum ada transaksi bulan ini.',
                       style: Theme.of(context).textTheme.bodyMedium,
@@ -233,9 +242,9 @@ class _BalanceBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final incomeInk = dark ? const Color(0xFF548CFF) : const Color(0xFF1558D4);
-    final expenseInk = dark ? const Color(0xFFFF8836) : const Color(0xFFB64A0B);
+    final brightness = Theme.of(context).brightness;
+    final incomeInk = EsokColors.incomeInk(brightness);
+    final expenseInk = EsokColors.expenseInk(brightness);
     final total = store.totalBalance;
     final totalColor = total < 0 ? colors.negative : colors.ink;
     final accounts = store.activeAccounts;
@@ -305,6 +314,7 @@ class _BalanceBlock extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
               child: Text(
@@ -317,22 +327,25 @@ class _BalanceBlock extends StatelessWidget {
                 ),
               ),
             ),
-            TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const ManageAccountsPage(),
+            Flexible(
+              flex: 2,
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ManageAccountsPage(),
+                  ),
                 ),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: colors.ink,
-                minimumSize: const Size(48, 48),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                textStyle: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                style: TextButton.styleFrom(
+                  foregroundColor: colors.ink,
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                child: const Text('Kelola dompet', textAlign: TextAlign.end),
               ),
-              child: const Text('Kelola dompet'),
             ),
           ],
         ),
@@ -513,13 +526,6 @@ class _TransactionRow extends StatelessWidget {
 
   bool get _isAdjustment => transaction.kind == 'adjustment';
 
-  String get _initial {
-    final name = transaction.isTransfer || _isAdjustment
-        ? store.accountName(transaction.accountId)
-        : store.categoryName(transaction.categoryId);
-    return name.isEmpty ? '?' : name.substring(0, 1).toUpperCase();
-  }
-
   String get _title {
     final note = transaction.note?.trim();
     if (note != null && note.isNotEmpty) return note;
@@ -541,31 +547,24 @@ class _TransactionRow extends StatelessWidget {
   }
 
   String get _amount {
-    if (transaction.isIncome) {
-      return '+${numberText(transaction.amount)}';
-    }
-    if (transaction.isExpense) {
-      if (transaction.amount < 0) {
-        return '+${numberText(transaction.amount.abs())}';
-      }
-      return '−${numberText(transaction.amount)}';
-    }
-    if (_isAdjustment) {
-      return transaction.amount >= 0
-          ? '+${numberText(transaction.amount)}'
-          : '−${numberText(transaction.amount.abs())}';
-    }
-    return numberText(transaction.amount);
+    if (transaction.isTransfer) return numberText(transaction.amount);
+    final effect = transaction.isExpense
+        ? -transaction.amount
+        : transaction.amount;
+    final sign = effect < 0
+        ? '−'
+        : effect > 0
+        ? '+'
+        : '';
+    return '$sign${numberText(effect.abs())}';
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final amountColor = transaction.isIncome
-        ? colors.positive
-        : transaction.isExpense
-        ? colors.negative
-        : colors.inkSoft;
+    final amountColor = transaction.isTransfer || _isAdjustment
+        ? colors.inkSoft
+        : colors.ink;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -585,13 +584,16 @@ class _TransactionRow extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  _initial,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: colors.muted,
-                  ),
+                child: Icon(
+                  transaction.isTransfer
+                      ? Icons.swap_horiz_rounded
+                      : _isAdjustment
+                      ? Icons.tune_rounded
+                      : transaction.isIncome
+                      ? Icons.south_west_rounded
+                      : Icons.north_east_rounded,
+                  size: 16,
+                  color: colors.muted,
                 ),
               ),
               const SizedBox(width: 12),

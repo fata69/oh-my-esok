@@ -19,6 +19,7 @@ dan mengirim gambar pilihan ke Gemini menggunakan API key pengguna.
 - **Tutup Hari** merangkum catatan yang belum selesai dan arus kas harian, lalu membantu memindahkan catatan satu per satu.
 - **Pengingat** sebelum tenggat, bisa diatur 30 menit sampai 1 hari.
 - **Pindai foto** struk dan tangkapan layar M-Banking dengan Gemini. Cek teks barang dan data yang terbaca sebelum memasukkannya ke draf transaksi.
+- **Pilih model AI** dari katalog Google dengan API key yang disimpan di perangkat. Cari nama atau ID di **Setelan → Pindai struk → Model**. Model perlu mendukung gambar untuk memindai struk.
 - **Buku kas**: pengeluaran, pemasukan, pindah dompet, saldo per dompet, dan koreksi saldo.
 - **Laporan**: bandingkan arus kas enam bulan, telusuri pengeluaran per kategori, dan pilih tanggal untuk melihat nominal persis. Transfer dan koreksi saldo tidak dihitung sebagai arus kas.
 - **Widget** catatan dan ringkasan uang — bisa dicentang langsung dari layar utama.
