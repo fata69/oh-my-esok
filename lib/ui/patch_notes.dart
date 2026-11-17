@@ -29,6 +29,16 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.3',
+      date: '17 Nov 2026',
+      notes: [
+        'Navbar glass kini memiliki empat tab: Hari, Uang, Laporan, dan Setelan.',
+        'Tambah catatan dan transaksi dari bagian bawah layar.',
+        'Laporan membandingkan pemasukan dan pengeluaran dengan grafik volume interaktif.',
+        'Nominal pemasukan dan pengeluaran memakai warna biru dan oranye sesuai tema.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.2',
       date: '16 Nov 2026',
       notes: [

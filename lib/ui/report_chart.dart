@@ -442,26 +442,17 @@ class _FlowPlot extends StatelessWidget {
             ],
           ),
         ),
-        Padding(
-          padding: EdgeInsets.only(right: axisWidth + 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                monthly
-                    ? DateFormat('MMM', 'id_ID').format(points.first.date)
-                    : '1',
-                style: axisStyle,
-              ),
-              Text(
-                monthly
-                    ? DateFormat('MMM', 'id_ID').format(points.last.date)
-                    : '${points.length}',
-                style: axisStyle,
-              ),
-            ],
+        if (!monthly)
+          Padding(
+            padding: EdgeInsets.only(right: axisWidth + 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('1', style: axisStyle),
+                Text('${points.length}', style: axisStyle),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
