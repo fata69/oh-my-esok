@@ -6,7 +6,7 @@ Keep **Oh My Esok** as the root header. The floating glass dock has four destina
 
 Dark mode uses a pure black canvas (`#000000`) with neutral charcoal controls and dock material. Add color to the four navigation glyphs, and use weight and a sliding neutral capsule for the selected state. The glyphs have darker variants on light surfaces and brighter variants on AMOLED. Keep blue and orange for financial meaning in the ledger, paired with arrow direction and text. Leave glass surfaces neutral in both themes.
 
-On a tab tap, move the one selection capsule immediately with a critically damped spring. A second tap retargets it from its current position and velocity. The capsule settles in roughly a quarter of a second, and reduced motion skips the glide. Icons and labels stay anchored to their tab cells. `+` keeps its separate reveal motion; this does not change the page transition.
+On a tab tap, move one neutral selection capsule with a thin, visible edge and a critically damped spring. A second tap retargets it from its current position and velocity. The capsule settles in roughly 170–200 ms, and reduced motion skips the glide. Icons and labels stay anchored to their tab cells. `+` keeps its separate reveal motion; this does not change the page transition.
 
 Keep financial information on one surface: a prominent balance, separate wallet and transaction sections, and simple icons to distinguish ledger entry types. Use familiar list rows and a checkmark for model selection; show the display name and canonical Google ID and make the selected, empty, and failed states clear. Keep the saved choice on cancel or failure. Avoid decorative glass in content.
 

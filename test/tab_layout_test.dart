@@ -409,7 +409,7 @@ void main() {
 
     await tester.tap(uang);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 40));
+    await tester.pump(const Duration(milliseconds: 32));
     final midway = tester.getCenter(selection);
     expect(midway.dx, inExclusiveRange(start.dx, destination.dx));
     expect(midway.dy, closeTo(start.dy, .01));

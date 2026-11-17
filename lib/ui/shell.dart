@@ -221,8 +221,8 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   // Critically damped so the selection lands on the destination without bounce.
   static const _glide = SpringDescription(
     mass: 1,
-    stiffness: 1156,
-    damping: 68,
+    stiffness: 1936,
+    damping: 88,
   );
   late final _reveal = AnimationController.unbounded(
     vsync: this,
@@ -321,33 +321,39 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
         child: Stack(
           children: [
             Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _indicator,
-                builder: (context, pill) {
-                  final stops = _tabs.length - 1;
-                  // Use tab units so the pill stays aligned when + changes
-                  // the available width at the same time.
-                  final position = _indicator.value.clamp(
-                    0.0,
-                    stops.toDouble(),
-                  );
-                  return Align(
-                    alignment: Alignment(2 * position / stops - 1, 0),
-                    child: pill,
-                  );
-                },
+              child: Align(
+                alignment: Alignment.centerLeft,
                 child: FractionallySizedBox(
                   widthFactor: 1 / _tabs.length,
                   heightFactor: 1,
-                  child: DecoratedBox(
-                    key: const ValueKey('dock-selection'),
-                    decoration: BoxDecoration(
-                      color: highContrast
-                          ? colors.onSurface
-                          : colors.brightness == Brightness.dark
-                          ? const Color(0xFF292929)
-                          : const Color(0xFFE9E9EC),
-                      borderRadius: _radius,
+                  child: AnimatedBuilder(
+                    animation: _indicator,
+                    builder: (context, pill) => FractionalTranslation(
+                      // Move the painted pill in tab units without laying out
+                      // the icons and labels again on each frame.
+                      translation: Offset(
+                        _indicator.value.clamp(0.0, _tabs.length - 1.0),
+                        0,
+                      ),
+                      child: pill,
+                    ),
+                    child: DecoratedBox(
+                      key: const ValueKey('dock-selection'),
+                      decoration: BoxDecoration(
+                        color: highContrast
+                            ? colors.onSurface
+                            : colors.brightness == Brightness.dark
+                            ? const Color(0xFF313131)
+                            : const Color(0xFFE4E4E7),
+                        border: highContrast
+                            ? null
+                            : Border.all(
+                                color: colors.brightness == Brightness.dark
+                                    ? const Color(0xFF686868)
+                                    : const Color(0xFF9B9BA3),
+                              ),
+                        borderRadius: _radius,
+                      ),
                     ),
                   ),
                 ),
