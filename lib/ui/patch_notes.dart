@@ -29,6 +29,15 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.6',
+      date: '17 Nov 2026',
+      notes: [
+        'Menahan tab tidak lagi menampilkan lapisan abu-abu. Penanda navbar meluncur dengan awal yang lebih lembut.',
+        'Tanggal dan bulan sejajar di tengah pada Hari, Uang, dan Laporan, dengan satu panah di setiap sisi.',
+        'Ketuk tanggal untuk membuka kalender, atau ketuk bulan untuk memilih bulan dan tahun pada Uang dan Laporan.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.5',
       date: '17 Nov 2026',
       notes: [
