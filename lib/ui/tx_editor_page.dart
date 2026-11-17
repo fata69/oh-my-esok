@@ -474,9 +474,10 @@ class _TxEditorPageState extends State<TxEditorPage> {
         .where((account) => account.id == _toAccountId)
         .firstOrNull;
 
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       backgroundColor: EsokColors.canvas,
-      bottomNavigationBar: MediaQuery.viewInsetsOf(context).bottom > 0
+      bottomNavigationBar: keyboardOpen
           ? null
           : _BottomActions(
               canSave: _canSave,
@@ -489,9 +490,32 @@ class _TxEditorPageState extends State<TxEditorPage> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final categoryHeight = (constraints.maxHeight - 510).clamp(
-              158.0,
+            final wide = constraints.maxWidth >= 520;
+            final columns = wide ? 6 : 3;
+            final keyHeight = constraints.maxHeight < 700 ? 48.0 : 52.0;
+            final keypadHeight = (12 ~/ columns) * (keyHeight + 7) - 7 + 16;
+            // Keep the entire keypad in view whenever there is also room to
+            // show part of the editable form. Extremely short viewports scroll.
+            final reserveKeypad =
+                !keyboardOpen && constraints.maxHeight >= keypadHeight + 100;
+            final formHeight =
+                constraints.maxHeight - (reserveKeypad ? keypadHeight : 0);
+            final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
+            final extraHeight =
+                (_creatingCategory ? (largeText ? 110 : 56) : 0) +
+                (_categoryError != null ? 24 : 0) +
+                (_hasScanDraft ? (largeText ? 90 : 48) : 0);
+            final categoryHeight = (formHeight - 320 - extraHeight).clamp(
+              70.0,
               226.0,
+            );
+            final keypad = Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: _Keypad(
+                onKey: _pressKey,
+                columns: columns,
+                keyHeight: keyHeight,
+              ),
             );
             final categoryGrid = Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -629,18 +653,27 @@ class _TxEditorPageState extends State<TxEditorPage> {
                           ),
                         ),
                       ),
-                      Text(
-                        _hasScanDraft && _amount == 0
-                            ? 'Isi nominal'
-                            : 'Rp ${numberText(_amount)}',
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.02,
-                          color: _amount == 0
-                              ? EsokColors.disabled
-                              : EsokColors.ink,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                      Flexible(
+                        flex: 3,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            _hasScanDraft && _amount == 0
+                                ? 'Isi nominal'
+                                : 'Rp ${numberText(_amount)}',
+                            style: TextStyle(
+                              fontSize: 25,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.02,
+                              color: _amount == 0
+                                  ? EsokColors.disabled
+                                  : EsokColors.ink,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -712,10 +745,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                child: _Keypad(onKey: _pressKey),
-              ),
+              if (!keyboardOpen && !reserveKeypad) keypad,
               if (_isEditing)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
@@ -731,9 +761,18 @@ class _TxEditorPageState extends State<TxEditorPage> {
               const SizedBox(height: 8),
             ];
 
-            // Keep the note field mounted when the Android keyboard resizes
-            // the viewport. Replacing this subtree would drop its focus.
-            return SingleChildScrollView(child: Column(children: children));
+            // Keep the editable scroll view mounted across IME changes so
+            // the note and category fields never lose focus.
+            return Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(children: children),
+                  ),
+                ),
+                if (reserveKeypad) keypad,
+              ],
+            );
           },
         ),
       ),
@@ -1175,10 +1214,7 @@ class _InlineCategory extends StatelessWidget {
               )
             else ...[
               field,
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [cancel, save],
-              ),
+              Wrap(alignment: WrapAlignment.end, children: [cancel, save]),
             ],
             if (error != null)
               Padding(
@@ -1366,9 +1402,15 @@ class _DateChip extends StatelessWidget {
 }
 
 class _Keypad extends StatelessWidget {
-  const _Keypad({required this.onKey});
+  const _Keypad({
+    required this.onKey,
+    required this.columns,
+    required this.keyHeight,
+  });
 
   final ValueChanged<String> onKey;
+  final int columns;
+  final double keyHeight;
 
   static const _keys = [
     '1',
@@ -1389,14 +1431,18 @@ class _Keypad extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (var row = 0; row < 4; row++) ...[
+        for (var row = 0; row < _keys.length ~/ columns; row++) ...[
           if (row > 0) const SizedBox(height: 7),
           Row(
             children: [
-              for (var col = 0; col < 3; col++) ...[
+              for (var col = 0; col < columns; col++) ...[
                 if (col > 0) const SizedBox(width: 7),
                 Expanded(
-                  child: _KeyButton(value: _keys[row * 3 + col], onTap: onKey),
+                  child: _KeyButton(
+                    value: _keys[row * columns + col],
+                    height: keyHeight,
+                    onTap: onKey,
+                  ),
                 ),
               ],
             ],
@@ -1408,9 +1454,14 @@ class _Keypad extends StatelessWidget {
 }
 
 class _KeyButton extends StatelessWidget {
-  const _KeyButton({required this.value, required this.onTap});
+  const _KeyButton({
+    required this.value,
+    required this.height,
+    required this.onTap,
+  });
 
   final String value;
+  final double height;
   final ValueChanged<String> onTap;
 
   @override
@@ -1419,7 +1470,7 @@ class _KeyButton extends StatelessWidget {
     return GestureDetector(
       onTap: () => onTap(value),
       child: Container(
-        height: 52,
+        height: height,
         decoration: BoxDecoration(
           color: EsokColors.soft,
           borderRadius: BorderRadius.circular(11),

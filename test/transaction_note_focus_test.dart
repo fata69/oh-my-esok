@@ -10,6 +10,74 @@ import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 void main() {
+  for (final (size, scale) in [
+    (const Size(412, 892), 1.0),
+    (const Size(320, 640), 2.0),
+    (const Size(760, 360), 2.0),
+  ]) {
+    testWidgets('all transaction keys fit above the footer at $size ×$scale', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+      tester.view.viewPadding = tester.view.padding;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final db = _UnusedDatabase();
+      final store = MoneyStore(
+        CategoryDao(db),
+        AccountDao(db),
+        MoneyTransactionDao(db),
+      );
+      addTearDown(store.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: store,
+          child: MaterialApp(
+            theme: EsokTheme.light(),
+            home: const TxEditorPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      void checkKeys() {
+        final footer = find.widgetWithText(TextButton, 'Pindai struk');
+        expect(footer.hitTestable(), findsOneWidget);
+        for (final key in [
+          for (var digit = 0; digit <= 9; digit++) find.text('$digit'),
+          find.text('000'),
+          find.byIcon(Icons.backspace_outlined),
+        ]) {
+          expect(key.hitTestable(), findsOneWidget);
+          expect(
+            tester.getRect(key).bottom,
+            lessThan(tester.getTopLeft(footer).dy),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+
+      checkKeys();
+      await tester.ensureVisible(find.text('Baru'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Baru').hitTestable());
+      await tester.pumpAndSettle();
+      checkKeys();
+      await tester.tap(find.text('8'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rp 8'), findsOneWidget);
+      await tester.ensureVisible(find.text('Pindah'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pindah').hitTestable());
+      await tester.pumpAndSettle();
+      checkKeys();
+    });
+  }
+
   testWidgets('transaction note keeps focus as the keyboard reduces height', (
     tester,
   ) async {
