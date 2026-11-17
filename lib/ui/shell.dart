@@ -49,15 +49,24 @@ class _EsokShellState extends State<EsokShell> {
         // The extended body exposes the measured height of the chrome and
         // the system inset. Bound the tabs with a persistent creation action.
         extendBody: true,
-        body: IndexedStack(
-          index: _index,
+        body: Stack(
+          fit: StackFit.expand,
           children: [
-            _AboveDock(
-              child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
+            _TabPane(
+              active: _index == 0,
+              child: _AboveDock(
+                child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
+              ),
             ),
-            const _AboveDock(child: MoneyPage()),
-            const _AboveDock(child: ReportsPage()),
-            const SettingsPage(),
+            _TabPane(
+              active: _index == 1,
+              child: const _AboveDock(child: MoneyPage()),
+            ),
+            _TabPane(
+              active: _index == 2,
+              child: const _AboveDock(child: ReportsPage()),
+            ),
+            _TabPane(active: _index == 3, child: const SettingsPage()),
           ],
         ),
         bottomNavigationBar: keyboardVisible
@@ -85,6 +94,62 @@ class _EsokShellState extends State<EsokShell> {
                   },
                 ),
               ),
+      ),
+    );
+  }
+}
+
+class _TabPane extends StatefulWidget {
+  const _TabPane({required this.active, required this.child});
+  final bool active;
+  final Widget child;
+  @override
+  State<_TabPane> createState() => _TabPaneState();
+}
+
+class _TabPaneState extends State<_TabPane> {
+  late bool _visible = widget.active;
+
+  @override
+  void didUpdateWidget(_TabPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active) _visible = true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced =
+        MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context);
+    return Offstage(
+      offstage: !widget.active && (reduced || !_visible),
+      child: TickerMode(
+        enabled: widget.active || _visible,
+        child: ExcludeSemantics(
+          excluding: !widget.active,
+          child: IgnorePointer(
+            ignoring: !widget.active,
+            child: AnimatedOpacity(
+              opacity: widget.active ? 1 : 0,
+              duration: reduced
+                  ? Duration.zero
+                  : Duration(milliseconds: widget.active ? 240 : 160),
+              curve: Curves.easeOutCubic,
+              onEnd: () {
+                if (mounted && !widget.active && _visible)
+                  setState(() => _visible = false);
+              },
+              child: AnimatedSlide(
+                offset: widget.active ? Offset.zero : const Offset(.018, 0),
+                duration: reduced
+                    ? Duration.zero
+                    : const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -164,27 +229,6 @@ class _FloatingTabBar extends StatelessWidget {
                   onTap: () => onChanged(i),
                 ),
               ),
-            if (primary != null) ...[
-              const SizedBox(width: 4),
-              SizedBox(width: 1, height: 22, child: ColoredBox(color: edge)),
-              const SizedBox(width: 4),
-              SizedBox.square(
-                key: const ValueKey('bottom-create'),
-                dimension: 48,
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: IconButton(
-                    tooltip: primary.$1,
-                    onPressed: primary.$2,
-                    icon: const Icon(Icons.add_rounded, size: 25),
-                    style: IconButton.styleFrom(
-                      foregroundColor: ink,
-                      shape: const CircleBorder(),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -202,12 +246,92 @@ class _FloatingTabBar extends StatelessWidget {
           heightFactor: 1,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
-            child: ClipRRect(
-              key: const ValueKey('floating-navigation'),
-              borderRadius: _radius,
-              child: solid
-                  ? capsule
-                  : BackdropFilter(filter: _blur, child: capsule),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    key: const ValueKey('floating-navigation'),
+                    borderRadius: _radius,
+                    child: solid
+                        ? capsule
+                        : BackdropFilter(filter: _blur, child: capsule),
+                  ),
+                ),
+                AnimatedContainer(
+                  key: const ValueKey('create-accessory-slot'),
+                  width: primary == null ? 0 : 60,
+                  height: 52,
+                  duration: solid
+                      ? Duration.zero
+                      : const Duration(milliseconds: 340),
+                  curve: Curves.easeInOutCubic,
+                  child: ClipRect(
+                    clipBehavior: Clip.hardEdge,
+                    child: OverflowBox(
+                      alignment: Alignment.centerRight,
+                      minWidth: 52,
+                      maxWidth: 52,
+                      child: IgnorePointer(
+                        ignoring: primary == null,
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(end: primary == null ? 0 : 1),
+                          duration: solid
+                              ? Duration.zero
+                              : const Duration(milliseconds: 420),
+                          curve: primary == null
+                              ? Curves.easeInCubic
+                              : Curves.easeOutBack,
+                          builder: (context, progress, child) => Opacity(
+                            opacity: progress.clamp(0, 1),
+                            child: Transform.translate(
+                              offset: Offset(-12 * (1 - progress), 0),
+                              child: Transform.scale(
+                                scale: .86 + .14 * progress,
+                                child: child,
+                              ),
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: BackdropFilter(
+                              filter: solid ? ui.ImageFilter.blur() : _blur,
+                              child: Container(
+                                key: primary == null
+                                    ? null
+                                    : const ValueKey('bottom-create'),
+                                width: 52,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: solid
+                                      ? tint
+                                      : tint.withValues(alpha: tintOpacity),
+                                  border: Border.all(color: edge),
+                                ),
+                                child: Material(
+                                  type: MaterialType.transparency,
+                                  child: IconButton(
+                                    tooltip: primary?.$1 ?? 'Tambah',
+                                    onPressed: primary?.$2,
+                                    icon: const Icon(
+                                      Icons.add_rounded,
+                                      size: 25,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      foregroundColor: ink,
+                                      shape: const CircleBorder(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

@@ -204,14 +204,13 @@ void main() {
       final dock = tester.getRect(nav);
       final button = tester.getRect(create);
       expect(tester.getRect(list).bottom, lessThanOrEqualTo(dock.top));
-      expect(dock.contains(button.topLeft), isTrue);
-      expect(dock.contains(button.bottomRight), isTrue);
+      expect(button.left - dock.right, closeTo(8, .01));
       expect(button.center.dy, closeTo(dock.center.dy, 0.01));
       expect(
         button.left,
         greaterThan(tester.getRect(find.bySemanticsLabel('Setelan')).right),
       );
-      expect(tester.getSize(create), const Size.square(48));
+      expect(tester.getSize(create), const Size.square(52));
     }
 
     verifyHeader(HomePage);
@@ -312,7 +311,10 @@ void main() {
 
     final create = find.byKey(const ValueKey('bottom-create'));
     final nav = find.byKey(const ValueKey('floating-navigation'));
-    expect(tester.getRect(nav).contains(tester.getCenter(create)), isTrue);
+    expect(
+      tester.getRect(create).left - tester.getRect(nav).right,
+      closeTo(8, .01),
+    );
     expect(
       tester.getCenter(create).dy,
       closeTo(tester.getCenter(nav).dy, 0.01),
@@ -345,6 +347,71 @@ void main() {
     expect(find.byType(TxEditorPage), findsOneWidget);
     expect(create.hitTestable(), findsNothing);
   });
+
+  testWidgets(
+    'dock accessory animates without losing tab state or hit targets',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(412, 892);
+      addTearDown(tester.view.reset);
+      await launch(tester);
+      final nav = find.byKey(const ValueKey('floating-navigation'));
+      final slot = find.byKey(const ValueKey('create-accessory-slot'));
+      final initial = tester.getSize(nav).width;
+      await tester.tap(find.bySemanticsLabel('Laporan').hitTestable());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 130));
+      expect(tester.getSize(slot).width, inExclusiveRange(0, 60));
+      expect(tester.getSize(nav).width, greaterThan(initial));
+      expect(find.byKey(const ValueKey('bottom-create')), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(slot).width, 0);
+      await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 130));
+      expect(tester.getSize(slot).width, inExclusiveRange(0, 60));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(slot).width, 60);
+      expect(find.text('Pengeluaran terakhir').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('capture the actual dock emergence motion', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(412, 892);
+    tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 20);
+    tester.view.padding = tester.view.viewPadding;
+    addTearDown(tester.view.reset);
+    final settings = await launch(tester, notes: 3, preview: true);
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      await settings.setThemeMode(mode);
+      await select(tester, 'Laporan');
+      for (final (tab, name) in [('Uang', 'show'), ('Laporan', 'hide')]) {
+        await tester.tap(find.bySemanticsLabel(tab).hitTestable());
+        await tester.pump();
+        for (var frame = 0; frame < 15; frame++) {
+          if (frame > 0) await tester.pump(const Duration(milliseconds: 33));
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(const ValueKey('preview-boundary')),
+          );
+          await tester.runAsync(() async {
+            final image = await boundary.toImage(pixelRatio: 1.5);
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            image.dispose();
+            final directory = Directory('build/design-captures')
+              ..createSync(recursive: true);
+            File('${directory.path}/motion-$name-${mode.name}-$frame.png')
+                .writeAsBytesSync(bytes!.buffer.asUint8List());
+          });
+        }
+        await tester.pumpAndSettle();
+      }
+    }
+  }, skip: !makePreviews);
 
   testWidgets('render the glass dock on production Hari, Uang and Laporan', (
     tester,
