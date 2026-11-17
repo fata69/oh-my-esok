@@ -535,7 +535,7 @@ void main() {
       final lastYear = today().year - 1;
       await tester.tap(find.text('$lastYear').hitTestable());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Januari').hitTestable());
+      await tester.tap(find.bySemanticsLabel('Januari').hitTestable());
       await tester.pumpAndSettle();
       expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
 

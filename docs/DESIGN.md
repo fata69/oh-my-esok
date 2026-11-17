@@ -12,6 +12,8 @@ Keep financial information on one surface: a prominent balance, separate wallet 
 
 Use type size, weight and spacing to separate the context, main value, and supporting text. In Hari, Uang, and Laporan, align the period at the same center and height, with one quiet chevron on each side. Tapping Hari opens the task calendar. Uang and Laporan share the month and year picker and stay in sync. Use one neutral surface per agenda, wallet group, transaction day, or settings section, with inset dividers between rows. Do not box individual amounts, stack decorative surfaces, or alter the dock geometry to create hierarchy.
 
+Keep the month choices in a narrow centered grid. Use short month labels with full names for screen readers, a small neutral selection marker, and 48 dp tap areas. Let the number of columns adapt to text size.
+
 In Uang, place marked **Dompet** and **Transaksi** headings below the total. The transaction filter changes only the history in the selected month; the summary and wallet balances keep their full values. Use [Copilot Money's transaction filters](https://help.copilot.money/en/articles/9554412-transactions-tab-overview) as a reference for this separation.
 
 Use **Dompet** everywhere for where money sits or moves and **Kategori** for what a transaction was for. In Settings, explain the two side by side under **Keuangan**. Offer a short catalog of recognizable glyphs by transaction type rather than a separate glyph for each food or drink. Keep an automatic default and give the icon a neutral background. Existing saved selections remain usable.

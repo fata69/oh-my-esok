@@ -54,7 +54,8 @@ class _MonthPicker extends StatefulWidget {
 
 class _MonthPickerState extends State<_MonthPicker> {
   final _now = DateTime.now();
-  final _format = DateFormat.MMMM('id_ID');
+  final _monthName = DateFormat.MMMM('id_ID');
+  final _shortMonth = DateFormat.MMM('id_ID');
   late int _year = widget.month.year;
   late final int _firstYear = math.min(widget.month.year, _now.year - 100);
   late final int _lastYear = math.max(widget.month.year, _now.year + 50);
@@ -71,7 +72,7 @@ class _MonthPickerState extends State<_MonthPicker> {
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: 256),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -80,7 +81,8 @@ class _MonthPickerState extends State<_MonthPicker> {
                   header: true,
                   child: Text(
                     _pickYear ? 'Pilih tahun' : 'Pilih bulan',
-                    style: text.titleLarge,
+                    textAlign: TextAlign.center,
+                    style: text.titleMedium,
                   ),
                 ),
                 EsokPeriodHeader(
@@ -109,13 +111,13 @@ class _MonthPickerState extends State<_MonthPicker> {
                 else ...[
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      const gap = 6.0;
+                      const gap = 4.0;
                       final minWidth =
-                          92 * MediaQuery.textScalerOf(context).scale(13) / 13;
+                          54 * MediaQuery.textScalerOf(context).scale(13) / 13;
                       final count =
                           ((constraints.maxWidth + gap) / (minWidth + gap))
                               .floor()
-                              .clamp(1, 3);
+                              .clamp(1, 4);
                       final width =
                           (constraints.maxWidth - gap * (count - 1)) / count;
                       return Wrap(
@@ -131,7 +133,7 @@ class _MonthPickerState extends State<_MonthPicker> {
                       );
                     },
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 4),
                   TextButton(
                     style: TextButton.styleFrom(foregroundColor: colors.ink),
                     onPressed: () => _select(context, _now.year, _now.month),
@@ -154,24 +156,34 @@ class _MonthPickerState extends State<_MonthPicker> {
   Widget _monthButton(BuildContext context, int month) {
     final colors = EsokColors.of(context);
     final selected = _year == widget.month.year && month == widget.month.month;
+    final date = DateTime(_year, month);
     return Semantics(
       selected: selected,
       child: TextButton(
         style: TextButton.styleFrom(
           minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          backgroundColor: selected ? colors.control : null,
+          padding: EdgeInsets.zero,
           foregroundColor: colors.ink,
-          side: selected ? BorderSide(color: colors.outline) : null,
           textStyle: TextStyle(
             fontSize: 13,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
         onPressed: () => _select(context, _year, month),
-        child: Text(
-          _format.format(DateTime(_year, month)),
-          textAlign: TextAlign.center,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+          decoration: selected
+              ? BoxDecoration(
+                  color: colors.control,
+                  borderRadius: BorderRadius.circular(9),
+                )
+              : null,
+          child: Text(
+            _shortMonth.format(date),
+            semanticsLabel: _monthName.format(date),
+            textAlign: TextAlign.center,
+          ),
         ),
       ),
     );
