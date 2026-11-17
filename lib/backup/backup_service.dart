@@ -104,6 +104,8 @@ class BackupService {
     'archived': account.archived,
     'createdAt': account.createdAt,
     'openingBalance': account.openingBalance,
+    // An additive v5 field: legacy readers ignore it and legacy files omit it.
+    'iconKey': ?account.iconKey,
   };
 
   static Future<File> createJsonFile(BackupData data) async {
@@ -221,6 +223,7 @@ class BackupService {
           archived: json['archived'] == true || json['archived'] == 1,
           createdAt: _epoch(json['createdAt']),
           openingBalance: (json['openingBalance'] as num?)?.toInt() ?? 0,
+          iconKey: json['iconKey'] as String?,
         ),
       ),
       transactions: _parseRows(
@@ -409,7 +412,11 @@ class BackupService {
         );
       }
       if (data.categories.isEmpty || data.accounts.isEmpty) {
-        await AppDatabase.seedDefaults(txn);
+        await AppDatabase.seedDefaults(
+          txn,
+          categories: data.categories.isEmpty,
+          accounts: data.accounts.isEmpty,
+        );
       }
     });
   }

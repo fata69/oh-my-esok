@@ -13,7 +13,7 @@ class AppDatabase {
     final directory = await getDatabasesPath();
     final db = await openDatabase(
       p.join(directory, 'esok.db'),
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await _createTasks(db);
         await _createMoney(db);
@@ -36,6 +36,9 @@ class AppDatabase {
         }
         if (oldVersion >= 2 && oldVersion < 5) {
           await db.execute('ALTER TABLE transactions ADD COLUMN detail TEXT');
+        }
+        if (oldVersion >= 2 && oldVersion < 6) {
+          await db.execute('ALTER TABLE accounts ADD COLUMN icon_key TEXT');
         }
       },
     );
@@ -79,7 +82,8 @@ CREATE TABLE accounts (
   sort_order INTEGER NOT NULL DEFAULT 0,
   archived   INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
-  opening_balance INTEGER NOT NULL DEFAULT 0
+  opening_balance INTEGER NOT NULL DEFAULT 0,
+  icon_key   TEXT
 )
 ''');
     await db.execute('''
@@ -101,7 +105,11 @@ CREATE TABLE transactions (
     await db.execute('CREATE INDEX idx_tx_cat ON transactions(category_id)');
   }
 
-  static Future<void> seedDefaults(DatabaseExecutor db) async {
+  static Future<void> seedDefaults(
+    DatabaseExecutor db, {
+    bool categories = true,
+    bool accounts = true,
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final batch = db.batch();
 
@@ -122,7 +130,7 @@ CREATE TABLE transactions (
       ('cat-inc-lain', 'Lain-lain', 'lainnya'),
     ];
 
-    for (var i = 0; i < expense.length; i++) {
+    for (var i = 0; categories && i < expense.length; i++) {
       batch.insert('categories', {
         'id': expense[i].$1,
         'name': expense[i].$2,
@@ -139,7 +147,7 @@ CREATE TABLE transactions (
         whereArgs: [expense[i].$1],
       );
     }
-    for (var i = 0; i < income.length; i++) {
+    for (var i = 0; categories && i < income.length; i++) {
       batch.insert('categories', {
         'id': income[i].$1,
         'name': income[i].$2,
@@ -156,15 +164,17 @@ CREATE TABLE transactions (
         whereArgs: [income[i].$1],
       );
     }
-    batch.insert('accounts', {
-      'id': 'acc-tunai',
-      'name': 'Tunai',
-      'type': 'cash',
-      'sort_order': 0,
-      'archived': 0,
-      'created_at': now,
-      'opening_balance': 0,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    if (accounts) {
+      batch.insert('accounts', {
+        'id': 'acc-tunai',
+        'name': 'Tunai',
+        'type': 'cash',
+        'sort_order': 0,
+        'archived': 0,
+        'created_at': now,
+        'opening_balance': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
 
     await batch.commit(noResult: true);
   }

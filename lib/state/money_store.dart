@@ -255,7 +255,13 @@ class MoneyStore extends ChangeNotifier {
     return category;
   }
 
-  Future<void> renameCategory(String id, String name) async {
+  /// A missing icon preserves the current choice; [clearIcon] restores default.
+  Future<void> renameCategory(
+    String id,
+    String name, {
+    String? iconId,
+    bool clearIcon = false,
+  }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Nama kategori kosong');
     final current = _categories.firstWhere((category) => category.id == id);
@@ -266,7 +272,9 @@ class MoneyStore extends ChangeNotifier {
           category.name.toLowerCase() == trimmed.toLowerCase(),
     );
     if (duplicate) throw NameConflictException();
-    await _categoryDao.update(current.copyWith(name: trimmed));
+    await _categoryDao.update(
+      current.copyWith(name: trimmed, iconId: iconId, clearIcon: clearIcon),
+    );
     await _loadMeta();
     notifyListeners();
   }
@@ -303,6 +311,7 @@ class MoneyStore extends ChangeNotifier {
     String name,
     String type, {
     int openingBalance = 0,
+    String? iconKey,
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Nama dompet kosong');
@@ -320,6 +329,7 @@ class MoneyStore extends ChangeNotifier {
       archived: false,
       createdAt: DateTime.now().millisecondsSinceEpoch,
       openingBalance: openingBalance,
+      iconKey: iconKey,
     );
     await _accountDao.insert(account);
     await _loadMeta();
@@ -327,7 +337,13 @@ class MoneyStore extends ChangeNotifier {
     return account;
   }
 
-  Future<void> renameAccount(String id, String name) async {
+  /// A missing icon preserves the current choice; [clearIcon] restores default.
+  Future<void> renameAccount(
+    String id,
+    String name, {
+    String? iconKey,
+    bool clearIcon = false,
+  }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Nama dompet kosong');
     final current = _accounts.firstWhere((account) => account.id == id);
@@ -337,7 +353,9 @@ class MoneyStore extends ChangeNotifier {
           account.name.toLowerCase() == trimmed.toLowerCase(),
     );
     if (duplicate) throw NameConflictException();
-    await _accountDao.update(current.copyWith(name: trimmed));
+    await _accountDao.update(
+      current.copyWith(name: trimmed, iconKey: iconKey, clearIcon: clearIcon),
+    );
     await _loadMeta();
     notifyListeners();
   }
