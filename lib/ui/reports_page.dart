@@ -65,9 +65,11 @@ class ReportsPage extends StatelessWidget {
               style: theme.textTheme.bodyMedium,
             ),
           ],
-          const _ReportSection(
+          _ReportSection(
             'Tren 6 bulan',
-            subtitle: 'Ketuk atau geser grafik untuk memilih bulan',
+            subtitle: hidden
+                ? null
+                : 'Ketuk atau geser grafik untuk memilih bulan',
           ),
           if (hidden)
             const _HiddenChart()

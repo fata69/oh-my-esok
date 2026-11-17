@@ -314,9 +314,7 @@ class _StatCell extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
         decoration: BoxDecoration(
-          border: last
-              ? null
-              : Border(right: BorderSide(color: colors.line)),
+          border: last ? null : Border(right: BorderSide(color: colors.line)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,10 +421,7 @@ class _DataRow extends StatelessWidget {
                   if (detail != null)
                     Text(
                       detail!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colors.muted,
-                      ),
+                      style: TextStyle(fontSize: 11, color: colors.muted),
                     ),
                 ],
               ),
@@ -457,11 +452,7 @@ class _InfoBox extends StatelessWidget {
       ),
       child: Text.rich(
         TextSpan(
-          style: TextStyle(
-            fontSize: 11.5,
-            height: 1.7,
-            color: colors.muted,
-          ),
+          style: TextStyle(fontSize: 11.5, height: 1.7, color: colors.muted),
           children: [
             TextSpan(text: 'Berkas cadangan berisi '),
             TextSpan(
@@ -506,7 +497,10 @@ class _ExportSheetState extends State<_ExportSheet> {
     try {
       final file = await _file();
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], subject: 'Cadangan Esok'),
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: _format == 'csv' ? 'Transaksi Esok' : 'Cadangan Esok',
+        ),
       );
       if (mounted) Navigator.of(context).pop('Berkas siap dibagikan.');
     } catch (error) {
@@ -527,12 +521,15 @@ class _ExportSheetState extends State<_ExportSheet> {
         fileName: p.basename(file.path),
         bytes: await file.readAsBytes(),
         mimeType: _format == 'csv' ? 'text/csv' : 'application/json',
-        dialogTitle: 'Simpan cadangan Esok',
+        dialogTitle: _format == 'csv'
+            ? 'Simpan transaksi CSV'
+            : 'Simpan cadangan Esok',
       );
       if (!mounted) return;
       setState(() => _busy = false);
       if (uri != null) {
-        Navigator.of(context).pop('Cadangan disimpan.');
+        Navigator.of(context)
+            .pop(_format == 'csv' ? 'CSV disimpan.' : 'Cadangan disimpan.');
       }
     } catch (error) {
       if (mounted) {
@@ -546,6 +543,7 @@ class _ExportSheetState extends State<_ExportSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
+    final csv = _format == 'csv';
     return Container(
       decoration: BoxDecoration(
         color: colors.canvas,
@@ -579,10 +577,12 @@ class _ExportSheetState extends State<_ExportSheet> {
             ),
             const SizedBox(height: 5),
             Text(
-              '${widget.data.tasks.length} tugas · '
-              '${widget.data.transactions.length} transaksi · '
-              '${widget.data.categories.length} kategori · '
-              '${widget.data.accounts.length} sumber dana',
+              csv
+                  ? '${widget.data.transactions.length} transaksi'
+                  : '${widget.data.tasks.length} tugas · '
+                        '${widget.data.transactions.length} transaksi · '
+                        '${widget.data.categories.length} kategori · '
+                        '${widget.data.accounts.length} sumber dana',
               style: TextStyle(fontSize: 11.5, color: colors.muted),
             ),
             const SizedBox(height: 18),
@@ -621,7 +621,9 @@ class _ExportSheetState extends State<_ExportSheet> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                'JSON bisa dibuka di editor teks dan berisi catatan uangmu dalam bentuk terbaca. Jangan simpan di folder yang dibagikan.',
+                csv
+                    ? 'CSV berisi tabel transaksi untuk Excel. Untuk memulihkan data di Oh My Esok, pilih cadangan JSON.'
+                    : 'JSON adalah cadangan lengkap yang bisa diimpor kembali ke Oh My Esok. Simpan di folder pribadi.',
                 style: TextStyle(
                   fontSize: 11.5,
                   height: 1.65,
