@@ -188,8 +188,8 @@ class EsokEntryButton extends StatelessWidget {
       onPressed: onPressed,
       style: FilledButton.styleFrom(
         minimumSize: const Size(48, 48),
-        backgroundColor: colors.action,
-        foregroundColor: colors.onAction,
+        backgroundColor: colors.ink,
+        foregroundColor: colors.canvas,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
