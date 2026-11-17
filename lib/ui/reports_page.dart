@@ -181,8 +181,9 @@ class _CategoryBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (categories.isEmpty)
+    if (categories.isEmpty) {
       return const Text('Belum ada pengeluaran untuk bulan ini.');
+    }
     final theme = Theme.of(context);
     final c = theme.colorScheme;
     final showShares = categories.any((entry) => entry.share > 0);
