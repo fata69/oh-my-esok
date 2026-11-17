@@ -543,6 +543,9 @@ class _TaskRow extends StatelessWidget {
             MediaQuery.accessibleNavigationOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 100);
+    final checkedColor = Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF63D99A)
+        : const Color(0xFF08754A);
     final titleStyle = Theme.of(context).textTheme.bodyLarge!.copyWith(
       fontSize: 16,
       fontWeight: FontWeight.w500,
@@ -572,14 +575,14 @@ class _TaskRow extends StatelessWidget {
                       height: 22,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: task.isDone ? colors.done : Colors.transparent,
+                        color: task.isDone ? checkedColor : Colors.transparent,
                         border: Border.all(
-                          color: task.isDone ? colors.done : colors.muted,
+                          color: task.isDone ? checkedColor : colors.muted,
                           width: 1.5,
                         ),
                       ),
                       child: task.isDone
-                          ? Icon(Icons.check, size: 13, color: colors.fabText)
+                          ? Icon(Icons.check, size: 13, color: colors.canvas)
                           : null,
                     ),
                   ),

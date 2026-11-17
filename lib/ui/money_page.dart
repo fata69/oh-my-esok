@@ -12,11 +12,14 @@ import 'tab_layout.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
 
-class MoneyPage extends StatelessWidget {
+class MoneyPage extends StatefulWidget {
   const MoneyPage({super.key});
 
   static Future<void> createTransaction(BuildContext context) =>
       _openEditor(context, initialDate: today());
+
+  @override
+  State<MoneyPage> createState() => _MoneyPageState();
 
   static Future<void> _openEditor(
     BuildContext context, {
@@ -39,6 +42,40 @@ class MoneyPage extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _LedgerKind {
+  all('Semua'),
+  income('Pemasukan'),
+  expense('Pengeluaran'),
+  transfer('Transfer');
+
+  const _LedgerKind(this.label);
+  final String label;
+}
+
+typedef _LedgerFilter = ({_LedgerKind kind, bool newestFirst});
+
+class _MoneyPageState extends State<MoneyPage> {
+  static const _defaultFilter = (kind: _LedgerKind.all, newestFirst: true);
+  _LedgerFilter _filter = _defaultFilter;
+
+  Future<void> _editFilter() async {
+    final filter = await showModalBottomSheet<_LedgerFilter>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _LedgerFilterSheet(initial: _filter),
+    );
+    if (mounted && filter != null) setState(() => _filter = filter);
+  }
+
+  bool _matches(MoneyTransaction transaction) => switch (_filter.kind) {
+    _LedgerKind.all => true,
+    _LedgerKind.income => transaction.isIncome,
+    _LedgerKind.expense => transaction.isExpense,
+    _LedgerKind.transfer => transaction.isTransfer,
+  };
 
   Future<void> _showActions(
     BuildContext context,
@@ -94,7 +131,7 @@ class MoneyPage extends StatelessWidget {
     );
     if (action == null || !context.mounted) return;
     if (action == 'edit') {
-      await _openEditor(context, transaction: transaction);
+      await MoneyPage._openEditor(context, transaction: transaction);
       return;
     }
     if (action == 'items') {
@@ -135,6 +172,16 @@ class MoneyPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = context.watch<MoneyStore>();
     final grouped = store.monthByDay;
+    final dates = grouped.keys.toList()
+      ..sort((a, b) => _filter.newestFirst ? b.compareTo(a) : a.compareTo(b));
+    final visible = <String, List<MoneyTransaction>>{};
+    for (final date in dates) {
+      final rows = grouped[date]!.where(_matches).toList();
+      if (rows.isNotEmpty) {
+        visible[date] = _filter.newestFirst ? rows : rows.reversed.toList();
+      }
+    }
+    final filterActive = _filter != _defaultFilter;
 
     return EsokTabLayout(
       child: Column(
@@ -157,27 +204,52 @@ class MoneyPage extends StatelessWidget {
               children: [
                 _BalanceBlock(store: store),
                 const SizedBox(height: 24),
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'Transaksi',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        'Transaksi',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _editFilter,
+                      icon: Icon(
+                        filterActive
+                            ? Icons.filter_alt
+                            : Icons.filter_alt_outlined,
+                        size: 17,
+                      ),
+                      label: const Text('Filter'),
+                    ),
+                  ],
                 ),
-                if (grouped.isEmpty)
+                if (filterActive)
+                  Text(
+                    '${_filter.kind.label} · ${_filter.newestFirst ? 'Terbaru dulu' : 'Terlama dulu'}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                if (visible.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'Belum ada transaksi bulan ini.',
+                      grouped.isEmpty
+                          ? 'Belum ada transaksi bulan ini.'
+                          : 'Tidak ada transaksi yang cocok dengan filter.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   )
                 else
-                  for (final entry in grouped.entries) ...[
+                  for (final entry in visible.entries) ...[
                     _DayHeader(
                       date: DateTime.parse(entry.key),
-                      net: store.netForDay(entry.value),
+                      net: _filter.kind == _LedgerKind.all
+                          ? store.netForDay(entry.value)
+                          : null,
                     ),
                     for (final (index, transaction) in entry.value.indexed)
                       EsokGroupedRow(
@@ -211,6 +283,90 @@ class MoneyPage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LedgerFilterSheet extends StatefulWidget {
+  const _LedgerFilterSheet({required this.initial});
+
+  final _LedgerFilter initial;
+
+  @override
+  State<_LedgerFilterSheet> createState() => _LedgerFilterSheetState();
+}
+
+class _LedgerFilterSheetState extends State<_LedgerFilterSheet> {
+  late _LedgerFilter _draft = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    Widget choices<T>(
+      List<(T, String)> options,
+      T value,
+      ValueChanged<T> onTap,
+    ) => Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        for (final (option, label) in options)
+          ChoiceChip(
+            label: Text(label),
+            selected: value == option,
+            onSelected: (_) => onTap(option),
+          ),
+      ],
+    );
+
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Filter transaksi', style: text.titleLarge),
+            const SizedBox(height: 5),
+            Text(
+              'Hanya mengubah riwayat bulan ini. Saldo tetap sama.',
+              style: text.bodyMedium,
+            ),
+            const SizedBox(height: 18),
+            Text('Jenis transaksi', style: text.bodyMedium),
+            choices(
+              [for (final kind in _LedgerKind.values) (kind, kind.label)],
+              _draft.kind,
+              (kind) => setState(
+                () => _draft = (kind: kind, newestFirst: _draft.newestFirst),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text('Urutkan', style: text.bodyMedium),
+            choices(
+              const [(true, 'Terbaru dulu'), (false, 'Terlama dulu')],
+              _draft.newestFirst,
+              (newestFirst) => setState(
+                () => _draft = (kind: _draft.kind, newestFirst: newestFirst),
+              ),
+            ),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, _draft),
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: const Text('Terapkan'),
+            ),
+            if (_draft != _MoneyPageState._defaultFilter)
+              TextButton(
+                onPressed: () =>
+                    setState(() => _draft = _MoneyPageState._defaultFilter),
+                child: const Text('Reset filter'),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -300,35 +456,19 @@ class _BalanceBlock extends StatelessWidget {
           spacing: 18,
           runSpacing: 4,
           children: [
-            Text.rich(
-              TextSpan(
-                style: TextStyle(fontSize: 12.5, color: colors.muted),
-                children: [
-                  const TextSpan(text: 'Masuk '),
-                  TextSpan(
-                    text: _flowAmount(store.monthIncome),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: incomeInk,
-                    ),
-                  ),
-                ],
-              ),
+            _flow(
+              'Masuk',
+              _flowAmount(store.monthIncome),
+              Icons.south_west_rounded,
+              incomeInk,
+              colors.muted,
             ),
-            Text.rich(
-              TextSpan(
-                style: TextStyle(fontSize: 12.5, color: colors.muted),
-                children: [
-                  const TextSpan(text: 'Keluar '),
-                  TextSpan(
-                    text: _flowAmount(-store.monthExpense),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: expenseInk,
-                    ),
-                  ),
-                ],
-              ),
+            _flow(
+              'Keluar',
+              _flowAmount(-store.monthExpense),
+              Icons.north_east_rounded,
+              expenseInk,
+              colors.muted,
             ),
           ],
         ),
@@ -337,13 +477,12 @@ class _BalanceBlock extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
-              child: Text(
-                'PER DOMPET',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.09,
-                  color: colors.muted,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  'Dompet',
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -411,6 +550,34 @@ class _BalanceBlock extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _flow(
+    String label,
+    String amount,
+    IconData icon,
+    Color ink,
+    Color muted,
+  ) {
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(fontSize: 12.5, color: muted),
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(end: 4),
+              child: Icon(icon, size: 14, color: ink),
+            ),
+          ),
+          TextSpan(text: '$label '),
+          TextSpan(
+            text: amount,
+            style: TextStyle(fontWeight: FontWeight.w600, color: ink),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -499,14 +666,15 @@ class _DayHeader extends StatelessWidget {
   const _DayHeader({required this.date, required this.net});
 
   final DateTime date;
-  final int net;
+  final int? net;
 
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final color = net < 0
+    final amount = net;
+    final color = (amount ?? 0) < 0
         ? colors.negative
-        : net > 0
+        : (amount ?? 0) > 0
         ? colors.positive
         : colors.muted;
     return Padding(
@@ -520,17 +688,18 @@ class _DayHeader extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
-          Flexible(
-            child: Text(
-              signedNumberText(net),
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: color,
-                fontFeatures: const [FontFeature.tabularFigures()],
+          if (amount != null)
+            Flexible(
+              child: Text(
+                signedNumberText(amount),
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: color,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -589,6 +758,12 @@ class _TransactionRow extends StatelessWidget {
     final amountColor = transaction.isTransfer || _isAdjustment
         ? colors.inkSoft
         : colors.ink;
+    final brightness = Theme.of(context).brightness;
+    final iconColor = transaction.isIncome
+        ? EsokColors.incomeInk(brightness)
+        : transaction.isExpense
+        ? EsokColors.expenseInk(brightness)
+        : colors.muted;
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -613,7 +788,7 @@ class _TransactionRow extends StatelessWidget {
                       ? Icons.south_west_rounded
                       : Icons.north_east_rounded,
                   size: 16,
-                  color: colors.muted,
+                  color: iconColor,
                 ),
               ),
               const SizedBox(width: 12),

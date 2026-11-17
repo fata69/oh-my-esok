@@ -412,6 +412,48 @@ void main() {
     expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
   });
 
+  testWidgets('transaction filters leave the wallet summary intact', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    await launch(tester, preview: true);
+    await select(tester, 'Uang');
+    final salary = find.text('Gaji');
+    final meal = find.text('Makan siang');
+    expect(salary, findsOneWidget);
+    expect(meal, findsOneWidget);
+
+    Future<void> filter(String type, {String? sort}) async {
+      await tester.tap(find.widgetWithText(TextButton, 'Filter').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, type));
+      if (sort != null) {
+        await tester.tap(find.widgetWithText(ChoiceChip, sort));
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Terapkan').hitTestable());
+      await tester.pumpAndSettle();
+    }
+
+    final total = find.text('8.122.000');
+    final occurrences = total.evaluate().length;
+    await filter('Pemasukan');
+    expect(salary, findsOneWidget);
+    expect(meal, findsNothing);
+    // Only the date subtotal is hidden; the main and wallet totals stay.
+    expect(total, findsNWidgets(occurrences - 1));
+    await filter('Transfer');
+    expect(
+      find.text('Tidak ada transaksi yang cocok dengan filter.'),
+      findsOneWidget,
+    );
+    await filter('Semua', sort: 'Terlama dulu');
+    expect(tester.getTopLeft(salary).dy, lessThan(tester.getTopLeft(meal).dy));
+    expect(total, findsNWidgets(occurrences));
+  });
+
   testWidgets('capture the actual dock emergence motion', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(412, 892);

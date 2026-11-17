@@ -201,10 +201,15 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   static const _radius = BorderRadius.all(Radius.circular(40));
   static final _blur = ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10);
   static const _tabs = [
-    ('Hari', Icons.event_note_outlined),
-    ('Uang', Icons.account_balance_wallet_outlined),
-    ('Laporan', Icons.bar_chart_outlined),
-    ('Setelan', Icons.settings_outlined),
+    ('Hari', Icons.event_note_outlined, Color(0xFF1558D4), Color(0xFF548CFF)),
+    (
+      'Uang',
+      Icons.account_balance_wallet_outlined,
+      Color(0xFF08754A),
+      Color(0xFF39D58D),
+    ),
+    ('Laporan', Icons.bar_chart_outlined, Color(0xFFA34B0A), Color(0xFFF6A343)),
+    ('Setelan', Icons.settings_outlined, Color(0xFF663CBC), Color(0xFFA988FF)),
   ];
 
   static const _addSize = 52.0;
@@ -280,18 +285,51 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
       ),
       child: Padding(
         padding: const EdgeInsets.all(4),
-        child: Row(
+        child: Stack(
           children: [
-            for (var i = 0; i < _tabs.length; i++)
-              Expanded(
-                child: _NavItem(
-                  label: _tabs[i].$1,
-                  icon: _tabs[i].$2,
-                  selected: widget.index == i,
-                  highContrast: highContrast,
-                  onTap: () => widget.onChanged(i),
+            Positioned.fill(
+              child: AnimatedAlign(
+                alignment: Alignment(
+                  2 * widget.index / (_tabs.length - 1) - 1,
+                  0,
+                ),
+                duration: solid
+                    ? Duration.zero
+                    : const Duration(milliseconds: 210),
+                curve: Curves.easeOutCubic,
+                child: FractionallySizedBox(
+                  widthFactor: 1 / _tabs.length,
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: highContrast
+                          ? colors.onSurface
+                          : colors.brightness == Brightness.dark
+                          ? const Color(0xFF292929)
+                          : const Color(0xFFE9E9EC),
+                      borderRadius: _radius,
+                    ),
+                  ),
                 ),
               ),
+            ),
+            Row(
+              children: [
+                for (var i = 0; i < _tabs.length; i++)
+                  Expanded(
+                    child: _NavItem(
+                      label: _tabs[i].$1,
+                      icon: _tabs[i].$2,
+                      iconColor: colors.brightness == Brightness.dark
+                          ? _tabs[i].$4
+                          : _tabs[i].$3,
+                      selected: widget.index == i,
+                      highContrast: highContrast,
+                      onTap: () => widget.onChanged(i),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
@@ -404,6 +442,7 @@ class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
     required this.icon,
+    required this.iconColor,
     required this.selected,
     required this.highContrast,
     required this.onTap,
@@ -411,6 +450,7 @@ class _NavItem extends StatelessWidget {
 
   final String label;
   final IconData icon;
+  final Color iconColor;
   final bool selected;
   final bool highContrast;
   final VoidCallback onTap;
@@ -418,17 +458,10 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final dark = colors.brightness == Brightness.dark;
-    final selectedInk = _dockInk(colors.brightness);
-    final selectedTint = dark
-        ? const Color(0xFF292929)
-        : const Color(0xFFEAF0FA);
     final inverted = selected && highContrast;
     final foreground = inverted
         ? colors.surface
-        : selected
-        ? selectedInk
-        : highContrast
+        : selected || highContrast
         ? colors.onSurface
         : colors.onSurfaceVariant;
     final interactionColor = selected
@@ -444,11 +477,7 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
-        color: inverted
-            ? colors.onSurface
-            : selected
-            ? selectedTint
-            : Colors.transparent,
+        type: MaterialType.transparency,
         shape: const RoundedRectangleBorder(borderRadius: radius),
         animationDuration: Duration.zero,
         child: InkWell(
@@ -466,7 +495,11 @@ class _NavItem extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 20, color: foreground),
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: highContrast ? foreground : iconColor,
+                  ),
                   const SizedBox(height: 2),
                   FittedBox(
                     fit: BoxFit.scaleDown,
