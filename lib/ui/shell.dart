@@ -218,12 +218,8 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   static const _revealDistance = 26.0;
   static const _enter = SpringDescription(mass: 1, stiffness: 800, damping: 44);
   static const _exit = SpringDescription(mass: 1, stiffness: 800, damping: 57);
-  // Critically damped so the selection lands on the destination without bounce.
-  static const _glide = SpringDescription(
-    mass: 1,
-    stiffness: 1936,
-    damping: 88,
-  );
+  // Match the Morphe pill's stiffness and 0.8 damping ratio at unit mass.
+  static const _glide = SpringDescription(mass: 1, stiffness: 400, damping: 32);
   late final _reveal = AnimationController.unbounded(
     vsync: this,
     value: _target,
@@ -518,7 +514,7 @@ class _NavItem extends StatelessWidget {
         : selected || highContrast
         ? colors.onSurface
         : colors.onSurfaceVariant;
-    final interactionColor = selected
+    final keyboardFocusColor = selected
         ? foreground.withValues(alpha: 0.08)
         : colors.surfaceContainerHigh;
     const radius = BorderRadius.all(Radius.circular(32));
@@ -539,9 +535,9 @@ class _NavItem extends StatelessWidget {
           onTap: onTap,
           borderRadius: radius,
           splashFactory: NoSplash.splashFactory,
-          focusColor: interactionColor,
-          hoverColor: interactionColor,
-          highlightColor: interactionColor,
+          focusColor: keyboardFocusColor,
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48),
             child: Padding(

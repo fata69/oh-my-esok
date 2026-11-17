@@ -6,6 +6,7 @@ import '../state/money_report.dart';
 import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../util/format.dart';
+import 'month_picker.dart';
 import 'report_chart.dart';
 import 'tab_layout.dart';
 
@@ -19,23 +20,21 @@ class ReportsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final hidden = context.watch<SettingsStore?>()?.hideAmounts ?? false;
     return EsokTabLayout(
+      period: EsokMonthHeader(
+        month: report.month,
+        onPrevious: store.previousMonth,
+        onNext: store.nextMonth,
+        onSelected: store.setMonth,
+      ),
       child: ListView(
         key: const PageStorageKey('reports'),
         padding: EdgeInsets.fromLTRB(
           EsokTabLayout.gutter,
-          0,
+          12,
           EsokTabLayout.gutter,
           EsokTabLayout.scrollBottomOf(context),
         ),
         children: [
-          EsokPeriodHeader(
-            title: monthTitle(report.month),
-            previousLabel: 'Bulan sebelumnya',
-            nextLabel: 'Bulan berikutnya',
-            onPrevious: store.previousMonth,
-            onNext: store.nextMonth,
-          ),
-          const SizedBox(height: 12),
           Text('Selisih bulan', style: theme.textTheme.bodyMedium),
           const SizedBox(height: 4),
           Text(

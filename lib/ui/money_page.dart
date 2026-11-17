@@ -10,6 +10,7 @@ import 'category_icon.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
 import 'money_icon_catalog.dart';
+import 'month_picker.dart';
 import 'tab_layout.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
@@ -186,104 +187,87 @@ class _MoneyPageState extends State<MoneyPage> {
     final filterActive = _filter != _defaultFilter;
 
     return EsokTabLayout(
-      child: Column(
+      period: EsokMonthHeader(
+        month: store.month,
+        onPrevious: store.previousMonth,
+        onNext: store.nextMonth,
+        onSelected: store.setMonth,
+      ),
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+          EsokTabLayout.gutter,
+          4,
+          EsokTabLayout.gutter,
+          EsokTabLayout.scrollBottomOf(context),
+        ),
         children: [
-          EsokPeriodHeader(
-            title: monthTitle(store.month),
-            previousLabel: 'Bulan sebelumnya',
-            nextLabel: 'Bulan berikutnya',
-            onPrevious: () => store.previousMonth(),
-            onNext: () => store.nextMonth(),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                EsokTabLayout.gutter,
-                4,
-                EsokTabLayout.gutter,
-                EsokTabLayout.scrollBottomOf(context),
-              ),
-              children: [
-                _BalanceBlock(store: store),
-                const SizedBox(height: 24),
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        'Transaksi',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _editFilter,
-                      icon: Icon(
-                        filterActive
-                            ? Icons.filter_alt
-                            : Icons.filter_alt_outlined,
-                        size: 17,
-                      ),
-                      label: const Text('Filter'),
-                    ),
-                  ],
+          _BalanceBlock(store: store),
+          const SizedBox(height: 24),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Semantics(
+                header: true,
+                child: Text(
+                  'Transaksi',
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                if (filterActive)
-                  Text(
-                    '${_filter.kind.label} · ${_filter.newestFirst ? 'Terbaru dulu' : 'Terlama dulu'}',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                if (visible.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      grouped.isEmpty
-                          ? 'Belum ada transaksi bulan ini.'
-                          : 'Tidak ada transaksi yang cocok dengan filter.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  )
-                else
-                  for (final entry in visible.entries) ...[
-                    _DayHeader(
-                      date: DateTime.parse(entry.key),
-                      net: _filter.kind == _LedgerKind.all
-                          ? store.netForDay(entry.value)
-                          : null,
-                    ),
-                    for (final (index, transaction) in entry.value.indexed)
-                      EsokGroupedRow(
-                        key: ValueKey(transaction.id),
-                        first: index == 0,
-                        last: index == entry.value.length - 1,
-                        child: Column(
-                          children: [
-                            if (index > 0)
-                              const Divider(
-                                height: 1,
-                                indent: 54,
-                                endIndent: 12,
-                              ),
-                            _TransactionRow(
-                              transaction: transaction,
-                              store: store,
-                              onTap: transaction.kind == 'adjustment'
-                                  ? null
-                                  : () => _showActions(
-                                      context,
-                                      store,
-                                      transaction,
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-              ],
-            ),
+              ),
+              TextButton.icon(
+                onPressed: _editFilter,
+                icon: Icon(
+                  filterActive ? Icons.filter_alt : Icons.filter_alt_outlined,
+                  size: 17,
+                ),
+                label: const Text('Filter'),
+              ),
+            ],
           ),
+          if (filterActive)
+            Text(
+              '${_filter.kind.label} · ${_filter.newestFirst ? 'Terbaru dulu' : 'Terlama dulu'}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                grouped.isEmpty
+                    ? 'Belum ada transaksi bulan ini.'
+                    : 'Tidak ada transaksi yang cocok dengan filter.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )
+          else
+            for (final entry in visible.entries) ...[
+              _DayHeader(
+                date: DateTime.parse(entry.key),
+                net: _filter.kind == _LedgerKind.all
+                    ? store.netForDay(entry.value)
+                    : null,
+              ),
+              for (final (index, transaction) in entry.value.indexed)
+                EsokGroupedRow(
+                  key: ValueKey(transaction.id),
+                  first: index == 0,
+                  last: index == entry.value.length - 1,
+                  child: Column(
+                    children: [
+                      if (index > 0)
+                        const Divider(height: 1, indent: 54, endIndent: 12),
+                      _TransactionRow(
+                        transaction: transaction,
+                        store: store,
+                        onTap: transaction.kind == 'adjustment'
+                            ? null
+                            : () => _showActions(context, store, transaction),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
         ],
       ),
     );

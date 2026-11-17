@@ -318,45 +318,41 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           PopupMenuItem(value: 'release_notes', child: Text('Catatan rilis')),
         ],
       ),
-      child: Column(
-        children: [
-          EsokPeriodHeader(
-            title: dateTitle(selected),
-            caption: positionLabel(selected),
-            detail: weekdayName(selected),
-            previousLabel: 'Hari sebelumnya',
-            nextLabel: 'Hari berikutnya',
-            onPrevious: store.canGoPrevious
-                ? () => _jumpTo(selected.subtract(const Duration(days: 1)))
-                : null,
-            onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
-            onSelect: _openCalendar,
-          ),
-          Expanded(
-            child: PageView.builder(
-              controller: _controller,
-              itemCount: _basePage * 2 + 1,
-              onPageChanged: (index) {
-                context.read<TaskStore>().selectDate(_dateForPage(index));
-              },
-              itemBuilder: (context, index) {
-                final date = _dateForPage(index);
-                return _DayPane(
-                  key: ValueKey(index),
-                  date: date,
-                  revision: store.revision,
-                  atEarliest: date == store.earliestAllowedDate,
-                  onToggle: _toggle,
-                  onOpen: (task) => _openEditor(task: task),
-                  onCloseDay: () => _openDayReview(date),
-                  onJumpToday: () => _jumpTo(today()),
-                  onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
-                  onOpenMoney: widget.onOpenMoney,
-                );
-              },
-            ),
-          ),
-        ],
+      period: EsokPeriodHeader(
+        title: dateTitle(selected),
+        detail:
+            '${weekdayName(selected)} · ${positionLabel(selected)}'
+            '${selected.year == today().year ? '' : ' · ${selected.year}'}',
+        selectLabel: 'Pilih tanggal',
+        previousLabel: 'Hari sebelumnya',
+        nextLabel: 'Hari berikutnya',
+        onPrevious: store.canGoPrevious
+            ? () => _jumpTo(selected.subtract(const Duration(days: 1)))
+            : null,
+        onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
+        onSelect: _openCalendar,
+      ),
+      child: PageView.builder(
+        controller: _controller,
+        itemCount: _basePage * 2 + 1,
+        onPageChanged: (index) {
+          context.read<TaskStore>().selectDate(_dateForPage(index));
+        },
+        itemBuilder: (context, index) {
+          final date = _dateForPage(index);
+          return _DayPane(
+            key: ValueKey(index),
+            date: date,
+            revision: store.revision,
+            atEarliest: date == store.earliestAllowedDate,
+            onToggle: _toggle,
+            onOpen: (task) => _openEditor(task: task),
+            onCloseDay: () => _openDayReview(date),
+            onJumpToday: () => _jumpTo(today()),
+            onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
+            onOpenMoney: widget.onOpenMoney,
+          );
+        },
       ),
     );
   }

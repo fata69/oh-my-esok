@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -16,6 +17,7 @@ import 'package:jadwal/data/task.dart';
 import 'package:jadwal/state/money_store.dart';
 import 'package:jadwal/state/settings_store.dart';
 import 'package:jadwal/state/task_store.dart';
+import 'package:jadwal/ui/calendar_sheet.dart';
 import 'package:jadwal/ui/home_page.dart';
 import 'package:jadwal/ui/money_page.dart';
 import 'package:jadwal/ui/reports_page.dart';
@@ -392,6 +394,58 @@ void main() {
     },
   );
 
+  testWidgets('holding an inactive tab does not paint a second dock pill', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final settings = await launch(tester);
+    await settings.setThemeMode(ThemeMode.dark);
+    await tester.pumpAndSettle();
+
+    final dock = find.byKey(const ValueKey('floating-navigation'));
+    final pill = find.byKey(const ValueKey('dock-selection'));
+    final target = find.bySemanticsLabel('Uang').hitTestable();
+    final initialCenter = tester.getCenter(pill);
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('preview-boundary')),
+    );
+    final bounds = tester.getRect(dock);
+
+    Future<List<int>?> pixels() => tester.runAsync(() async {
+      final image = await boundary.toImage();
+      try {
+        final rgba = (await image.toByteData())!;
+        final bytes = rgba.buffer.asUint8List();
+        return [
+          for (var y = bounds.top.round(); y < bounds.bottom.round(); y++)
+            ...Uint8List.sublistView(
+              bytes,
+              (y * image.width + bounds.left.round()) * 4,
+              (y * image.width + bounds.right.round()) * 4,
+            ),
+        ];
+      } finally {
+        image.dispose();
+      }
+    });
+
+    final idle = await pixels();
+    expect(idle, isNotNull);
+    final finger = await tester.startGesture(tester.getCenter(target));
+    await tester.pump(const Duration(milliseconds: 550));
+    expect(tester.getCenter(pill), initialCenter);
+    expect(listEquals(await pixels(), idle), isTrue);
+
+    await finger.up();
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(pill).dx,
+      closeTo(tester.getCenter(target).dx, .01),
+    );
+  });
+
   testWidgets('dock selection keeps its momentum on a quick reverse tap', (
     tester,
   ) async {
@@ -450,6 +504,51 @@ void main() {
     );
     expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
   });
+
+  testWidgets(
+    'periods align and open the appropriate picker on all three tabs',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      await launch(tester);
+
+      final day = find.byTooltip('Pilih tanggal').hitTestable();
+      final center = tester.getCenter(day);
+      expect(center.dx, 195);
+      final left = tester.getCenter(find.byTooltip('Hari sebelumnya'));
+      final right = tester.getCenter(find.byTooltip('Hari berikutnya'));
+      expect(left.dx + right.dx, closeTo(center.dx * 2, .01));
+      await tester.tap(day);
+      await tester.pumpAndSettle();
+      expect(find.byType(CalendarSheet), findsOneWidget);
+      await tester.tap(find.text('Tutup').hitTestable());
+      await tester.pumpAndSettle();
+
+      await select(tester, 'Uang');
+      final month = find.byTooltip('Pilih bulan').hitTestable();
+      expect(tester.getCenter(month), center);
+      await tester.tap(month);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Pilih tahun').hitTestable());
+      await tester.pumpAndSettle();
+      final lastYear = today().year - 1;
+      await tester.tap(find.text('$lastYear').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Januari').hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
+
+      await select(tester, 'Laporan');
+      expect(tester.getCenter(month), center);
+      expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
+      await tester.tap(month);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bulan ini').hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text(monthTitle(today())).hitTestable(), findsOneWidget);
+    },
+  );
 
   testWidgets('transaction filters leave the wallet summary intact', (
     tester,
