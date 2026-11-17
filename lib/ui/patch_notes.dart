@@ -32,6 +32,7 @@ class PatchNotesSheet extends StatelessWidget {
       version: '0.1.0-preview.7',
       date: '17 Nov 2026',
       notes: [
+        'Ikon navbar monokrom, dengan garis sedikit lebih tebal pada tab aktif.',
         'Pilih ikon saat membuat kategori atau ubah ikon kategori langsung dari Catat.',
         'Catat menampilkan dua baris kategori dan sebagian baris berikutnya saat pilihan masih bisa digulir.',
         'Keypad angka kembali dari bawah setelah keyboard teks menutup, tanpa melepas draf catatan atau kategori.',

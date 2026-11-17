@@ -202,15 +202,28 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   static const _radius = BorderRadius.all(Radius.circular(40));
   static final _blur = ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10);
   static const _tabs = [
-    ('Hari', Icons.event_note_outlined, Color(0xFF1558D4), Color(0xFF548CFF)),
+    (
+      'Hari',
+      '<rect x="4" y="5" width="16" height="16" rx="2"/>'
+          '<path d="M8 3v4m8-4v4M4 10h16M8 14h3m-3 3h6"/>',
+    ),
     (
       'Uang',
-      Icons.account_balance_wallet_outlined,
-      Color(0xFF08754A),
-      Color(0xFF39D58D),
+      '<path d="M19 8V4H6a2 2 0 0 0 0 4h14v13H6a2 2 0 0 1-2-2V6'
+          'm13 6h4v5h-4a2.5 2.5 0 0 1 0-5Zm.2 2.5h.1"/>',
     ),
-    ('Laporan', Icons.bar_chart_outlined, Color(0xFFA34B0A), Color(0xFFF6A343)),
-    ('Setelan', Icons.settings_outlined, Color(0xFF663CBC), Color(0xFFA988FF)),
+    (
+      'Laporan',
+      '<rect x="3" y="13" width="4" height="8" rx="1"/>'
+          '<rect x="10" y="5" width="4" height="16" rx="1"/>'
+          '<rect x="17" y="9" width="4" height="12" rx="1"/>',
+    ),
+    (
+      'Setelan',
+      '<path d="m9.5 3-.6 2.2-2 .9-2-.6L3 9l1.6 1.6v2.8L3 15l1.9 3.5'
+          ' 2-.6 2 .9.6 2.2h5l.6-2.2 2-.9 2 .6 1.9-3.5-1.6-1.6v-2.8'
+          'L21 9l-1.9-3.5-2 .6-2-.9-.6-2.2Z"/><circle cx="12" cy="12" r="3"/>',
+    ),
   ];
 
   static const _addSize = 52.0;
@@ -305,7 +318,6 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
     final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
     final primary = widget.action;
     final edge = highContrast ? colors.outline : colors.outlineVariant;
-    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
     final capsule = DecoratedBox(
       decoration: BoxDecoration(
         color: solid ? tint : tint.withValues(alpha: tintOpacity),
@@ -362,9 +374,6 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
                     child: _NavItem(
                       label: _tabs[i].$1,
                       icon: _tabs[i].$2,
-                      iconColor: colors.brightness == Brightness.dark
-                          ? _tabs[i].$4
-                          : _tabs[i].$3,
                       selected: widget.index == i,
                       highContrast: highContrast,
                       onTap: () => widget.onChanged(i),
@@ -396,7 +405,7 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
               onPressed: primary?.$2,
               icon: const Icon(Icons.add_rounded, size: 25),
               style: IconButton.styleFrom(
-                foregroundColor: ink,
+                foregroundColor: colors.onSurface,
                 shape: const CircleBorder(),
               ),
             ),
@@ -476,34 +485,20 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   }
 }
 
-Color _dockInk(Brightness brightness) => brightness == Brightness.dark
-    ? const Color(0xFFF0F0F0)
-    : const Color(0xFF1558D4);
-
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
     required this.icon,
-    required this.iconColor,
     required this.selected,
     required this.highContrast,
     required this.onTap,
   });
 
   final String label;
-  final IconData icon;
-  final Color iconColor;
+  final String icon;
   final bool selected;
   final bool highContrast;
   final VoidCallback onTap;
-
-  static const _reportGlyph = '''<svg xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-      stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="13" width="4" height="8" rx="1"/>
-      <rect x="10" y="5" width="4" height="16" rx="1"/>
-      <rect x="17" y="9" width="4" height="12" rx="1"/>
-    </svg>''';
 
   @override
   Widget build(BuildContext context) {
@@ -518,7 +513,7 @@ class _NavItem extends StatelessWidget {
         ? foreground.withValues(alpha: 0.08)
         : colors.surfaceContainerHigh;
     const radius = BorderRadius.all(Radius.circular(32));
-    final glyphInk = highContrast ? foreground : iconColor;
+    final stroke = selected ? 2.1 : 1.8;
     return Semantics(
       container: true,
       button: true,
@@ -546,15 +541,14 @@ class _NavItem extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (icon == Icons.bar_chart_outlined)
-                    SvgPicture.string(
-                      _reportGlyph,
-                      width: 20,
-                      height: 20,
-                      colorFilter: ColorFilter.mode(glyphInk, BlendMode.srcIn),
-                    )
-                  else
-                    Icon(icon, size: 20, color: glyphInk),
+                  SvgPicture.string(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+                    'fill="none" stroke="currentColor" stroke-width="$stroke" '
+                    'stroke-linecap="round" stroke-linejoin="round">$icon</svg>',
+                    width: 20,
+                    height: 20,
+                    colorFilter: ColorFilter.mode(foreground, BlendMode.srcIn),
+                  ),
                   const SizedBox(height: 2),
                   FittedBox(
                     fit: BoxFit.scaleDown,
