@@ -15,6 +15,19 @@ enum MoneyIconSet {
     wallet => _walletIcons,
   };
 
+  Iterable<MoneyIconSpec> choices({String? categoryKind}) {
+    if (this == wallet) return entries;
+    const income = {'gaji', 'bonus', 'jual'};
+    const niche = {'laundry', 'pulsa'};
+    return entries.where(
+      (entry) => switch (categoryKind) {
+        'income' => income.contains(entry.id) || entry.id == 'lainnya',
+        'expense' => !income.contains(entry.id) && !niche.contains(entry.id),
+        _ => !niche.contains(entry.id),
+      },
+    );
+  }
+
   MoneyIconSpec? find(String? id) {
     for (final entry in entries) {
       if (entry.id == id) return entry;
@@ -39,14 +52,7 @@ class MoneyIconSpec {
 
 // Only these bundled files can be opened for an icon stored in the database.
 const _categoryIcons = [
-  MoneyIconSpec._svg('makan', 'Makan', 'makan.svg', _IconTone.copper),
-  MoneyIconSpec._glyph(
-    'mie',
-    'Mi',
-    Icons.ramen_dining_outlined,
-    _IconTone.copper,
-  ),
-  MoneyIconSpec._glyph('kopi', 'Kopi', Icons.coffee_outlined, _IconTone.teal),
+  MoneyIconSpec._svg('makan', 'Makanan', 'makan.svg', _IconTone.copper),
   MoneyIconSpec._svg('minuman', 'Minuman', 'minuman.svg', _IconTone.teal),
   MoneyIconSpec._svg('transport', 'Transport', 'transport.svg', _IconTone.blue),
   MoneyIconSpec._svg('belanja', 'Belanja', 'belanja.svg', _IconTone.violet),
@@ -115,7 +121,7 @@ const _categoryFallback = MoneyIconSpec._glyph(
 );
 const _walletFallback = MoneyIconSpec._glyph(
   '',
-  'Sumber dana',
+  'Dompet',
   Icons.account_balance_wallet_outlined,
 );
 

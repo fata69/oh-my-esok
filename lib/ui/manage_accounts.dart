@@ -23,7 +23,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
-      builder: (_) => const _AccountSheet(title: 'Sumber dana baru'),
+      builder: (_) => const _AccountSheet(title: 'Dompet baru'),
     );
     if (draft == null || !mounted) return;
     try {
@@ -33,7 +33,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
         iconKey: draft.iconKey,
       );
     } on NameConflictException {
-      _message('Sumber dana itu sudah ada.');
+      _message('Dompet itu sudah ada.');
     }
   }
 
@@ -78,7 +78,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (_) => _AccountSheet(
-        title: 'Ubah sumber dana',
+        title: 'Ubah dompet',
         initialName: account.name,
         initialType: account.type,
         initialIconKey: account.iconKey,
@@ -94,7 +94,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
         clearIcon: draft.iconKey == null && account.iconKey != null,
       );
     } on NameConflictException {
-      _message('Sumber dana itu sudah ada.');
+      _message('Dompet itu sudah ada.');
     }
   }
 
@@ -104,14 +104,14 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     );
     if (!mounted) return;
     if (count > 0) {
-      _message('Sumber dana ini punya $count transaksi. Arsipkan saja.');
+      _message('Dompet ini punya $count transaksi. Arsipkan saja.');
       return;
     }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: EsokColors.canvas,
-        title: const Text('Hapus sumber dana?'),
+        title: const Text('Hapus dompet?'),
         content: Text('“${account.name}” akan dihapus permanen.'),
         actions: [
           TextButton(
@@ -129,7 +129,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     try {
       await context.read<MoneyStore>().deleteAccount(account.id);
     } on ItemInUseException {
-      _message('Sumber dana ini masih dipakai transaksi.');
+      _message('Dompet ini masih dipakai transaksi.');
     }
   }
 
@@ -233,7 +233,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
               const Center(child: _Handle()),
               const SizedBox(height: 8),
               Text(
-                'Sumber dana diarsipkan',
+                'Dompet diarsipkan',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -299,7 +299,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
                   ),
                   Expanded(
                     child: Text(
-                      'Sumber dana',
+                      'Dompet',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -332,6 +332,13 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Tempat menyimpan uang: tunai, rekening, atau dompet digital.',
+                      style: TextStyle(fontSize: 13, color: EsokColors.muted),
+                    ),
+                  ),
                   _TotalDanaBar(total: store.totalBalance),
                   for (final group in groups) ...[
                     if (active.any((account) => account.type == group.$1)) ...[
@@ -361,7 +368,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
                     Padding(
                       padding: EdgeInsets.only(top: 80),
                       child: Text(
-                        'Belum ada sumber dana.',
+                        'Belum ada dompet.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 13, color: EsokColors.muted),
                       ),
@@ -376,7 +383,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           alignment: Alignment.center,
                           child: Text(
-                            'Lihat $archivedCount sumber dana diarsipkan',
+                            'Lihat $archivedCount dompet diarsipkan',
                             style: TextStyle(
                               fontSize: 12,
                               color: EsokColors.muted,
@@ -630,7 +637,7 @@ class _AccountSheetState extends State<_AccountSheet> {
                 onSubmitted: (_) => _submit(),
                 style: TextStyle(fontSize: 15, color: EsokColors.ink),
                 decoration: InputDecoration(
-                  hintText: 'Nama sumber dana',
+                  hintText: 'Nama dompet',
                   errorText: _error,
                   filled: true,
                   fillColor: EsokColors.soft,

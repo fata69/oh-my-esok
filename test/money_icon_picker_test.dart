@@ -25,8 +25,6 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
 
     String? value;
     final updates = <String?>[];
@@ -55,7 +53,13 @@ void main() {
 
     await tester.tap(find.text('Ikon · Otomatis'));
     await tester.pumpAndSettle();
-    expect(find.bySemanticsLabel('Otomatis'), findsOneWidget);
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(find.bySemanticsLabel('Otomatis'), findsOneWidget);
+    } finally {
+      semantics.dispose();
+    }
     await tester.ensureVisible(find.text('Tabungan'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tabungan'));

@@ -12,10 +12,12 @@ SCREENS = {
     'hari': ('Hari', 'Tanggal dan progres agenda mudah dipindai.'),
     'laporan': ('Laporan', 'Judul periode konsisten; grafik volume tetap.'),
     'setelan': ('Setelan', 'Opsi terkait berada dalam satu kelompok.'),
+    'keuangan': ('Setelan Keuangan', 'Dompet menyimpan saldo; kategori mengelompokkan transaksi.'),
     'filter': ('Filter transaksi', 'Pilih jenis transaksi dan urutan waktu untuk riwayat.'),
     'hasil-filter': ('Hasil filter', 'Saldo dan jumlah per dompet tetap utuh.'),
     'dompet': ('Ikon dompet', 'Pilih simbol dompet atau gunakan ikon otomatis sesuai jenis.'),
     'kategori': ('Ikon kategori', 'Pilih simbol yang mudah dikenali, seperti mangkuk untuk makan.'),
+    'kategori-cepat': ('Kategori di Catat', 'Pilih ikon lewat tombol kecil di dalam kolom nama.'),
 }
 
 PAGE = '''<!doctype html>

@@ -185,7 +185,11 @@ class _TxEditorPageState extends State<TxEditorPage> {
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (_) => _WalletSheet(
-        title: to ? 'Ke sumber dana' : 'Dari sumber dana',
+        title: switch (_kind) {
+          'income' => 'Terima ke dompet',
+          'expense' => 'Bayar dari dompet',
+          _ => to ? 'Ke dompet' : 'Dari dompet',
+        },
         accounts: accounts,
         selectedId: to ? _toAccountId : _accountId,
         excludedId: to ? _accountId : null,
@@ -509,7 +513,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                 constraints.maxHeight - (reserveKeypad ? keypadHeight : 0);
             final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
             final extraHeight =
-                (_creatingCategory ? (largeText ? 162 : 104) : 0) +
+                (_creatingCategory ? (largeText ? 110 : 56) : 0) +
                 (_categoryError != null ? 24 : 0) +
                 (_hasScanDraft ? (largeText ? 90 : 48) : 0);
             final categoryHeight = (formHeight - 320 - extraHeight).clamp(
@@ -574,6 +578,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _InlineCategory(
                       controller: _categoryNameController,
+                      kind: _kind,
                       error: _categoryError,
                       iconId: _draftCategoryIconId,
                       onIconChanged: (iconId) =>
@@ -595,7 +600,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
                       Expanded(
                         flex: 5,
                         child: _WalletPill(
-                          label: selectedAccount?.name ?? 'Sumber dana',
+                          label: selectedAccount?.name ?? 'Pilih dompet',
+                          account: selectedAccount,
                           onTap: () => _pickAccount(to: false),
                         ),
                       ),
@@ -619,11 +625,13 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     children: [
                       _WalletPill(
                         label: 'Dari ${selectedAccount?.name ?? '—'}',
+                        account: selectedAccount,
                         onTap: () => _pickAccount(to: false),
                       ),
                       const SizedBox(height: 8),
                       _WalletPill(
                         label: 'Ke ${selectedToAccount?.name ?? '—'}',
+                        account: selectedToAccount,
                         onTap: () => _pickAccount(to: true),
                       ),
                       const SizedBox(height: 8),
@@ -1145,6 +1153,7 @@ class _CategoryTile extends StatelessWidget {
 class _InlineCategory extends StatelessWidget {
   const _InlineCategory({
     required this.controller,
+    required this.kind,
     required this.error,
     required this.iconId,
     required this.onIconChanged,
@@ -1153,6 +1162,7 @@ class _InlineCategory extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final String kind;
   final String? error;
   final String? iconId;
   final ValueChanged<String?> onIconChanged;
@@ -1171,6 +1181,14 @@ class _InlineCategory extends StatelessWidget {
       decoration: InputDecoration(
         hintText: 'Nama kategori baru',
         hintStyle: TextStyle(fontSize: 14, color: EsokColors.muted),
+        prefixIcon: MoneyIconField(
+          iconSet: MoneyIconSet.category,
+          categoryKind: kind,
+          value: iconId,
+          automatic: categoryIconSpec(null),
+          onChanged: onIconChanged,
+          compact: true,
+        ),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 10,
@@ -1213,7 +1231,7 @@ class _InlineCategory extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final singleRow =
-            constraints.maxWidth >= 270 &&
+            constraints.maxWidth >= 300 &&
             MediaQuery.textScalerOf(context).scale(14) <= 19;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1242,12 +1260,6 @@ class _InlineCategory extends StatelessWidget {
                   ),
                 ),
               ),
-            MoneyIconField(
-              iconSet: MoneyIconSet.category,
-              value: iconId,
-              automatic: categoryIconSpec(null),
-              onChanged: onIconChanged,
-            ),
           ],
         );
       },
@@ -1256,10 +1268,11 @@ class _InlineCategory extends StatelessWidget {
 }
 
 class _WalletPill extends StatelessWidget {
-  const _WalletPill({required this.label, required this.onTap});
+  const _WalletPill({required this.label, required this.onTap, this.account});
 
   final String label;
   final VoidCallback onTap;
+  final Account? account;
 
   @override
   Widget build(BuildContext context) {
@@ -1274,11 +1287,14 @@ class _WalletPill extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 16,
-              color: EsokColors.muted,
-            ),
+            if (account case final selected?)
+              WalletIconView(account: selected, size: 16)
+            else
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 16,
+                color: EsokColors.muted,
+              ),
             const SizedBox(width: 7),
             Expanded(
               child: Text(
@@ -1842,39 +1858,50 @@ class _WalletSheet extends StatelessWidget {
             const SizedBox(height: 8),
             for (final account in accounts)
               if (account.id != excludedId)
-                InkWell(
-                  onTap: () => Navigator.of(context).pop(account.id),
-                  child: SizedBox(
-                    height: 52,
-                    child: Row(
-                      children: [
-                        Icon(
-                          selectedId == account.id
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          size: 18,
-                          color: selectedId == account.id
-                              ? EsokColors.accent
-                              : EsokColors.muted,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            account.name,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: EsokColors.ink,
+                Semantics(
+                  selected: selectedId == account.id,
+                  child: InkWell(
+                    onTap: () => Navigator.of(context).pop(account.id),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 52),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          WalletIconView(account: account, size: 18),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              account.name,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: EsokColors.ink,
+                              ),
                             ),
                           ),
-                        ),
-                        Text(
-                          accountTypeLabel(account.type),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: EsokColors.muted,
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              accountTypeLabel(account.type),
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: EsokColors.muted,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 18,
+                            child: selectedId == account.id
+                                ? Icon(
+                                    Icons.check,
+                                    size: 18,
+                                    color: EsokColors.ink,
+                                  )
+                                : null,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1885,7 +1912,7 @@ class _WalletSheet extends StatelessWidget {
                 foregroundColor: EsokColors.accent,
                 alignment: Alignment.centerLeft,
               ),
-              child: const Text('Kelola sumber dana'),
+              child: const Text('Kelola dompet'),
             ),
           ],
         ),

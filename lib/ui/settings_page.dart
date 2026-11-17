@@ -9,7 +9,6 @@ import '../backup/auto_backup.dart';
 import '../data/database.dart';
 import '../data/task_dao.dart';
 import '../notify/notifier.dart';
-import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../widget/widget_sync.dart';
 import '../update/update_page.dart';
@@ -347,10 +346,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsStore>();
-    final store = context.watch<MoneyStore>();
-    final expenseCount = store.expenseCategories.length;
-    final incomeCount = store.incomeCategories.length;
-    final accountCount = store.activeAccounts.length;
 
     return EsokTabLayout(
       child: ListView(
@@ -432,12 +427,24 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           _SettingsGroup(
-            label: 'Data',
+            label: 'Keuangan',
             children: [
+              _SettingsRow(
+                title: 'Dompet',
+                icon: Icons.account_balance_wallet_outlined,
+                subtitle: 'Saldo tunai, rekening, dan dompet digital',
+                trailing: const _Trailing('›'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ManageAccountsPage(),
+                  ),
+                ),
+              ),
               _SettingsRow(
                 title: 'Kategori',
                 icon: Icons.category_outlined,
-                trailing: _Trailing('$expenseCount · $incomeCount ›'),
+                subtitle: 'Kelompok pemasukan dan pengeluaran',
+                trailing: const _Trailing('›'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) =>
@@ -445,16 +452,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ),
-              _SettingsRow(
-                title: 'Sumber dana',
-                icon: Icons.account_balance_wallet_outlined,
-                trailing: _Trailing('$accountCount ›'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ManageAccountsPage(),
-                  ),
-                ),
-              ),
+            ],
+          ),
+          _SettingsGroup(
+            label: 'Data',
+            children: [
               _SettingsRow(
                 title: 'Ekspor & impor',
                 icon: Icons.swap_vert,

@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'home_page.dart';
@@ -455,6 +456,14 @@ class _NavItem extends StatelessWidget {
   final bool highContrast;
   final VoidCallback onTap;
 
+  static const _reportGlyph = '''<svg xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+      stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="13" width="4" height="8" rx="1"/>
+      <rect x="10" y="5" width="4" height="16" rx="1"/>
+      <rect x="17" y="9" width="4" height="12" rx="1"/>
+    </svg>''';
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -468,6 +477,7 @@ class _NavItem extends StatelessWidget {
         ? foreground.withValues(alpha: 0.08)
         : colors.surfaceContainerHigh;
     const radius = BorderRadius.all(Radius.circular(32));
+    final glyphInk = highContrast ? foreground : iconColor;
     return Semantics(
       container: true,
       button: true,
@@ -495,11 +505,15 @@ class _NavItem extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: highContrast ? foreground : iconColor,
-                  ),
+                  if (icon == Icons.bar_chart_outlined)
+                    SvgPicture.string(
+                      _reportGlyph,
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(glyphInk, BlendMode.srcIn),
+                    )
+                  else
+                    Icon(icon, size: 20, color: glyphInk),
                   const SizedBox(height: 2),
                   FittedBox(
                     fit: BoxFit.scaleDown,

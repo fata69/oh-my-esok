@@ -37,6 +37,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
       barrierColor: const Color(0x5214120E),
       builder: (_) => _CategorySheet(
         title: kind == 'income' ? 'Kategori pemasukan' : 'Kategori pengeluaran',
+        kind: kind,
       ),
     );
     if (draft == null || !mounted) return;
@@ -57,7 +58,11 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
-      builder: (_) => _CategorySheet(title: 'Ubah kategori', initial: category),
+      builder: (_) => _CategorySheet(
+        title: 'Ubah kategori',
+        kind: category.kind,
+        initial: category,
+      ),
     );
     if (draft == null || !mounted) return;
     try {
@@ -302,6 +307,13 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 4),
+              child: Text(
+                'Kelompokkan transaksi, misalnya Makanan atau Gaji.',
+                style: TextStyle(fontSize: 13, color: EsokColors.muted),
               ),
             ),
             Padding(
@@ -560,9 +572,10 @@ class _Handle extends StatelessWidget {
 typedef _CategoryDraft = ({String name, String? iconId});
 
 class _CategorySheet extends StatefulWidget {
-  const _CategorySheet({required this.title, this.initial});
+  const _CategorySheet({required this.title, required this.kind, this.initial});
 
   final String title;
+  final String kind;
   final MoneyCategory? initial;
 
   @override
@@ -650,6 +663,7 @@ class _CategorySheetState extends State<_CategorySheet> {
               const SizedBox(height: 4),
               MoneyIconField(
                 iconSet: MoneyIconSet.category,
+                categoryKind: widget.kind,
                 value: _iconId,
                 automatic: categoryIconSpec(
                   null,

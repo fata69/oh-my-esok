@@ -6,8 +6,10 @@ import '../data/money_transaction.dart';
 import '../data/task.dart';
 import '../state/money_store.dart';
 import '../util/format.dart';
+import 'category_icon.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
+import 'money_icon_catalog.dart';
 import 'tab_layout.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
@@ -512,7 +514,7 @@ class _BalanceBlock extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text(
-              'Belum ada sumber dana.',
+              'Belum ada dompet.',
               style: TextStyle(fontSize: 12, color: colors.muted),
             ),
           )
@@ -544,7 +546,7 @@ class _BalanceBlock extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(
-                'Atur dana awal di Sumber dana agar saldo sesuai.',
+                'Atur dana awal di Kelola dompet agar saldo sesuai.',
                 style: TextStyle(fontSize: 11, color: colors.accent),
               ),
             ),
@@ -596,9 +598,6 @@ class _AccountBalanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final initial = account.name.isEmpty
-        ? '?'
-        : account.name.substring(0, 1).toUpperCase();
     final color = balance < 0 ? colors.negative : colors.ink;
     return InkWell(
       onTap: onTap,
@@ -616,14 +615,7 @@ class _AccountBalanceRow extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  initial,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: colors.muted,
-                  ),
-                ),
+                child: WalletIconView(account: account, size: 16),
               ),
               const SizedBox(width: 11),
               Expanded(
@@ -682,6 +674,7 @@ class _DayHeader extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
+            flex: 3,
             child: Text(
               moneyDayLabel(date),
               style: Theme.of(context).textTheme.bodyMedium
@@ -689,14 +682,18 @@ class _DayHeader extends StatelessWidget {
             ),
           ),
           if (amount != null)
-            Flexible(
-              child: Text(
-                signedNumberText(amount),
-                textAlign: TextAlign.end,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: color,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(end: 12),
+                child: Text(
+                  signedNumberText(amount),
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: color,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
             ),
@@ -764,6 +761,11 @@ class _TransactionRow extends StatelessWidget {
         : transaction.isExpense
         ? EsokColors.expenseInk(brightness)
         : colors.muted;
+    final category = transaction.isTransfer || _isAdjustment
+        ? null
+        : store.categories
+              .where((item) => item.id == transaction.categoryId)
+              .firstOrNull;
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -779,17 +781,19 @@ class _TransactionRow extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Icon(
-                  transaction.isTransfer
-                      ? Icons.swap_horiz_rounded
-                      : _isAdjustment
-                      ? Icons.tune_rounded
-                      : transaction.isIncome
-                      ? Icons.south_west_rounded
-                      : Icons.north_east_rounded,
-                  size: 16,
-                  color: iconColor,
-                ),
+                child: category != null
+                    ? CategoryIconView(category: category, size: 16)
+                    : Icon(
+                        transaction.isTransfer
+                            ? Icons.swap_horiz_rounded
+                            : _isAdjustment
+                            ? Icons.tune_rounded
+                            : transaction.isIncome
+                            ? Icons.south_west_rounded
+                            : Icons.north_east_rounded,
+                        size: 16,
+                        color: iconColor,
+                      ),
               ),
               const SizedBox(width: 12),
               Expanded(

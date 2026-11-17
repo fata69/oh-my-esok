@@ -13,12 +13,16 @@ class MoneyIconField extends StatelessWidget {
     required this.value,
     required this.automatic,
     required this.onChanged,
+    this.compact = false,
+    this.categoryKind,
   });
 
   final MoneyIconSet iconSet;
   final String? value;
   final MoneyIconSpec automatic;
   final ValueChanged<String?> onChanged;
+  final bool compact;
+  final String? categoryKind;
 
   Future<void> _open(BuildContext context) async {
     final palette = EsokColors.of(context);
@@ -40,6 +44,7 @@ class MoneyIconField extends StatelessWidget {
         iconSet: iconSet,
         value: value,
         automatic: automatic,
+        categoryKind: categoryKind,
       ),
     );
     if (choice != null && context.mounted) onChanged(choice.id);
@@ -50,6 +55,13 @@ class MoneyIconField extends StatelessWidget {
     final palette = EsokColors.of(context);
     final current = iconSet.find(value);
     final label = current?.label ?? 'Otomatis';
+    if (compact) {
+      return IconButton(
+        tooltip: 'Pilih ikon kategori · $label',
+        onPressed: () => _open(context),
+        icon: MoneyIconGlyph(spec: current ?? automatic, size: 19),
+      );
+    }
     return Semantics(
       label: 'Ikon',
       value: label,
@@ -87,19 +99,23 @@ class _MoneyIconPickerSheet extends StatelessWidget {
     required this.iconSet,
     required this.value,
     required this.automatic,
+    required this.categoryKind,
   });
 
   final MoneyIconSet iconSet;
   final String? value;
   final MoneyIconSpec automatic;
+  final String? categoryKind;
 
   @override
   Widget build(BuildContext context) {
     final palette = EsokColors.of(context);
     final current = iconSet.find(value);
+    final choices = iconSet.choices(categoryKind: categoryKind).toList();
+    if (current != null && !choices.contains(current)) choices.add(current);
     final title = iconSet == MoneyIconSet.category
         ? 'Ikon kategori'
-        : 'Ikon sumber dana';
+        : 'Ikon dompet';
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -150,10 +166,7 @@ class _MoneyIconPickerSheet extends StatelessWidget {
                       spacing: gap,
                       runSpacing: gap,
                       children: [
-                        for (final entry in <MoneyIconSpec?>[
-                          null,
-                          ...iconSet.entries,
-                        ])
+                        for (final entry in <MoneyIconSpec?>[null, ...choices])
                           SizedBox(
                             width: width,
                             child: _MoneyIconOption(

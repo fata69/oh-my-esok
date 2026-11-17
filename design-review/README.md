@@ -12,3 +12,5 @@ python design-review/build_review.py
 ```
 
 Setiap input manifest memberi identitas, kelompok, state, tema, dan catatan asal render. Setelah perubahan UI, ganti semua gambar yang menampilkan bagian tersebut, termasuk bagian yang tampak di belakang sheet. HTML dan indeks cakupan adalah artefak lokal; rilis APK menunggu hasil review.
+
+Untuk review 02, buka `audit-round-2/apple-content.html` untuk membandingkan layar Flutter build 19 dan kandidat. `audit-round-2/dock-center.html` adalah prototipe khusus posisi dan gerakan `+`; perubahan posisi di prototipe tidak mengubah aplikasi. Kedua file dapat dibuka langsung tanpa server. Galeri pertama dibangun dengan `python design-review/build_content_review.py <capture-build-19> <capture-kandidat> design-review/audit-round-2/apple-content.html --revision <commit>`.

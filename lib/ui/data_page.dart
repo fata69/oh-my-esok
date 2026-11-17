@@ -456,7 +456,7 @@ class _InfoBox extends StatelessWidget {
           children: [
             TextSpan(text: 'Berkas cadangan berisi '),
             TextSpan(
-              text: 'semua tugas, transaksi, kategori, dan sumber dana',
+              text: 'semua tugas, transaksi, kategori, dan dompet',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: colors.inkSoft,
@@ -582,7 +582,7 @@ class _ExportSheetState extends State<_ExportSheet> {
                   : '${widget.data.tasks.length} tugas · '
                         '${widget.data.transactions.length} transaksi · '
                         '${widget.data.categories.length} kategori · '
-                        '${widget.data.accounts.length} sumber dana',
+                        '${widget.data.accounts.length} dompet',
               style: TextStyle(fontSize: 11.5, color: colors.muted),
             ),
             const SizedBox(height: 18),
@@ -795,7 +795,7 @@ class _ImportSheet extends StatelessWidget {
                       '${data.tasks.length} tugas · '
                       '${data.transactions.length} transaksi · '
                       '${data.categories.length} kategori · '
-                      '${data.accounts.length} sumber dana',
+                      '${data.accounts.length} dompet',
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.55,
@@ -816,7 +816,7 @@ class _ImportSheet extends StatelessWidget {
                   onlyCategoriesAndAccounts
                       ? 'Cadangan ini tidak berisi tugas atau transaksi. '
                             'Tugas dan transaksi yang ada akan dihapus. '
-                            'Kategori dan sumber dana akan diganti.'
+                            'Kategori dan dompet akan diganti.'
                       : 'Data sekarang akan diganti seluruhnya. Setelah impor, '
                             'notifikasi dijadwalkan ulang dan widget diperbarui.',
                   style: TextStyle(
