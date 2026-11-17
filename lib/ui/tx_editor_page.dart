@@ -653,7 +653,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                           ),
                         ),
                       ),
-                      Flexible(
+                      Expanded(
                         flex: 3,
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
