@@ -15,7 +15,10 @@ import 'tx_editor_page.dart';
 class MoneyPage extends StatelessWidget {
   const MoneyPage({super.key});
 
-  Future<void> _openEditor(
+  static Future<void> createTransaction(BuildContext context) =>
+      _openEditor(context, initialDate: today());
+
+  static Future<void> _openEditor(
     BuildContext context, {
     MoneyTransaction? transaction,
     DateTime? initialDate,
@@ -152,14 +155,6 @@ class MoneyPage extends StatelessWidget {
                 EsokTabLayout.scrollBottomOf(context),
               ),
               children: [
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: EsokEntryButton(
-                    label: 'Catat transaksi',
-                    onPressed: () => _openEditor(context, initialDate: today()),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 _BalanceBlock(store: store),
                 if (grouped.isEmpty)
                   Padding(
@@ -230,9 +225,17 @@ class _BalanceBlock extends StatelessWidget {
 
   final MoneyStore store;
 
+  String _flowAmount(int value) {
+    final sign = value < 0 ? '−' : (value > 0 ? '+' : '');
+    return '$sign${rupiahText(value.abs())}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final incomeInk = dark ? const Color(0xFF548CFF) : const Color(0xFF1558D4);
+    final expenseInk = dark ? const Color(0xFFFF8836) : const Color(0xFFB64A0B);
     final total = store.totalBalance;
     final totalColor = total < 0 ? colors.negative : colors.ink;
     final accounts = store.activeAccounts;
@@ -274,10 +277,10 @@ class _BalanceBlock extends StatelessWidget {
                 children: [
                   const TextSpan(text: 'Masuk '),
                   TextSpan(
-                    text: rupiahText(store.monthIncome),
+                    text: _flowAmount(store.monthIncome),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: colors.positive,
+                      color: incomeInk,
                     ),
                   ),
                 ],
@@ -289,10 +292,10 @@ class _BalanceBlock extends StatelessWidget {
                 children: [
                   const TextSpan(text: 'Keluar '),
                   TextSpan(
-                    text: rupiahText(store.monthExpense),
+                    text: _flowAmount(-store.monthExpense),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: colors.negative,
+                      color: expenseInk,
                     ),
                   ),
                 ],

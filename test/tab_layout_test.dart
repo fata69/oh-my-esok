@@ -1,3 +1,7 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +18,10 @@ import 'package:jadwal/state/settings_store.dart';
 import 'package:jadwal/state/task_store.dart';
 import 'package:jadwal/ui/home_page.dart';
 import 'package:jadwal/ui/money_page.dart';
+import 'package:jadwal/ui/reports_page.dart';
 import 'package:jadwal/ui/settings_page.dart';
+import 'package:jadwal/ui/task_editor.dart';
+import 'package:jadwal/ui/tx_editor_page.dart';
 import 'package:jadwal/util/format.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -24,6 +31,7 @@ import 'package:sqflite/sqflite.dart';
 import 'support/day_review_fixture.dart';
 
 void main() {
+  const makePreviews = bool.fromEnvironment('ESOK_UI_PREVIEWS');
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
@@ -37,9 +45,23 @@ void main() {
       );
     }
     await font.load();
+    if (makePreviews) {
+      final sdk = Platform.environment['FLUTTER_ROOT'];
+      final icons = File(
+        '$sdk/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
+      );
+      await (FontLoader('MaterialIcons')..addFont(
+            Future.value(ByteData.sublistView(icons.readAsBytesSync())),
+          ))
+          .load();
+    }
   });
 
-  Future<void> launch(WidgetTester tester, {int notes = 0}) async {
+  Future<SettingsStore> launch(
+    WidgetTester tester, {
+    int notes = 0,
+    bool preview = false,
+  }) async {
     // Only the native I/O boundaries use test data. The shell, pages, stores,
     // tab state and theme changes all use the production implementations.
     final messenger = tester.binding.defaultBinaryMessenger;
@@ -68,14 +90,16 @@ void main() {
         for (var i = 0; i < notes; i++)
           Task(
             id: 'task-$i',
-            title: 'Catatan ke-$i',
+            title: preview
+                ? ['Tinjau agenda', 'Kirim catatan rapat', 'Belanja rumah'][i]
+                : 'Catatan ke-$i',
             scheduledDate: dateKey(today()),
             isDone: false,
             createdAt: i,
           ),
       ], []),
     );
-    final db = _LedgerDatabase();
+    final db = _LedgerDatabase(preview: preview);
     final money = MoneyStore(
       CategoryDao(db),
       AccountDao(db),
@@ -87,9 +111,13 @@ void main() {
     await tasks.init();
     await money.init();
     await tester.pumpWidget(
-      EsokApp(store: tasks, moneyStore: money, settings: settings),
+      RepaintBoundary(
+        key: const ValueKey('preview-boundary'),
+        child: EsokApp(store: tasks, moneyStore: money, settings: settings),
+      ),
     );
     await tester.pumpAndSettle();
+    return settings;
   }
 
   Future<void> select(WidgetTester tester, String label) async {
@@ -153,8 +181,9 @@ void main() {
     await launch(tester, notes: 10);
 
     final nav = find.byKey(const ValueKey('floating-navigation'));
+    final create = find.byKey(const ValueKey('bottom-create'));
     expect(tester.getRect(nav).bottom, closeTo(720 - 24 - 6, 0.01));
-    for (final tab in ['Hari', 'Uang', 'Setelan']) {
+    for (final tab in ['Hari', 'Uang', 'Laporan', 'Setelan']) {
       final size = tester.getSize(find.bySemanticsLabel(tab));
       expect(size.width, greaterThanOrEqualTo(48));
       expect(size.height, greaterThanOrEqualTo(48));
@@ -170,8 +199,16 @@ void main() {
       expect(tester.widget<Text>(header).style?.fontFamily, 'PlusJakartaSans');
     }
 
+    void verifyDock() {
+      final list = find.byType(ListView).first;
+      expect(tester.getRect(list).bottom, lessThan(tester.getRect(create).top));
+      expect(tester.getRect(create).bottom, lessThan(tester.getRect(nav).top));
+      expect(tester.getSize(create), const Size.square(52));
+    }
+
     verifyHeader(HomePage);
-    expect(find.text('Tambah catatan').hitTestable(), findsOneWidget);
+    verifyDock();
+    expect(find.byTooltip('Tambah catatan').hitTestable(), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
     final date = find.text(dateTitle(today()));
     final dateSize = tester.widget<Text>(date).style?.fontSize;
@@ -186,15 +223,15 @@ void main() {
           )
           .first,
     );
-    // Scroll to the very end, not just until it enters the viewport under nav.
     await tester.drag(find.byType(ListView).first, const Offset(0, -320));
     await tester.pumpAndSettle();
     expect(action.hitTestable(), findsOneWidget);
-    expect(tester.getRect(action).bottom, lessThan(tester.getRect(nav).top));
+    expect(tester.getRect(action).bottom, lessThan(tester.getRect(create).top));
 
     await select(tester, 'Uang');
     verifyHeader(MoneyPage);
-    expect(find.text('Catat transaksi').hitTestable(), findsOneWidget);
+    verifyDock();
+    expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
     final now = today();
     expect(
@@ -215,7 +252,7 @@ void main() {
     expect(lastAmount.hitTestable(), findsOneWidget);
     expect(
       tester.getRect(lastAmount).bottom,
-      lessThan(tester.getRect(nav).top),
+      lessThan(tester.getRect(create).top),
     );
 
     // Simulate the taller system navigation bar in three-button mode.
@@ -225,7 +262,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getRect(nav).bottom, closeTo(720 - 48 - 6, 0.01));
 
+    await select(tester, 'Laporan');
+    expect(find.byType(ReportsPage), findsOneWidget);
+    expect(create, findsNothing);
     await select(tester, 'Setelan');
+    expect(create, findsNothing);
     verifyHeader(SettingsPage);
     final license = find.text('Lisensi font');
     await tester.scrollUntilVisible(
@@ -239,11 +280,103 @@ void main() {
     expect(tester.getRect(license).bottom, lessThan(tester.getRect(nav).top));
 
     await select(tester, 'Hari');
+    await tester.drag(find.byType(ListView).first, const Offset(0, -220));
+    await tester.pumpAndSettle();
     expect(action.hitTestable(), findsOneWidget);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    final expense = tester.widget<TxEditorPage>(find.byType(TxEditorPage));
+    expect(expense.initialDate, today());
+    expect(expense.initialKind, 'expense');
   });
+
+  testWidgets('bottom actions respect the selected day and yield to editors', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(740, 420);
+    tester.view.padding = const FakeViewPadding(top: 20, right: 24, bottom: 20);
+    tester.view.viewPadding = tester.view.padding;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await launch(tester);
+
+    final create = find.byKey(const ValueKey('bottom-create'));
+    final nav = find.byKey(const ValueKey('floating-navigation'));
+    expect(tester.getRect(create).left, greaterThan(tester.getRect(nav).right));
+    await tester.tap(find.byTooltip('Hari berikutnya'));
+    await tester.pumpAndSettle();
+    await tester.tap(create);
+    await tester.pumpAndSettle();
+    final editor = find.byType(TaskEditorSheet);
+    expect(
+      tester.widget<TaskEditorSheet>(editor).initialDate,
+      today().add(const Duration(days: 1)),
+    );
+    expect(create.hitTestable(), findsNothing);
+    final input = find
+        .descendant(of: editor, matching: find.byType(EditableText))
+        .first;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 175);
+    await tester.pumpAndSettle();
+    expect(tester.widget<EditableText>(input).focusNode.hasFocus, isTrue);
+    expect(create, findsNothing);
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Tutup'));
+    await tester.pumpAndSettle();
+
+    await select(tester, 'Uang');
+    await tester.tap(create);
+    await tester.pumpAndSettle();
+    expect(find.byType(TxEditorPage), findsOneWidget);
+    expect(create.hitTestable(), findsNothing);
+  });
+
+  testWidgets('render the glass dock on production Hari, Uang and Laporan', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(412, 892);
+    tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 20);
+    tester.view.padding = tester.view.viewPadding;
+    addTearDown(tester.view.reset);
+    final settings = await launch(tester, notes: 3, preview: true);
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      await settings.setThemeMode(mode);
+      await tester.pumpAndSettle();
+      for (final tab in ['Hari', 'Uang', 'Laporan']) {
+        await select(tester, tab);
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(const ValueKey('preview-boundary')),
+        );
+        await tester.runAsync(() async {
+          final image = await boundary.toImage(pixelRatio: 2);
+          try {
+            final bytes = (await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            ))!;
+            final directory = Directory('build/v17-previews')
+              ..createSync(recursive: true);
+            File('${directory.path}/${tab.toLowerCase()}-${mode.name}.png')
+                .writeAsBytesSync(bytes.buffer.asUint8List());
+          } finally {
+            image.dispose();
+          }
+        });
+      }
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  }, skip: !makePreviews);
 }
 
 class _LedgerDatabase implements Database {
+  _LedgerDatabase({required this.preview});
+
+  final bool preview;
+
   @override
   Future<List<Map<String, Object?>>> query(
     String table, {
@@ -273,12 +406,23 @@ class _LedgerDatabase implements Database {
         if (whereArgs == null || whereArgs.contains(dateKey(today())))
           MoneyTransaction(
             id: 'last',
-            note: 'Pengeluaran terakhir',
-            amount: 987654321012,
+            note: preview ? 'Makan siang' : 'Pengeluaran terakhir',
+            amount: preview ? 78000 : 987654321012,
             kind: 'expense',
             accountId: 'cash',
             date: dateKey(today()),
             createdAt: 0,
+          ).toMap(),
+        if (preview &&
+            (whereArgs == null || whereArgs.contains(dateKey(today()))))
+          MoneyTransaction(
+            id: 'salary',
+            note: 'Gaji',
+            amount: 8200000,
+            kind: 'income',
+            accountId: 'cash',
+            date: dateKey(today()),
+            createdAt: 1,
           ).toMap(),
       ],
       _ => throw ArgumentError.value(table),

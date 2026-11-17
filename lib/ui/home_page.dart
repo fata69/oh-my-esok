@@ -30,10 +30,10 @@ class HomePage extends StatefulWidget {
   final VoidCallback? onOpenMoney;
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  HomePageState createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
+class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   static const _basePage = 10000;
   static const _settingsChannel = MethodChannel('esok/settings');
 
@@ -129,7 +129,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _openEditor({Task? task, DateTime? date}) async {
+  Future<void> createNote() => _openEditor();
+
+  Future<void> _openEditor({Task? task}) async {
     final store = context.read<TaskStore>();
     final result = await showModalBottomSheet<TaskEditorResult>(
       context: context,
@@ -137,7 +139,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
       builder: (context) =>
-          TaskEditorSheet(task: task, initialDate: date ?? store.selectedDate),
+          TaskEditorSheet(task: task, initialDate: store.selectedDate),
     );
     if (result == null || !mounted) return;
 
@@ -357,7 +359,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   atEarliest: date == store.earliestAllowedDate,
                   onToggle: _toggle,
                   onOpen: (task) => _openEditor(task: task),
-                  onAdd: () => _openEditor(date: date),
                   onCloseDay: () => _openDayReview(date),
                   onJumpToday: () => _jumpTo(today()),
                   onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
@@ -387,7 +388,6 @@ class _DayPane extends StatefulWidget {
     required this.atEarliest,
     required this.onToggle,
     required this.onOpen,
-    required this.onAdd,
     required this.onCloseDay,
     required this.onJumpToday,
     required this.onJumpNext,
@@ -399,7 +399,6 @@ class _DayPane extends StatefulWidget {
   final bool atEarliest;
   final Future<void> Function(Task) onToggle;
   final ValueChanged<Task> onOpen;
-  final VoidCallback onAdd;
   final VoidCallback onCloseDay;
   final VoidCallback onJumpToday;
   final VoidCallback onJumpNext;
@@ -459,26 +458,17 @@ class _DayPaneState extends State<_DayPane> {
             EsokTabLayout.scrollBottomOf(context),
           ),
           children: [
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                EsokEntryButton(
-                  label: 'Tambah catatan',
-                  onPressed: widget.onAdd,
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                onPressed: widget.onCloseDay,
+                style: TextButton.styleFrom(
+                  foregroundColor: colors.ink,
+                  minimumSize: const Size(48, 48),
                 ),
-                TextButton.icon(
-                  onPressed: widget.onCloseDay,
-                  style: TextButton.styleFrom(
-                    foregroundColor: colors.ink,
-                    minimumSize: const Size(48, 48),
-                  ),
-                  icon: const Icon(Icons.fact_check_outlined, size: 18),
-                  label: const Text('Tutup hari'),
-                ),
-              ],
+                icon: const Icon(Icons.fact_check_outlined, size: 18),
+                label: const Text('Tutup hari'),
+              ),
             ),
             const SizedBox(height: 8),
             if (tasks.isEmpty)
@@ -737,10 +727,10 @@ class _BottomCard extends StatelessWidget {
               Expanded(
                 child: RichText(
                   text: TextSpan(
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colors.inkSoft,
-                    ),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.inkSoft,
+                      ),
                     children: [
                       if (prefix != null)
                         TextSpan(

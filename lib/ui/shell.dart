@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'home_page.dart';
 import 'money_page.dart';
+import 'reports_page.dart';
 import 'settings_page.dart';
 import 'theme.dart';
 
@@ -16,6 +17,7 @@ class EsokShell extends StatefulWidget {
 }
 
 class _EsokShellState extends State<EsokShell> {
+  final _home = GlobalKey<HomePageState>();
   int _index = 0;
 
   void _selectTab(int index) {
@@ -44,14 +46,17 @@ class _EsokShellState extends State<EsokShell> {
       value: overlay,
       child: Scaffold(
         backgroundColor: EsokColors.of(context).canvas,
-        // Keep the list painting behind the capsule. Scaffold reports the
-        // measured bar height in the bottom padding of the body's MediaQuery.
+        // The extended body exposes the measured height of the chrome and
+        // the system inset. Bound the tabs with a persistent creation action.
         extendBody: true,
         body: IndexedStack(
           index: _index,
           children: [
-            HomePage(onOpenMoney: () => _selectTab(1)),
-            const MoneyPage(),
+            _AboveDock(
+              child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
+            ),
+            const _AboveDock(child: MoneyPage()),
+            const _AboveDock(child: ReportsPage()),
             const SettingsPage(),
           ],
         ),
@@ -64,15 +69,51 @@ class _EsokShellState extends State<EsokShell> {
                 maintainState: true,
                 maintainAnimation: true,
                 maintainSize: true,
-                child: _FloatingTabBar(index: _index, onChanged: _selectTab),
+                child: _FloatingTabBar(
+                  index: _index,
+                  onChanged: _selectTab,
+                  action: switch (_index) {
+                    0 => (
+                      'Tambah catatan',
+                      () => _home.currentState?.createNote(),
+                    ),
+                    1 => (
+                      'Catat transaksi',
+                      () => MoneyPage.createTransaction(context),
+                    ),
+                    _ => null,
+                  },
+                ),
               ),
       ),
     );
   }
 }
 
+class _AboveDock extends StatelessWidget {
+  const _AboveDock({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+      child: MediaQuery.removePadding(
+        context: context,
+        removeBottom: true,
+        child: child,
+      ),
+    );
+  }
+}
+
 class _FloatingTabBar extends StatelessWidget {
-  const _FloatingTabBar({required this.index, required this.onChanged});
+  const _FloatingTabBar({
+    required this.index,
+    required this.onChanged,
+    this.action,
+  });
 
   static const _forceSolid = bool.fromEnvironment('ESOK_SOLID_NAV');
   static const _radius = BorderRadius.all(Radius.circular(40));
@@ -80,11 +121,13 @@ class _FloatingTabBar extends StatelessWidget {
   static const _tabs = [
     ('Hari', Icons.event_note_outlined),
     ('Uang', Icons.account_balance_wallet_outlined),
+    ('Laporan', Icons.bar_chart_outlined),
     ('Setelan', Icons.settings_outlined),
   ];
 
   final int index;
   final ValueChanged<int> onChanged;
+  final (String, VoidCallback)? action;
 
   @override
   Widget build(BuildContext context) {
@@ -98,32 +141,81 @@ class _FloatingTabBar extends StatelessWidget {
     final tint = colors.surfaceContainerLow;
     // A bright list item behind the dark bar needs a stronger scrim.
     final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
-    final capsule = DecoratedBox(
-      decoration: BoxDecoration(
-        color: solid ? tint : tint.withValues(alpha: tintOpacity),
-        borderRadius: _radius,
-        border: Border.all(
-          color: highContrast ? colors.outline : colors.outlineVariant,
+    Widget glass({
+      Key? key,
+      required BorderRadius radius,
+      required Color surface,
+      required Widget child,
+    }) {
+      final layer = DecoratedBox(
+        decoration: BoxDecoration(
+          color: solid ? surface : surface.withValues(alpha: tintOpacity),
+          borderRadius: radius,
+          border: Border.all(
+            color: highContrast ? colors.outline : colors.outlineVariant,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            for (var i = 0; i < _tabs.length; i++)
-              Expanded(
-                child: _NavItem(
-                  label: _tabs[i].$1,
-                  icon: _tabs[i].$2,
-                  selected: index == i,
-                  highContrast: highContrast,
-                  onTap: () => onChanged(i),
+        child: child,
+      );
+      return ClipRRect(
+        key: key,
+        borderRadius: radius,
+        child: solid ? layer : BackdropFilter(filter: _blur, child: layer),
+      );
+    }
+
+    final navigation = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: glass(
+        key: const ValueKey('floating-navigation'),
+        radius: _radius,
+        surface: tint,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            children: [
+              for (var i = 0; i < _tabs.length; i++)
+                Expanded(
+                  child: _NavItem(
+                    label: _tabs[i].$1,
+                    icon: _tabs[i].$2,
+                    selected: index == i,
+                    highContrast: highContrast,
+                    onTap: () => onChanged(i),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+    final primary = action;
+    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
+    final button = primary == null
+        ? null
+        : SizedBox.square(
+            key: const ValueKey('bottom-create'),
+            dimension: 52,
+            child: glass(
+              radius: BorderRadius.circular(26),
+              surface: Color.alphaBlend(
+                ink.withValues(alpha: highContrast ? 0 : .09),
+                tint,
+              ),
+              child: Material(
+                type: MaterialType.transparency,
+                child: IconButton(
+                  tooltip: primary.$1,
+                  onPressed: primary.$2,
+                  icon: const Icon(Icons.add_rounded, size: 25),
+                  style: IconButton.styleFrom(
+                    foregroundColor: ink,
+                    shape: const CircleBorder(),
+                  ),
+                ),
+              ),
+            ),
+          );
 
     return SafeArea(
       top: false,
@@ -131,25 +223,50 @@ class _FloatingTabBar extends StatelessWidget {
       // The larger gesture-detection zone would lift this tap-only control.
       maintainBottomViewPadding: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: EdgeInsets.fromLTRB(12, button == null ? 0 : 8, 12, 6),
         child: Align(
           alignment: Alignment.bottomCenter,
           heightFactor: 1,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: ClipRRect(
-              key: const ValueKey('floating-navigation'),
-              borderRadius: _radius,
-              child: solid
-                  ? capsule
-                  : BackdropFilter(filter: _blur, child: capsule),
-            ),
-          ),
+          child: button == null
+              ? navigation
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth >= 424) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(child: navigation),
+                          const SizedBox(width: 12),
+                          button,
+                        ],
+                      );
+                    }
+                    return ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: button,
+                          ),
+                          const SizedBox(height: 8),
+                          navigation,
+                        ],
+                      ),
+                    );
+                  },
+                ),
         ),
       ),
     );
   }
 }
+
+Color _dockInk(Brightness brightness) => brightness == Brightness.dark
+    ? const Color(0xFF9DBDFF)
+    : const Color(0xFF1558D4);
 
 class _NavItem extends StatelessWidget {
   const _NavItem({
@@ -169,12 +286,16 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final palette = EsokColors.of(context);
+    final dark = colors.brightness == Brightness.dark;
+    final selectedInk = _dockInk(colors.brightness);
+    final selectedTint = dark
+        ? const Color(0xFF242D40)
+        : const Color(0xFFEAF0FA);
     final inverted = selected && highContrast;
     final foreground = inverted
         ? colors.surface
         : selected
-        ? palette.action
+        ? selectedInk
         : highContrast
         ? colors.onSurface
         : colors.onSurfaceVariant;
@@ -194,7 +315,7 @@ class _NavItem extends StatelessWidget {
         color: inverted
             ? colors.onSurface
             : selected
-            ? palette.accentContainer
+            ? selectedTint
             : Colors.transparent,
         shape: const RoundedRectangleBorder(borderRadius: radius),
         animationDuration: Duration.zero,
@@ -215,15 +336,20 @@ class _NavItem extends StatelessWidget {
                 children: [
                   Icon(icon, size: 20, color: foreground),
                   const SizedBox(height: 2),
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.15,
-                      letterSpacing: 0,
-                      color: foreground,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.15,
+                        letterSpacing: 0,
+                        color: foreground,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],

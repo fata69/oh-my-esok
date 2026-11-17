@@ -20,9 +20,10 @@ dan mengirim gambar pilihan ke Gemini menggunakan API key pengguna.
 - **Pengingat** sebelum tenggat, bisa diatur 30 menit sampai 1 hari.
 - **Pindai foto** struk dan tangkapan layar M-Banking dengan Gemini. Cek teks barang dan data yang terbaca sebelum memasukkannya ke draf transaksi.
 - **Buku kas**: pengeluaran, pemasukan, pindah dompet, saldo per dompet, dan koreksi saldo.
+- **Laporan**: bandingkan arus kas enam bulan, telusuri pengeluaran per kategori, dan pilih tanggal untuk melihat nominal persis. Transfer dan koreksi saldo tidak dihitung sebagai arus kas.
 - **Widget** catatan dan ringkasan uang — bisa dicentang langsung dari layar utama.
 - **Cadangan otomatis** ke `Download/Oh My Esok/oh-my-esok-backup.json`, terpisah dari cadangan Esok asli.
-- **Tema** terang, gelap, atau ikut sistem.
+- **Tema** terang, gelap, atau ikut sistem, dengan navbar glass mengambang dan aksi tambah dekat bagian bawah.
 - **Pembaruan aplikasi** dari Setelan. Oh My Esok memeriksa APK yang diunduh dari GitHub sebelum menyerahkannya ke installer Android.
 
 ## Memasang
@@ -33,6 +34,7 @@ dan mengirim gambar pilihan ke Gemini menggunakan API key pengguna.
 
 Update hanya menimpa Oh My Esok dengan ID dan sertifikat signing yang sama.
 Jangan mencopot Esok untuk memasang fork ini. Data Esok dipindahkan lewat JSON.
+Untuk memperbarui dari aplikasi, buka **Setelan → Pembaruan aplikasi** dan aktifkan **Sertakan prarilis** bila ingin mencoba versi preview.
 
 ## Build
 
@@ -63,7 +65,7 @@ Lihat [alur QA dan rilis](docs/RELEASING.md) untuk menyiapkan APK kandidat.
 lib/
   data/    model dan SQLite: tugas, kategori, dompet, transaksi
   state/   TaskStore, MoneyStore, SettingsStore
-  ui/      layar Hari, Uang, Setelan, editor transaksi
+  ui/      layar Hari, Uang, Laporan, Setelan, editor transaksi
   ai/      pindai struk dan mutasi
   backup/  ekspor, impor, cadangan otomatis
   widget/  jembatan ke widget Android

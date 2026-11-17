@@ -58,9 +58,9 @@ const _lightPalette = EsokPalette._(
   outline: Color(0xFF8D8D8D),
   ink: Color(0xFF202020),
   muted: Color(0xFF646464),
-  action: Color(0xFF245E52),
+  action: Color(0xFF202020),
   onAction: Color(0xFFFFFFFF),
-  accentContainer: Color(0xFFDCEDE7),
+  accentContainer: Color(0xFFE8EDF8),
 );
 
 const _darkPalette = EsokPalette._(
@@ -73,9 +73,9 @@ const _darkPalette = EsokPalette._(
   outline: Color(0xFF6E6E6E),
   ink: Color(0xFFEEEEEE),
   muted: Color(0xFFB4B4B4),
-  action: Color(0xFF9ED6C3),
-  onAction: Color(0xFF11241F),
-  accentContainer: Color(0xFF233D35),
+  action: Color(0xFFEEEEEE),
+  onAction: Color(0xFF111111),
+  accentContainer: Color(0xFF263248),
 );
 
 class EsokColors {

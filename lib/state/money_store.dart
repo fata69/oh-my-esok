@@ -9,6 +9,7 @@ import '../data/money_transaction.dart';
 import '../data/money_transaction_dao.dart';
 import '../data/task.dart';
 import '../widget/widget_sync.dart';
+import 'money_report.dart';
 
 class NameConflictException implements Exception {}
 
@@ -33,6 +34,12 @@ class MoneyStore extends ChangeNotifier {
   List<Account> get accounts => _accounts;
   List<MoneyTransaction> get monthTransactions => _monthTransactions;
   int get revision => _revision;
+
+  MoneyReport get monthReport => MoneyReport.build(
+    month: _month,
+    transactions: _allTransactions,
+    categories: _categories,
+  );
 
   List<MoneyCategory> get expenseCategories => _activeCategories('expense');
   List<MoneyCategory> get incomeCategories => _activeCategories('income');
