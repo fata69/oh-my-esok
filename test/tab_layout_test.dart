@@ -201,9 +201,17 @@ void main() {
 
     void verifyDock() {
       final list = find.byType(ListView).first;
-      expect(tester.getRect(list).bottom, lessThan(tester.getRect(create).top));
-      expect(tester.getRect(create).bottom, lessThan(tester.getRect(nav).top));
-      expect(tester.getSize(create), const Size.square(52));
+      final dock = tester.getRect(nav);
+      final button = tester.getRect(create);
+      expect(tester.getRect(list).bottom, lessThanOrEqualTo(dock.top));
+      expect(dock.contains(button.topLeft), isTrue);
+      expect(dock.contains(button.bottomRight), isTrue);
+      expect(button.center.dy, closeTo(dock.center.dy, 0.01));
+      expect(
+        button.left,
+        greaterThan(tester.getRect(find.bySemanticsLabel('Setelan')).right),
+      );
+      expect(tester.getSize(create), const Size.square(48));
     }
 
     verifyHeader(HomePage);
@@ -304,7 +312,11 @@ void main() {
 
     final create = find.byKey(const ValueKey('bottom-create'));
     final nav = find.byKey(const ValueKey('floating-navigation'));
-    expect(tester.getRect(create).left, greaterThan(tester.getRect(nav).right));
+    expect(tester.getRect(nav).contains(tester.getCenter(create)), isTrue);
+    expect(
+      tester.getCenter(create).dy,
+      closeTo(tester.getCenter(nav).dy, 0.01),
+    );
     await tester.tap(find.byTooltip('Hari berikutnya'));
     await tester.pumpAndSettle();
     await tester.tap(create);

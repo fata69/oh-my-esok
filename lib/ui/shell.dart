@@ -141,81 +141,54 @@ class _FloatingTabBar extends StatelessWidget {
     final tint = colors.surfaceContainerLow;
     // A bright list item behind the dark bar needs a stronger scrim.
     final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
-    Widget glass({
-      Key? key,
-      required BorderRadius radius,
-      required Color surface,
-      required Widget child,
-    }) {
-      final layer = DecoratedBox(
-        decoration: BoxDecoration(
-          color: solid ? surface : surface.withValues(alpha: tintOpacity),
-          borderRadius: radius,
-          border: Border.all(
-            color: highContrast ? colors.outline : colors.outlineVariant,
-          ),
-        ),
-        child: child,
-      );
-      return ClipRRect(
-        key: key,
-        borderRadius: radius,
-        child: solid ? layer : BackdropFilter(filter: _blur, child: layer),
-      );
-    }
-
-    final navigation = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 360),
-      child: glass(
-        key: const ValueKey('floating-navigation'),
-        radius: _radius,
-        surface: tint,
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            children: [
-              for (var i = 0; i < _tabs.length; i++)
-                Expanded(
-                  child: _NavItem(
-                    label: _tabs[i].$1,
-                    icon: _tabs[i].$2,
-                    selected: index == i,
-                    highContrast: highContrast,
-                    onTap: () => onChanged(i),
+    final primary = action;
+    final edge = highContrast ? colors.outline : colors.outlineVariant;
+    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
+    final capsule = DecoratedBox(
+      decoration: BoxDecoration(
+        color: solid ? tint : tint.withValues(alpha: tintOpacity),
+        borderRadius: _radius,
+        border: Border.all(color: edge),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            for (var i = 0; i < _tabs.length; i++)
+              Expanded(
+                child: _NavItem(
+                  label: _tabs[i].$1,
+                  icon: _tabs[i].$2,
+                  selected: index == i,
+                  highContrast: highContrast,
+                  onTap: () => onChanged(i),
+                ),
+              ),
+            if (primary != null) ...[
+              const SizedBox(width: 4),
+              SizedBox(width: 1, height: 22, child: ColoredBox(color: edge)),
+              const SizedBox(width: 4),
+              SizedBox.square(
+                key: const ValueKey('bottom-create'),
+                dimension: 48,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: IconButton(
+                    tooltip: primary.$1,
+                    onPressed: primary.$2,
+                    icon: const Icon(Icons.add_rounded, size: 25),
+                    style: IconButton.styleFrom(
+                      foregroundColor: ink,
+                      shape: const CircleBorder(),
+                    ),
                   ),
                 ),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
-    final primary = action;
-    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
-    final button = primary == null
-        ? null
-        : SizedBox.square(
-            key: const ValueKey('bottom-create'),
-            dimension: 52,
-            child: glass(
-              radius: BorderRadius.circular(26),
-              surface: Color.alphaBlend(
-                ink.withValues(alpha: highContrast ? 0 : .09),
-                tint,
-              ),
-              child: Material(
-                type: MaterialType.transparency,
-                child: IconButton(
-                  tooltip: primary.$1,
-                  onPressed: primary.$2,
-                  icon: const Icon(Icons.add_rounded, size: 25),
-                  style: IconButton.styleFrom(
-                    foregroundColor: ink,
-                    shape: const CircleBorder(),
-                  ),
-                ),
-              ),
-            ),
-          );
 
     return SafeArea(
       top: false,
@@ -223,41 +196,20 @@ class _FloatingTabBar extends StatelessWidget {
       // The larger gesture-detection zone would lift this tap-only control.
       maintainBottomViewPadding: true,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(12, button == null ? 0 : 8, 12, 6),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
         child: Align(
           alignment: Alignment.bottomCenter,
           heightFactor: 1,
-          child: button == null
-              ? navigation
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth >= 424) {
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(child: navigation),
-                          const SizedBox(width: 12),
-                          button,
-                        ],
-                      );
-                    }
-                    return ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 360),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Align(
-                            alignment: AlignmentDirectional.centerEnd,
-                            child: button,
-                          ),
-                          const SizedBox(height: 8),
-                          navigation,
-                        ],
-                      ),
-                    );
-                  },
-                ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: ClipRRect(
+              key: const ValueKey('floating-navigation'),
+              borderRadius: _radius,
+              child: solid
+                  ? capsule
+                  : BackdropFilter(filter: _blur, child: capsule),
+            ),
+          ),
         ),
       ),
     );
