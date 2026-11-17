@@ -453,9 +453,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -477,13 +476,22 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
     return Scaffold(
       backgroundColor: EsokColors.canvas,
+      bottomNavigationBar: MediaQuery.viewInsetsOf(context).bottom > 0
+          ? null
+          : _BottomActions(
+              canSave: _canSave,
+              saving: _saving,
+              scanning: _scanning,
+              onScan: _scanReceipt,
+              onSave: _save,
+            ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final categoryHeight = (constraints.maxHeight - 510).clamp(
-              158.0,
-              226.0,
-            );
+            final categoryRows = (categories.length + 4) ~/ 4;
+            final categoryHeight = (categoryRows * 78.0 - 8)
+                .clamp(70.0, (constraints.maxHeight - 470).clamp(148.0, 226.0))
+                .toDouble();
             final categoryGrid = Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _CategoryGrid(
@@ -512,44 +520,23 @@ class _TxEditorPageState extends State<TxEditorPage> {
                         color: EsokColors.ink,
                       ),
                     ),
-                    if (!_saving)
-                      Positioned(
-                        right: 8,
-                        child: _scanning
-                            ? const SizedBox(
-                                width: 36,
-                                height: 36,
-                                child: Padding(
-                                  padding: EdgeInsets.all(10),
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : GestureDetector(
-                                onTap: _scanReceipt,
-                                behavior: HitTestBehavior.opaque,
-                                child: Container(
-                                  width: 36,
-                                  height: 36,
-                                  alignment: Alignment.center,
-                                  child: Icon(
-                                    Icons.photo_camera_outlined,
-                                    size: 19,
-                                    color: EsokColors.muted,
-                                  ),
-                                ),
-                              ),
+                    Positioned(
+                      left: 12,
+                      child: IconButton(
+                        tooltip: 'Batal',
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                        color: EsokColors.muted,
                       ),
+                    ),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _Segments(
-                  selected: _kind,
-                  onChanged: _changeKind,
-                ),
+                child: _Segments(selected: _kind, onChanged: _changeKind),
               ),
               if (_hasScanDraft)
                 const Padding(
@@ -628,146 +615,141 @@ class _TxEditorPageState extends State<TxEditorPage> {
                 ),
                 const SizedBox(height: 8),
               ],
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Container(
-                height: 62,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: EsokColors.soft,
-                  borderRadius: BorderRadius.circular(12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Container(
+                  height: 62,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: EsokColors.soft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _isTransfer
+                              ? 'PINDAH'
+                              : (selectedCategory?.name ?? 'JUMLAH')
+                                    .toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.06,
+                            color: EsokColors.muted,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _hasScanDraft && _amount == 0
+                            ? 'Isi nominal'
+                            : 'Rp ${numberText(_amount)}',
+                        style: TextStyle(
+                          fontSize: 25,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.02,
+                          color: _amount == 0
+                              ? EsokColors.disabled
+                              : EsokColors.ink,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        _isTransfer
-                            ? 'PINDAH'
-                            : (selectedCategory?.name ?? 'JUMLAH')
-                                  .toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.06,
-                          color: EsokColors.muted,
+                      child: _DateChip(
+                        label: 'Hari ini',
+                        selected: _date == today(),
+                        onTap: () => setState(() => _date = today()),
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: _DateChip(
+                        label: 'Kemarin',
+                        selected:
+                            _date == today().subtract(const Duration(days: 1)),
+                        onTap: () => setState(
+                          () =>
+                              _date = today().subtract(const Duration(days: 1)),
                         ),
                       ),
                     ),
-                    Text(
-                      _hasScanDraft && _amount == 0
-                          ? 'Isi nominal'
-                          : 'Rp ${numberText(_amount)}',
-                      style: TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.02,
-                        color: _amount == 0
-                            ? EsokColors.disabled
-                            : EsokColors.ink,
-                        fontFeatures: const [
-                          FontFeature.tabularFigures(),
-                        ],
+                    const SizedBox(width: 7),
+                    GestureDetector(
+                      onTap: _pickDate,
+                      child: Container(
+                        height: 38,
+                        padding: const EdgeInsets.symmetric(horizontal: 11),
+                        decoration: BoxDecoration(
+                          color: EsokColors.soft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.calendar_today_outlined,
+                              size: 15,
+                              color: EsokColors.ink,
+                            ),
+                            if (_date == null) ...[
+                              const SizedBox(width: 6),
+                              const Text('Pilih tanggal'),
+                            ] else if (_date != today() &&
+                                _date !=
+                                    today().subtract(
+                                      const Duration(days: 1),
+                                    )) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                shortDateTitle(_date!),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: EsokColors.ink,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _DateChip(
-                      label: 'Hari ini',
-                      selected: _date == today(),
-                      onTap: () => setState(() => _date = today()),
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: _DateChip(
-                      label: 'Kemarin',
-                      selected:
-                          _date == today().subtract(const Duration(days: 1)),
-                      onTap: () => setState(
-                        () => _date = today().subtract(
-                          const Duration(days: 1),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  GestureDetector(
-                    onTap: _pickDate,
-                    child: Container(
-                      height: 38,
-                      padding: const EdgeInsets.symmetric(horizontal: 11),
-                      decoration: BoxDecoration(
-                        color: EsokColors.soft,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.calendar_today_outlined,
-                            size: 15,
-                            color: EsokColors.ink,
-                          ),
-                          if (_date == null) ...[
-                            const SizedBox(width: 6),
-                            const Text('Pilih tanggal'),
-                          ] else if (_date != today() &&
-                              _date !=
-                                  today().subtract(
-                                    const Duration(days: 1),
-                                  )) ...[
-                            const SizedBox(width: 6),
-                            Text(
-                              shortDateTitle(_date!),
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: EsokColors.ink,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: _Keypad(onKey: _pressKey),
-            ),
-            if (_isEditing)
               Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: TextButton(
-                  onPressed: _delete,
-                  style: TextButton.styleFrom(
-                    foregroundColor: EsokColors.lateInk,
-                    textStyle: const TextStyle(fontSize: 13),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                child: _Keypad(onKey: _pressKey),
+              ),
+              if (_isEditing)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: TextButton(
+                    onPressed: _delete,
+                    style: TextButton.styleFrom(
+                      foregroundColor: EsokColors.lateInk,
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    child: const Text('Hapus transaksi'),
                   ),
-                  child: const Text('Hapus transaksi'),
                 ),
-              ),
-              _BottomActions(
-                canSave: _canSave,
-                saving: _saving,
-                onCancel: () => Navigator.of(context).pop(),
-                onSave: _save,
-              ),
+              const SizedBox(height: 12),
             ];
 
             // Keep the note field mounted when the Android keyboard resizes
             // the viewport. Replacing this subtree would drop its focus.
-            return SingleChildScrollView(child: Column(children: children));
+            return SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: Column(children: children),
+            );
           },
         ),
       ),
@@ -1141,73 +1123,93 @@ class _InlineCategory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(11, 9, 11, 7),
-      decoration: BoxDecoration(
-        color: EsokColors.surface,
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: EsokColors.lineStrong),
+    final field = TextField(
+      controller: controller,
+      autofocus: true,
+      textCapitalization: TextCapitalization.sentences,
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => onSave(),
+      style: TextStyle(fontSize: 14, color: EsokColors.ink),
+      decoration: InputDecoration(
+        hintText: 'Nama kategori baru',
+        hintStyle: TextStyle(fontSize: 14, color: EsokColors.muted),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 13,
+        ),
+        filled: true,
+        fillColor: EsokColors.soft,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            onSubmitted: (_) => onSave(),
-            style: TextStyle(fontSize: 14, color: EsokColors.ink),
-            decoration: InputDecoration(
-              hintText: 'Nama kategori baru',
-              errorText: error,
-              hintStyle: TextStyle(fontSize: 14, color: EsokColors.muted),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 10,
-              ),
-              filled: true,
-              fillColor: EsokColors.soft,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
-              ),
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: onCancel,
-                style: TextButton.styleFrom(
-                  foregroundColor: EsokColors.muted,
-                  textStyle: const TextStyle(fontSize: 12),
-                ),
-                child: const Text('Batal'),
-              ),
-              TextButton(
-                onPressed: onSave,
-                style: TextButton.styleFrom(
-                  foregroundColor: EsokColors.accent,
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('Tambah'),
+    );
+    final cancel = TextButton(
+      onPressed: onCancel,
+      style: TextButton.styleFrom(
+        foregroundColor: EsokColors.muted,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
+      child: const Text('Batal'),
+    );
+    final save = ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => TextButton(
+        onPressed: value.text.trim().isEmpty ? null : onSave,
+        style: TextButton.styleFrom(
+          foregroundColor: EsokColors.accent,
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        child: const Text('Tambah'),
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final singleRow =
+            constraints.maxWidth >= 270 &&
+            MediaQuery.textScalerOf(context).scale(14) <= 19;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (singleRow)
+              Row(
+                children: [
+                  Expanded(child: field),
+                  const SizedBox(width: 4),
+                  cancel,
+                  save,
+                ],
+              )
+            else ...[
+              field,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [cancel, save],
               ),
             ],
-          ),
-        ],
-      ),
+            if (error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 3, 0, 2),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    error!,
+                    style: TextStyle(fontSize: 12, color: EsokColors.lateInk),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1316,10 +1318,7 @@ class _NoteFieldState extends State<_NoteField> {
               style: TextStyle(fontSize: 13.5, color: EsokColors.ink),
               decoration: InputDecoration(
                 hintText: 'Catatan',
-                hintStyle: TextStyle(
-                  fontSize: 13.5,
-                  color: EsokColors.muted,
-                ),
+                hintStyle: TextStyle(fontSize: 13.5, color: EsokColors.muted),
                 isCollapsed: true,
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -1413,10 +1412,7 @@ class _Keypad extends StatelessWidget {
               for (var col = 0; col < 3; col++) ...[
                 if (col > 0) const SizedBox(width: 7),
                 Expanded(
-                  child: _KeyButton(
-                    value: _keys[row * 3 + col],
-                    onTap: onKey,
-                  ),
+                  child: _KeyButton(value: _keys[row * 3 + col], onTap: onKey),
                 ),
               ],
             ],
@@ -1446,19 +1442,13 @@ class _KeyButton extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: isBack
-            ? Icon(
-                Icons.backspace_outlined,
-                size: 19,
-                color: EsokColors.muted,
-              )
+            ? Icon(Icons.backspace_outlined, size: 19, color: EsokColors.muted)
             : Text(
                 value,
                 style: TextStyle(
                   fontSize: value == '000' ? 13 : 19,
                   fontWeight: FontWeight.w500,
-                  color: value == '000'
-                      ? EsokColors.muted
-                      : EsokColors.ink,
+                  color: value == '000' ? EsokColors.muted : EsokColors.ink,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
@@ -1471,61 +1461,89 @@ class _BottomActions extends StatelessWidget {
   const _BottomActions({
     required this.canSave,
     required this.saving,
-    required this.onCancel,
+    required this.scanning,
+    required this.onScan,
     required this.onSave,
   });
 
   final bool canSave;
   final bool saving;
-  final VoidCallback onCancel;
+  final bool scanning;
+  final VoidCallback onScan;
   final VoidCallback onSave;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 10,
-              child: SizedBox(
-                height: 48,
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(11),
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: EsokColors.canvas,
+        border: Border(top: BorderSide(color: EsokColors.line)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Row(
+            children: [
+              Expanded(
                 child: OutlinedButton(
-                  onPressed: saving ? null : onCancel,
+                  onPressed: scanning || saving ? null : onScan,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: EsokColors.ink,
-                    side: BorderSide(color: EsokColors.lineStrong),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(11),
+                    disabledForegroundColor: EsokColors.muted,
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
                     ),
+                    side: BorderSide(color: EsokColors.lineStrong),
+                    shape: shape,
                   ),
-                  child: const Text('Batal'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (scanning)
+                        const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        const Icon(Icons.document_scanner_outlined, size: 18),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Semantics(
+                          liveRegion: scanning,
+                          child: Text(scanning ? 'Memindai…' : 'Pindai struk'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 14,
-              child: SizedBox(
-                height: 48,
+              const SizedBox(width: 8),
+              Expanded(
                 child: FilledButton(
                   onPressed: canSave && !saving ? onSave : null,
                   style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     backgroundColor: EsokColors.accent,
                     foregroundColor: EsokColors.onAccent,
                     disabledBackgroundColor: EsokColors.soft,
                     disabledForegroundColor: EsokColors.disabled,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(11),
-                    ),
+                    shape: shape,
                   ),
                   child: Text(saving ? 'Menyimpan…' : 'Simpan'),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1583,10 +1601,7 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
             const SizedBox(height: 4),
             Text(
               'Gambar berisi ${widget.transactions.length} baris. Pilih satu.',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: EsokColors.muted,
-              ),
+              style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
             ),
             const SizedBox(height: 10),
             Flexible(
@@ -1636,10 +1651,13 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
                                   [
                                     if (scan.tanggal != null)
                                       shortDateTitle(scan.tanggal!),
-                                    if (scan.tanggal == null) 'Tanggal belum terbaca',
+                                    if (scan.tanggal == null)
+                                      'Tanggal belum terbaca',
                                     scan.arah == null
                                         ? 'Arah perlu diperiksa'
-                                        : incoming ? 'Masuk' : 'Keluar',
+                                        : incoming
+                                        ? 'Masuk'
+                                        : 'Keluar',
                                     if (scan.kategori != null) scan.kategori!,
                                   ].join(' · '),
                                   maxLines: 1,
@@ -1656,7 +1674,11 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
                           Text(
                             scan.nominal == null
                                 ? 'Nominal belum terbaca'
-                                : '${scan.arah == null ? '' : incoming ? '+' : '−'}'
+                                : '${scan.arah == null
+                                          ? ''
+                                          : incoming
+                                          ? '+'
+                                          : '−'}'
                                       '${numberText(scan.nominal!)}',
                             style: TextStyle(
                               fontSize: 13,
@@ -1681,9 +1703,9 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
               child: FilledButton(
                 onPressed: widget.transactions.isEmpty
                     ? null
-                    : () => Navigator.of(context).pop(
-                        widget.transactions[_selected],
-                      ),
+                    : () =>
+                          Navigator.of(context)
+                              .pop(widget.transactions[_selected]),
                 style: FilledButton.styleFrom(
                   backgroundColor: EsokColors.accent,
                   foregroundColor: EsokColors.onAccent,

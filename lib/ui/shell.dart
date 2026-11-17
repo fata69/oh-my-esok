@@ -136,8 +136,9 @@ class _TabPaneState extends State<_TabPane> {
                   : Duration(milliseconds: widget.active ? 240 : 160),
               curve: Curves.easeOutCubic,
               onEnd: () {
-                if (mounted && !widget.active && _visible)
+                if (mounted && !widget.active && _visible) {
                   setState(() => _visible = false);
+                }
               },
               child: AnimatedSlide(
                 offset: widget.active ? Offset.zero : const Offset(.018, 0),
@@ -234,6 +235,54 @@ class _FloatingTabBar extends StatelessWidget {
       ),
     );
 
+    // Keep the circle whole throughout the transition. The capsule paints
+    // over it while they overlap, so it can emerge from behind the edge.
+    final accessory = ExcludeSemantics(
+      excluding: primary == null,
+      child: IgnorePointer(
+        ignoring: primary == null,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: primary == null ? 0 : 1),
+          duration: solid ? Duration.zero : const Duration(milliseconds: 420),
+          curve: primary == null ? Curves.easeInCubic : Curves.easeOutBack,
+          builder: (context, progress, child) => Opacity(
+            opacity: progress.clamp(0, 1),
+            child: Transform.translate(
+              offset: Offset(-30 * (1 - progress), 0),
+              child: Transform.scale(scale: .90 + .10 * progress, child: child),
+            ),
+          ),
+          child: ClipOval(
+            child: BackdropFilter(
+              filter: solid ? ui.ImageFilter.blur() : _blur,
+              child: Container(
+                key: primary == null ? null : const ValueKey('bottom-create'),
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: solid ? tint : tint.withValues(alpha: tintOpacity),
+                  border: Border.all(color: edge),
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: IconButton(
+                    tooltip: primary?.$1 ?? 'Tambah',
+                    onPressed: primary?.$2,
+                    icon: const Icon(Icons.add_rounded, size: 25),
+                    style: IconButton.styleFrom(
+                      foregroundColor: ink,
+                      shape: const CircleBorder(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
     return SafeArea(
       top: false,
       // The OS navigation bar inset already protects both system modes.
@@ -246,90 +295,32 @@ class _FloatingTabBar extends StatelessWidget {
           heightFactor: 1,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.centerRight,
               children: [
-                Expanded(
-                  child: ClipRRect(
-                    key: const ValueKey('floating-navigation'),
-                    borderRadius: _radius,
-                    child: solid
-                        ? capsule
-                        : BackdropFilter(filter: _blur, child: capsule),
-                  ),
-                ),
-                AnimatedContainer(
-                  key: const ValueKey('create-accessory-slot'),
-                  width: primary == null ? 0 : 60,
-                  height: 52,
-                  duration: solid
-                      ? Duration.zero
-                      : const Duration(milliseconds: 340),
-                  curve: Curves.easeInOutCubic,
-                  child: ClipRect(
-                    clipBehavior: Clip.hardEdge,
-                    child: OverflowBox(
-                      alignment: Alignment.centerRight,
-                      minWidth: 52,
-                      maxWidth: 52,
-                      child: IgnorePointer(
-                        ignoring: primary == null,
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween(end: primary == null ? 0 : 1),
-                          duration: solid
-                              ? Duration.zero
-                              : const Duration(milliseconds: 420),
-                          curve: primary == null
-                              ? Curves.easeInCubic
-                              : Curves.easeOutBack,
-                          builder: (context, progress, child) => Opacity(
-                            opacity: progress.clamp(0, 1),
-                            child: Transform.translate(
-                              offset: Offset(-12 * (1 - progress), 0),
-                              child: Transform.scale(
-                                scale: .86 + .14 * progress,
-                                child: child,
-                              ),
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: BackdropFilter(
-                              filter: solid ? ui.ImageFilter.blur() : _blur,
-                              child: Container(
-                                key: primary == null
-                                    ? null
-                                    : const ValueKey('bottom-create'),
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: solid
-                                      ? tint
-                                      : tint.withValues(alpha: tintOpacity),
-                                  border: Border.all(color: edge),
-                                ),
-                                child: Material(
-                                  type: MaterialType.transparency,
-                                  child: IconButton(
-                                    tooltip: primary?.$1 ?? 'Tambah',
-                                    onPressed: primary?.$2,
-                                    icon: const Icon(
-                                      Icons.add_rounded,
-                                      size: 25,
-                                    ),
-                                    style: IconButton.styleFrom(
-                                      foregroundColor: ink,
-                                      shape: const CircleBorder(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                Positioned(right: 0, child: accessory),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        key: const ValueKey('floating-navigation'),
+                        borderRadius: _radius,
+                        child: solid
+                            ? capsule
+                            : BackdropFilter(filter: _blur, child: capsule),
                       ),
                     ),
-                  ),
+                    AnimatedContainer(
+                      key: const ValueKey('create-accessory-slot'),
+                      width: primary == null ? 0 : 60,
+                      height: 52,
+                      duration: solid
+                          ? Duration.zero
+                          : const Duration(milliseconds: 340),
+                      curve: Curves.easeInOutCubic,
+                    ),
+                  ],
                 ),
               ],
             ),
