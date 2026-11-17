@@ -18,6 +18,8 @@ import '../util/sound_fx.dart';
 import 'category_icon.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
+import 'money_icon_catalog.dart';
+import 'money_icon_picker.dart';
 import 'receipt_scan_review.dart';
 import 'theme.dart';
 
@@ -48,6 +50,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   late final TextEditingController _noteController;
   bool _creatingCategory = false;
   final _categoryNameController = TextEditingController();
+  String? _draftCategoryIconId;
   String? _categoryError;
   bool _saving = false;
   bool _scanning = false;
@@ -142,6 +145,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
     setState(() {
       _kind = kind;
       _creatingCategory = false;
+      _draftCategoryIconId = null;
       _categoryError = null;
       if (kind == 'transfer') {
         _categoryId = null;
@@ -229,11 +233,13 @@ class _TxEditorPageState extends State<TxEditorPage> {
       final category = await context.read<MoneyStore>().addCategory(
         name,
         _kind,
+        iconId: _draftCategoryIconId,
       );
       if (!mounted) return;
       setState(() {
         _categoryId = category.id;
         _creatingCategory = false;
+        _draftCategoryIconId = null;
         _categoryError = null;
         _categoryNameController.clear();
       });
@@ -420,6 +426,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       _noteController.text = _summaryForScan(scan);
       _detail = scan.detailText(numberText);
       _creatingCategory = false;
+      _draftCategoryIconId = null;
     });
     _ensureSelections();
     _toast('Draf pindai perlu diperiksa. Simpan hanya setelah cocok.');
@@ -502,7 +509,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                 constraints.maxHeight - (reserveKeypad ? keypadHeight : 0);
             final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
             final extraHeight =
-                (_creatingCategory ? (largeText ? 110 : 56) : 0) +
+                (_creatingCategory ? (largeText ? 162 : 104) : 0) +
                 (_categoryError != null ? 24 : 0) +
                 (_hasScanDraft ? (largeText ? 90 : 48) : 0);
             final categoryHeight = (formHeight - 320 - extraHeight).clamp(
@@ -568,8 +575,12 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     child: _InlineCategory(
                       controller: _categoryNameController,
                       error: _categoryError,
+                      iconId: _draftCategoryIconId,
+                      onIconChanged: (iconId) =>
+                          setState(() => _draftCategoryIconId = iconId),
                       onCancel: () => setState(() {
                         _creatingCategory = false;
+                        _draftCategoryIconId = null;
                         _categoryNameController.clear();
                         _categoryError = null;
                       }),
@@ -1135,12 +1146,16 @@ class _InlineCategory extends StatelessWidget {
   const _InlineCategory({
     required this.controller,
     required this.error,
+    required this.iconId,
+    required this.onIconChanged,
     required this.onCancel,
     required this.onSave,
   });
 
   final TextEditingController controller;
   final String? error;
+  final String? iconId;
+  final ValueChanged<String?> onIconChanged;
   final VoidCallback onCancel;
   final VoidCallback onSave;
 
@@ -1227,6 +1242,12 @@ class _InlineCategory extends StatelessWidget {
                   ),
                 ),
               ),
+            MoneyIconField(
+              iconSet: MoneyIconSet.category,
+              value: iconId,
+              automatic: categoryIconSpec(null),
+              onChanged: onIconChanged,
+            ),
           ],
         );
       },

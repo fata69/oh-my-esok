@@ -5,6 +5,8 @@ import '../data/account.dart';
 import '../state/money_store.dart';
 import '../util/format.dart';
 import 'chevron.dart';
+import 'money_icon_catalog.dart';
+import 'money_icon_picker.dart';
 import 'theme.dart';
 
 class ManageAccountsPage extends StatefulWidget {
@@ -25,7 +27,11 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     );
     if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().addAccount(draft.name, draft.type);
+      await context.read<MoneyStore>().addAccount(
+        draft.name,
+        draft.type,
+        iconKey: draft.iconKey,
+      );
     } on NameConflictException {
       _message('Sumber dana itu sudah ada.');
     }
@@ -75,12 +81,18 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
         title: 'Ubah sumber dana',
         initialName: account.name,
         initialType: account.type,
+        initialIconKey: account.iconKey,
         lockType: true,
       ),
     );
     if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().renameAccount(account.id, draft.name);
+      await context.read<MoneyStore>().renameAccount(
+        account.id,
+        draft.name,
+        iconKey: draft.iconKey,
+        clearIcon: draft.iconKey == null && account.iconKey != null,
+      );
     } on NameConflictException {
       _message('Sumber dana itu sudah ada.');
     }
@@ -156,7 +168,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
                 },
               ),
               _ActionRow(
-                label: 'Ubah nama',
+                label: 'Ubah nama atau ikon',
                 onTap: () {
                   Navigator.pop(context);
                   _rename(account);
@@ -437,9 +449,6 @@ class _AccountRow extends StatelessWidget {
   final int balance;
   final VoidCallback onTap;
 
-  String get _initial =>
-      account.name.isEmpty ? '?' : account.name.substring(0, 1).toUpperCase();
-
   @override
   Widget build(BuildContext context) {
     final color = balance < 0 ? EsokColors.negative : EsokColors.ink;
@@ -458,14 +467,7 @@ class _AccountRow extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: Text(
-                _initial,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: EsokColors.muted,
-                ),
-              ),
+              child: WalletIconView(account: account, size: 17),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -475,17 +477,11 @@ class _AccountRow extends StatelessWidget {
                 children: [
                   Text(
                     account.name,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      color: EsokColors.ink,
-                    ),
+                    style: TextStyle(fontSize: 14.5, color: EsokColors.ink),
                   ),
                   Text(
                     accountTypeLabel(account.type),
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: EsokColors.muted,
-                    ),
+                    style: TextStyle(fontSize: 10.5, color: EsokColors.muted),
                   ),
                 ],
               ),
@@ -541,10 +537,11 @@ class _ActionRow extends StatelessWidget {
 }
 
 class _AccountDraft {
-  const _AccountDraft(this.name, this.type);
+  const _AccountDraft(this.name, this.type, this.iconKey);
 
   final String name;
   final String type;
+  final String? iconKey;
 }
 
 class _AccountSheet extends StatefulWidget {
@@ -552,12 +549,14 @@ class _AccountSheet extends StatefulWidget {
     required this.title,
     this.initialName,
     this.initialType = 'cash',
+    this.initialIconKey,
     this.lockType = false,
   });
 
   final String title;
   final String? initialName;
   final String initialType;
+  final String? initialIconKey;
   final bool lockType;
 
   @override
@@ -567,6 +566,7 @@ class _AccountSheet extends StatefulWidget {
 class _AccountSheetState extends State<_AccountSheet> {
   late final TextEditingController _controller;
   late String _type;
+  String? _iconKey;
   String? _error;
 
   @override
@@ -574,6 +574,7 @@ class _AccountSheetState extends State<_AccountSheet> {
     super.initState();
     _controller = TextEditingController(text: widget.initialName ?? '');
     _type = widget.initialType;
+    _iconKey = widget.initialIconKey;
   }
 
   @override
@@ -588,7 +589,7 @@ class _AccountSheetState extends State<_AccountSheet> {
       setState(() => _error = 'Nama tidak boleh kosong.');
       return;
     }
-    Navigator.of(context).pop(_AccountDraft(name, _type));
+    Navigator.of(context).pop(_AccountDraft(name, _type, _iconKey));
   }
 
   @override
@@ -604,97 +605,110 @@ class _AccountSheetState extends State<_AccountSheet> {
         color: EsokColors.canvas,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Center(child: _Handle()),
-          Text(
-            widget.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: EsokColors.ink,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            onSubmitted: (_) => _submit(),
-            style: TextStyle(fontSize: 15, color: EsokColors.ink),
-            decoration: InputDecoration(
-              hintText: 'Nama sumber dana',
-              errorText: _error,
-              filled: true,
-              fillColor: EsokColors.soft,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Center(child: _Handle()),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: EsokColors.ink,
+                ),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+              const SizedBox(height: 14),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                onSubmitted: (_) => _submit(),
+                style: TextStyle(fontSize: 15, color: EsokColors.ink),
+                decoration: InputDecoration(
+                  hintText: 'Nama sumber dana',
+                  errorText: _error,
+                  filled: true,
+                  fillColor: EsokColors.soft,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
+                  ),
+                ),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
-              ),
-            ),
-          ),
-          if (!widget.lockType) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: [
-                for (final type in types)
-                  GestureDetector(
-                    onTap: () => setState(() => _type = type.$1),
-                    child: IntrinsicWidth(
-                      child: Container(
-                        height: 31,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: _type == type.$1
-                              ? EsokColors.ink
-                              : EsokColors.soft,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          type.$2,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _type == type.$1
-                                ? EsokColors.canvas
-                                : EsokColors.inkSoft,
+              if (!widget.lockType) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: [
+                    for (final type in types)
+                      GestureDetector(
+                        onTap: () => setState(() => _type = type.$1),
+                        child: IntrinsicWidth(
+                          child: Container(
+                            height: 31,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: _type == type.$1
+                                  ? EsokColors.ink
+                                  : EsokColors.soft,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              type.$2,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _type == type.$1
+                                    ? EsokColors.canvas
+                                    : EsokColors.inkSoft,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                  ],
+                ),
               ],
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Batal'),
+              const SizedBox(height: 4),
+              MoneyIconField(
+                iconSet: MoneyIconSet.wallet,
+                value: _iconKey,
+                automatic: walletIconSpec(_type, null),
+                onChanged: (value) => setState(() => _iconKey = value),
               ),
-              TextButton(
-                onPressed: _submit,
-                style: TextButton.styleFrom(foregroundColor: EsokColors.accent),
-                child: const Text('Simpan'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Batal'),
+                  ),
+                  TextButton(
+                    onPressed: _submit,
+                    style: TextButton.styleFrom(
+                      foregroundColor: EsokColors.accent,
+                    ),
+                    child: const Text('Simpan'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

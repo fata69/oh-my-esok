@@ -5,6 +5,8 @@ import '../data/category.dart';
 import '../state/money_store.dart';
 import 'category_icon.dart';
 import 'chevron.dart';
+import 'money_icon_catalog.dart';
+import 'money_icon_picker.dart';
 import 'theme.dart';
 
 class ManageCategoriesPage extends StatefulWidget {
@@ -27,41 +29,44 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
   }
 
   Future<void> _add() async {
-    final name = await showModalBottomSheet<String>(
+    final kind = _kind;
+    final draft = await showModalBottomSheet<_CategoryDraft>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
-      builder: (_) => _NameSheet(
-        title: _kind == 'income'
-            ? 'Kategori pemasukan'
-            : 'Kategori pengeluaran',
-        hint: 'Nama kategori',
+      builder: (_) => _CategorySheet(
+        title: kind == 'income' ? 'Kategori pemasukan' : 'Kategori pengeluaran',
       ),
     );
-    if (name == null || !mounted) return;
+    if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().addCategory(name, _kind);
+      await context.read<MoneyStore>().addCategory(
+        draft.name,
+        kind,
+        iconId: draft.iconId,
+      );
     } on NameConflictException {
       _message('Kategori itu sudah ada.');
     }
   }
 
-  Future<void> _rename(MoneyCategory category) async {
-    final name = await showModalBottomSheet<String>(
+  Future<void> _edit(MoneyCategory category) async {
+    final draft = await showModalBottomSheet<_CategoryDraft>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
-      builder: (_) => _NameSheet(
-        title: 'Ubah nama kategori',
-        hint: 'Nama kategori',
-        initial: category.name,
-      ),
+      builder: (_) => _CategorySheet(title: 'Ubah kategori', initial: category),
     );
-    if (name == null || !mounted) return;
+    if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().renameCategory(category.id, name);
+      await context.read<MoneyStore>().renameCategory(
+        category.id,
+        draft.name,
+        iconId: draft.iconId,
+        clearIcon: draft.iconId == null && category.iconId != null,
+      );
     } on NameConflictException {
       _message('Kategori itu sudah ada.');
     }
@@ -123,10 +128,10 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
             children: [
               const _Handle(),
               _ActionRow(
-                label: 'Ubah nama',
+                label: 'Ubah nama atau ikon',
                 onTap: () {
                   Navigator.pop(context);
-                  _rename(category);
+                  _edit(category);
                 },
               ),
               _ActionRow(
@@ -359,10 +364,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
                     alignment: Alignment.center,
                     child: Text(
                       'Lihat $archivedCount kategori diarsipkan',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: EsokColors.muted,
-                      ),
+                      style: TextStyle(fontSize: 12, color: EsokColors.muted),
                     ),
                   ),
                 ),
@@ -463,10 +465,7 @@ class _CategoryRow extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: CategoryIconView(
-              category: category,
-              size: 16,
-            ),
+            child: CategoryIconView(category: category, size: 16),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -478,10 +477,7 @@ class _CategoryRow extends StatelessWidget {
                   Expanded(
                     child: Text(
                       category.name,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        color: EsokColors.ink,
-                      ),
+                      style: TextStyle(fontSize: 14.5, color: EsokColors.ink),
                     ),
                   ),
                   FutureBuilder<int>(
@@ -561,25 +557,28 @@ class _Handle extends StatelessWidget {
   }
 }
 
-class _NameSheet extends StatefulWidget {
-  const _NameSheet({required this.title, required this.hint, this.initial});
+typedef _CategoryDraft = ({String name, String? iconId});
+
+class _CategorySheet extends StatefulWidget {
+  const _CategorySheet({required this.title, this.initial});
 
   final String title;
-  final String hint;
-  final String? initial;
+  final MoneyCategory? initial;
 
   @override
-  State<_NameSheet> createState() => _NameSheetState();
+  State<_CategorySheet> createState() => _CategorySheetState();
 }
 
-class _NameSheetState extends State<_NameSheet> {
+class _CategorySheetState extends State<_CategorySheet> {
   late final TextEditingController _controller;
+  String? _iconId;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initial ?? '');
+    _controller = TextEditingController(text: widget.initial?.name ?? '');
+    _iconId = widget.initial?.iconId;
   }
 
   @override
@@ -594,7 +593,7 @@ class _NameSheetState extends State<_NameSheet> {
       setState(() => _error = 'Nama tidak boleh kosong.');
       return;
     }
-    Navigator.of(context).pop(name);
+    Navigator.of(context).pop<_CategoryDraft>((name: name, iconId: _iconId));
   }
 
   @override
@@ -605,62 +604,78 @@ class _NameSheetState extends State<_NameSheet> {
         color: EsokColors.canvas,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Center(child: _Handle()),
-          Text(
-            widget.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: EsokColors.ink,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            onSubmitted: (_) => _submit(),
-            style: TextStyle(fontSize: 15, color: EsokColors.ink),
-            decoration: InputDecoration(
-              hintText: widget.hint,
-              errorText: _error,
-              filled: true,
-              fillColor: EsokColors.soft,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Batal'),
+              const Center(child: _Handle()),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: EsokColors.ink,
+                ),
               ),
-              TextButton(
-                onPressed: _submit,
-                style: TextButton.styleFrom(foregroundColor: EsokColors.accent),
-                child: const Text('Simpan'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                onSubmitted: (_) => _submit(),
+                style: TextStyle(fontSize: 15, color: EsokColors.ink),
+                decoration: InputDecoration(
+                  hintText: 'Nama kategori',
+                  errorText: _error,
+                  filled: true,
+                  fillColor: EsokColors.soft,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              MoneyIconField(
+                iconSet: MoneyIconSet.category,
+                value: _iconId,
+                automatic: categoryIconSpec(
+                  null,
+                  categoryId: widget.initial?.id,
+                ),
+                onChanged: (value) => setState(() => _iconId = value),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Batal'),
+                  ),
+                  TextButton(
+                    onPressed: _submit,
+                    style: TextButton.styleFrom(
+                      foregroundColor: EsokColors.accent,
+                    ),
+                    child: const Text('Simpan'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
