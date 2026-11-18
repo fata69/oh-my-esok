@@ -23,16 +23,18 @@ belongs to upstream; never install a candidate over it.
    `pub get --enforce-lockfile`, analysis and tests, then compiles with
    `OH_MY_ESOK_UNSIGNED_BUILD=true`. Gradle has no release keystore
    configuration and refuses a release build without this opt-in. The script
-   requests ARMv7, ARM64 and x86-64 in a single APK, without ABI splits.
-5. The script checks that the fresh `app-release.apk` is unsigned and checks
-   its ZIP alignment before signing. It launches the Android `apksigner` JAR
+   produces a universal APK and three standalone APKs for ARMv7, ARM64 and
+   x86-64. Flutter's ABI version offset is disabled for the standalone APKs
+   so every package uses the same versionCode.
+5. The script checks that each fresh APK is unsigned and checks its ZIP
+   alignment before signing. It launches the Android `apksigner` JAR
    directly with the project JDK. The passwords go only into that child's
    environment via `--ks-pass env:...` and `--key-pass env:...`. They are
    absent from the command line, the parent environment, and later tools.
    The original signing variables remain cleared on success or failure.
-6. The script verifies ZIP alignment again on the signed APK. The metadata
-   script verifies its signature, rejects debug certificates and missing
-   universal ABIs, and writes `dist/oh-my-esok-universal.apk`,
+6. The script verifies ZIP alignment again on each signed APK. The metadata
+   script checks the expected ABIs, matching package identity, version, minSdk
+   and release signer across all APKs, and writes the four `dist/oh-my-esok-*.apk`,
    `ota-android.json`, `SHA256SUMS`, public certificate details and the source
    commit. Use these files only after a successful run; a failed run may leave
    earlier assets in `dist/`. Compare the signer SHA-256 with the last accepted

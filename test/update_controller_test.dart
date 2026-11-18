@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jadwal/update/update_availability.dart';
 import 'package:jadwal/update/update_controller.dart';
 
 class _Headers extends Fake implements HttpHeaders {
@@ -144,6 +146,104 @@ void main() {
       'sha256': List.filled(64, 'a').join(),
     },
   };
+
+  test(
+    'automatic availability uses validation and is cached for six hours',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      var now = DateTime.utc(2026, 11, 18);
+      final client = _Client([
+        _Response(200, release()),
+        _Response(200, metadata()),
+      ]);
+      final first = UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => client),
+        now: () => now,
+      );
+      addTearDown(first.dispose);
+      await Future.wait([
+        first.checkAutomatically(),
+        first.checkAutomatically(),
+      ]);
+      expect(first.available, isTrue);
+      expect(client.requested, hasLength(2));
+
+      final failure = _Client([_Response(403, {})]);
+      final restored = UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => failure),
+        now: () => now,
+      );
+      addTearDown(restored.dispose);
+      now = now.add(const Duration(hours: 5));
+      await restored.checkAutomatically();
+      expect(restored.available, isTrue);
+      expect(failure.requested, isEmpty);
+      now = now.add(const Duration(hours: 1));
+      var changes = 0;
+      restored.addListener(() => changes++);
+      await restored.checkAutomatically();
+      await restored.checkAutomatically();
+      expect(failure.requested, hasLength(1));
+      expect(restored.available, isTrue);
+      expect(changes, 0);
+    },
+  );
+
+  test(
+    'first failed automatic check stays invisible and persists attempt',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final client = _Client([_Response(403, {})]);
+      UpdateAvailability state() => UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => client),
+        now: () => DateTime.utc(2026, 11, 18),
+      );
+      final first = state();
+      final restarted = state();
+      addTearDown(first.dispose);
+      addTearDown(restarted.dispose);
+      await first.checkAutomatically();
+      await restarted.checkAutomatically();
+      expect(first.available, isFalse);
+      expect(restarted.available, isFalse);
+      expect(client.requested, hasLength(1));
+    },
+  );
+
+  test(
+    'preview opt-in survives restart and opt-out clears the preview hint',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preview = release()..['prerelease'] = true;
+      final manifest = metadata()..['channel'] = 'preview';
+      final client = _Client([
+        _Response(200, [preview]),
+        _Response(200, manifest),
+      ]);
+      UpdateAvailability state() => UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => client),
+        now: () => DateTime.utc(2026, 11, 18),
+      );
+      final first = state();
+      final restarted = state();
+      final optedOut = state();
+      for (final availability in [first, restarted, optedOut]) {
+        addTearDown(availability.dispose);
+      }
+      await first.load();
+      expect(first.allowPreview, isFalse);
+      await first.setAllowPreview(true);
+      await restarted.checkAutomatically();
+      expect(restarted.allowPreview, isTrue);
+      expect(client.requested.first.queryParameters, {'per_page': '20'});
+      expect(restarted.available, isTrue);
+      await restarted.setAllowPreview(false);
+      await optedOut.load();
+      expect(restarted.available, isFalse);
+      expect(optedOut.allowPreview, isFalse);
+      expect(optedOut.available, isFalse);
+    },
+  );
   test(
     'new validated release becomes available with its release notes',
     () async {

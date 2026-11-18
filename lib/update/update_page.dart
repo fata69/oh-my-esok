@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 
+import 'update_availability.dart';
 import 'update_controller.dart';
 
 class UpdatePage extends StatefulWidget {
@@ -12,11 +13,64 @@ class UpdatePage extends StatefulWidget {
 
 class _UpdatePageState extends State<UpdatePage> with WidgetsBindingObserver {
   final controller = UpdateController();
+  final _availability = UpdateAvailability.instance;
+  bool _loading = true;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    unawaited(controller.loadInstalled());
+    unawaited(_initialize());
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await _availability.load();
+    } catch (_) {
+      // A preferences read failure should still allow a manual stable check.
+    }
+    if (!mounted) return;
+    controller.allowPreview = _availability.allowPreview;
+    setState(() => _loading = false);
+    if (_availability.available) {
+      await _check();
+    } else {
+      try {
+        await controller.loadInstalled();
+      } catch (_) {
+        // The manual check reports errors on demand.
+      }
+    }
+  }
+
+  Future<void> _check() async {
+    await controller.check();
+    if (!mounted) return;
+    try {
+      await _availability.recordResult(controller);
+    } catch (_) {
+      // The manual result does not depend on updating the Settings hint.
+    }
+  }
+
+  Future<void> _setPreview(bool value) async {
+    setState(() => _loading = true);
+    try {
+      await _availability.setAllowPreview(value);
+      if (!mounted) return;
+      controller.allowPreview = value;
+      controller.release = null;
+      controller.notes = '';
+      controller.message = null;
+      controller.phase = UpdatePhase.idle;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Preferensi prarilis gagal disimpan.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -109,7 +163,7 @@ class _UpdatePageState extends State<UpdatePage> with WidgetsBindingObserver {
               ),
             if (!controller.busy)
               OutlinedButton(
-                onPressed: controller.check,
+                onPressed: _loading ? null : _check,
                 child: const Text('Cek pembaruan'),
               ),
             const SizedBox(height: 16),
@@ -120,15 +174,7 @@ class _UpdatePageState extends State<UpdatePage> with WidgetsBindingObserver {
                 'Versi untuk mencoba fitur baru sebelum rilis stabil.',
               ),
               value: controller.allowPreview,
-              onChanged: controller.busy
-                  ? null
-                  : (value) => setState(() {
-                      controller.allowPreview = value;
-                      controller.release = null;
-                      controller.notes = '';
-                      controller.message = null;
-                      controller.phase = UpdatePhase.idle;
-                    }),
+              onChanged: controller.busy || _loading ? null : _setPreview,
             ),
             if (controller.notes.isNotEmpty) ...[
               const Divider(height: 36),

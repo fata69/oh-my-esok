@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/physics.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../update/update_availability.dart';
 import 'home_page.dart';
 import 'money_page.dart';
 import 'reports_page.dart';
@@ -18,9 +21,30 @@ class EsokShell extends StatefulWidget {
   State<EsokShell> createState() => _EsokShellState();
 }
 
-class _EsokShellState extends State<EsokShell> {
+class _EsokShellState extends State<EsokShell> with WidgetsBindingObserver {
   final _home = GlobalKey<HomePageState>();
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!Platform.isAndroid) return;
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(UpdateAvailability.instance.checkAutomatically());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(UpdateAvailability.instance.checkAutomatically());
+    }
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isAndroid) WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   void _selectTab(int index) {
     if (_index != index) setState(() => _index = index);

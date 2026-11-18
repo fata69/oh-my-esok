@@ -12,6 +12,7 @@ import '../notify/notifier.dart';
 import '../state/settings_store.dart';
 import '../widget/widget_sync.dart';
 import '../update/update_page.dart';
+import '../update/update_availability.dart';
 import 'ai_model_picker.dart';
 import 'data_page.dart';
 import 'manage_accounts.dart';
@@ -523,14 +524,24 @@ class _SettingsPageState extends State<SettingsPage> {
                 icon: Icons.info_outline,
                 subtitle: 'Dikembangkan dan dikelola oleh Fata (@fata69)',
               ),
-              _SettingsRow(
-                title: 'Pembaruan aplikasi',
-                icon: Icons.system_update_outlined,
-                subtitle: 'Versi $_version',
-                trailing: const _Trailing('Periksa ›'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
-                ),
+              ListenableBuilder(
+                listenable: UpdateAvailability.instance,
+                builder: (context, _) {
+                  final available = UpdateAvailability.instance.available;
+                  return _SettingsRow(
+                    title: 'Pembaruan aplikasi',
+                    icon: Icons.system_update_outlined,
+                    subtitle: available
+                        ? 'Pembaruan tersedia'
+                        : 'Versi $_version',
+                    trailing: _Trailing(available ? 'Lihat ›' : 'Periksa ›'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const UpdatePage(),
+                      ),
+                    ),
+                  );
+                },
               ),
               _SettingsRow(
                 title: 'Lisensi font',
