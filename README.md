@@ -1,86 +1,68 @@
-# Oh My Esok
+<p align="center">
+  <img src="docs/images/petak-esok.png" alt="Ikon Petak ESOK" width="88" height="88">
+</p>
 
-Oh My Esok adalah aplikasi Android untuk **agenda berulang, pengingat, catatan harian,
-dan buku kas pribadi**. Atur pengingat absen setiap Senin–Jumat pukul 08.00, centang
-agenda dari widget, atau cari transaksi lama berdasarkan catatan, kategori, dan dompet.
+<h1 align="center">Oh My Esok</h1>
 
-Agenda dan transaksi tersimpan di HP tanpa akun. Pindai struk bersifat opsional dan
-mengirim gambar pilihan ke Gemini menggunakan API key pengguna.
+<p align="center"><strong>Agenda berulang, catatan harian, dan buku kas dalam satu aplikasi Android.</strong></p>
 
-[Unduh APK Oh My Esok untuk Android](https://github.com/fata69/oh-my-esok/releases)
-· [Kode sumber build preview 23](https://github.com/fata69/oh-my-esok/tree/v0.1.0-preview.8)
+<p align="center">
+  <a href="https://github.com/fata69/oh-my-esok/releases"><img alt="Unduh APK" src="https://img.shields.io/badge/Unduh%20APK-GitHub%20Releases-202020?style=flat-square&amp;logo=github"></a>
+  <a href="#pasang-di-android"><img alt="Android 7.0 ke atas" src="https://img.shields.io/badge/Android-7.0%2B-343434?style=flat-square&amp;logo=android&amp;logoColor=white"></a>
+</p>
 
-Oh My Esok dikembangkan dan dikelola oleh [Fata (@fata69)](https://github.com/fata69)
-sebagai fork dari [Esok](https://github.com/notSeraphimXD/esok), proyek asli karya
-**notSeraphimXD**. Riwayat Git proyek asal dipertahankan.
+<p align="center">
+  <a href="#fitur">Fitur</a> · <a href="#pasang-di-android">Cara pasang</a> · <a href="#build-dari-kode-sumber">Kode sumber</a>
+</p>
 
-## Fitur di rilis preview
+<p align="center">
+  <a href="docs/images/hari.webp"><img src="docs/images/hari.webp" alt="Hari dalam tema terang, dengan agenda dan catatan harian" width="240"></a>
+  <a href="docs/images/uang.webp"><img src="docs/images/uang.webp" alt="Uang dalam tema AMOLED, dengan ringkasan dana, dompet, dan transaksi" width="240"></a>
+  <a href="docs/images/laporan.webp"><img src="docs/images/laporan.webp" alt="Laporan dalam tema terang, dengan grafik pemasukan dan pengeluaran" width="240"></a>
+  <br><sub>Hari · Uang · Laporan pada rilis preview. Data pada gambar adalah contoh.</sub>
+</p>
 
-- **Catatan per hari** dengan jam opsional. Geser untuk pindah hari, ketuk tanggal untuk membuka kalender bulanan.
-- **Tutup Hari** merangkum catatan yang belum selesai dan arus kas harian, lalu membantu memindahkan catatan satu per satu.
-- **Agenda berulang dan pengingat** untuk setiap hari, Senin–Jumat, mingguan, atau hari pilihan. Selesaikan atau lewati satu kejadian pada tanggalnya.
-- **Pindai foto** struk dan tangkapan layar M-Banking dengan Gemini. Cek teks barang dan data yang terbaca sebelum memasukkannya ke draf transaksi.
-- **Buku kas**: pengeluaran, pemasukan, pindah dompet, saldo per dompet, dan koreksi saldo.
-- **Cari transaksi** di semua bulan berdasarkan catatan, kategori, atau dompet.
-- **Laporan**: bandingkan arus kas enam bulan, telusuri pengeluaran per kategori, dan pilih tanggal untuk melihat nominal persis. Transfer dan koreksi saldo tidak dihitung sebagai arus kas.
-- **Widget Agenda** untuk melihat progres hari ini, menambah tugas, dan membuka jadwal berikutnya. Ada juga widget ringkasan uang.
-- **Cadangan otomatis** ke `Download/Oh My Esok/oh-my-esok-backup.json`, terpisah dari cadangan Esok asli.
-- **Tema** terang, gelap, atau ikut sistem, dengan navbar glass mengambang dan aksi tambah dekat bagian bawah.
-- **Pembaruan aplikasi** dari Setelan. Oh My Esok memeriksa APK yang diunduh dari GitHub sebelum menyerahkannya ke installer Android.
+## Fitur
 
-## Memasang
+| Bagian | Yang bisa dilakukan |
+| --- | --- |
+| **Hari dan pengingat** | Catat agenda per tanggal. Atur pengulangan harian, Senin–Jumat, mingguan, atau hari pilihan. Centang agenda hari ini langsung dari widget. |
+| **Uang** | Catat pemasukan, pengeluaran, dan transfer. Kelola beberapa dompet dan cari transaksi lama berdasarkan catatan, kategori, atau dompet. |
+| **Laporan** | Bandingkan pemasukan dan pengeluaran enam bulan, lalu buka rincian pengeluaran per kategori. |
+| **Pindai struk** | Pindai struk dengan Gemini dan API key sendiri. Tinjau hasilnya sebagai draf, lalu tekan **Simpan** saat sudah benar. |
+| **Cadangan data** | Ekspor atau impor JSON. Agenda dan transaksi tersimpan di perangkat tanpa akun. |
 
-1. Buka halaman [Releases](https://github.com/fata69/oh-my-esok/releases).
-2. Unduh APK Oh My Esok. Aplikasi mendukung Android 7.0 (API 24) ke atas.
-3. Buka berkasnya, lalu izinkan pemasangan bila diminta.
+## Pasang di Android
 
-Oh My Esok memiliki ID Android `io.github.fata69.ohmyesok` dan bisa dipasang
-berdampingan dengan Esok. Untuk memindahkan data, ekspor JSON dari Esok lalu pilih
-berkas tersebut lewat **Setelan → Data → Impor** di Oh My Esok.
-Update menimpa Oh My Esok dengan ID dan sertifikat signing yang sama.
-Untuk memperbarui dari aplikasi, buka **Setelan → Pembaruan aplikasi** dan aktifkan **Sertakan prarilis** bila ingin mencoba versi preview.
+1. Buka [GitHub Releases](https://github.com/fata69/oh-my-esok/releases) dan pilih rilis preview terbaru. Butuh Android 7.0 (API 24) atau lebih baru.
+2. Pilih APK sesuai arsitektur perangkat. Kalau ragu, unduh `oh-my-esok-universal.apk`.
+3. Buka APK dan ikuti konfirmasi pemasangan Android.
 
-## Build
+Sudah terpasang? Buka **Setelan → Pembaruan aplikasi → Cek pembaruan**. Aktifkan
+**Sertakan prarilis** untuk menerima build preview. Mulai build 25, pilihan ini
+tersimpan dan aplikasi otomatis memilih APK yang cocok dengan perangkat.
 
-Untuk membangun APK dari kode yang sesuai dengan rilis, checkout tag rilis yang dipilih.
+Oh My Esok bisa dipasang berdampingan dengan Esok. Untuk memindahkan data,
+ekspor JSON dari Esok lalu buka **Setelan → Data → Impor** di Oh My Esok.
 
-```powershell
+## Build dari kode sumber
+
+Setiap [tag rilis](https://github.com/fata69/oh-my-esok/tags) menunjuk ke kode sumber APK
+yang dipublikasikan. Checkout tag tersebut jika ingin membangun versi yang sama.
+
+```sh
 flutter pub get --enforce-lockfile
 flutter analyze
 flutter test
 flutter build apk --debug
 ```
 
-Untuk kandidat resmi, ikuti [panduan rilis](docs/RELEASING.md) dan gunakan
-`scripts/build-android.ps1` pada host tepercaya. Skrip menghapus variabel signing
-dari lingkungan kompilasi, membangun APK unsigned, lalu menandatangani dengan
-Android `apksigner`. Simpan kunci di luar GitHub dan repo. Gradle hanya
-menghasilkan APK release unsigned dengan `OH_MY_ESOK_UNSIGNED_BUILD=true`;
-gunakan skrip untuk menghasilkan APK kandidat yang ditandatangani.
+Lihat [panduan rilis](docs/RELEASING.md) untuk APK bertanda tangan dan
+[panduan OTA](docs/ota.md) untuk format aset pembaruan.
 
-Cadangan sistem Android dan transfer data otomatis dinonaktifkan untuk data
-aplikasi, termasuk preferensi API key. Cadangan JSON tetap tersedia dan tidak
-memuat API key.
+## Kredit
 
-Hasilnya ada di `build/app/outputs/flutter-apk/`.
-Lihat [alur QA dan rilis](docs/RELEASING.md) untuk menyiapkan APK kandidat.
-
-## Struktur
-
-```
-lib/
-  data/    model dan SQLite: tugas, kategori, dompet, transaksi
-  state/   TaskStore, MoneyStore, SettingsStore
-  ui/      layar Hari, Uang, Laporan, Setelan, editor transaksi
-  ai/      pindai struk dan mutasi
-  backup/  ekspor, impor, cadangan otomatis
-  widget/  jembatan ke widget Android
-  update/  cek rilis, unduh, dan validasi pembaruan APK
-android/app/src/main/kotlin/   widget native dan receiver
-assets/  font, ikon kategori, suara
-```
-
-## Catatan
-
-- SQLite adalah sumber kebenaran. Widget menerima salinan JSON, dan centang dari widget diterapkan ke database saat aplikasi dibuka.
-- Plus Jakarta Sans disertakan dengan [OFL](assets/fonts/plus-jakarta-sans/OFL.txt).
+Oh My Esok dikembangkan dan dikelola oleh [Fata (@fata69)](https://github.com/fata69).
+Proyek ini adalah fork dari [Esok](https://github.com/notSeraphimXD/esok), karya
+**notSeraphimXD**, dengan riwayat Git proyek asal tetap dipertahankan.
+Plus Jakarta Sans disertakan dengan [SIL Open Font License](assets/fonts/plus-jakarta-sans/OFL.txt).
