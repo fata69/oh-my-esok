@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../data/task.dart';
 import '../parse/quick_add.dart';
 import '../util/format.dart';
+import 'task_repeat.dart';
 import 'theme.dart';
 import 'time_picker_sheet.dart';
 
@@ -17,11 +18,19 @@ class TaskEditorResult {
   final bool deleted;
 }
 
+enum TaskEditScope { occurrence, following }
+
 class TaskEditorSheet extends StatefulWidget {
-  const TaskEditorSheet({super.key, required this.initialDate, this.task});
+  const TaskEditorSheet({
+    super.key,
+    required this.initialDate,
+    this.task,
+    this.scope,
+  });
 
   final DateTime initialDate;
   final Task? task;
+  final TaskEditScope? scope;
 
   @override
   State<TaskEditorSheet> createState() => _TaskEditorSheetState();
@@ -33,6 +42,9 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
   late final FocusNode _notesFocus;
   late DateTime _date;
   String? _time;
+  late TaskRepeatRule _repeat;
+  bool get _dateLocked => widget.scope != null;
+  bool get _canChangeRepeat => widget.scope != TaskEditScope.occurrence;
 
   @override
   void initState() {
@@ -43,6 +55,10 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
     _notesFocus = FocusNode()..addListener(_onNotesFocusChanged);
     _date = widget.task?.date ?? dateOnly(widget.initialDate);
     _time = widget.task?.scheduledTime;
+    _repeat = TaskRepeatRule.fromWeekdays(
+      widget.task?.repeatWeekdays ?? [],
+      _date,
+    );
   }
 
   @override
@@ -85,7 +101,7 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
       cancelText: 'Batal',
       confirmText: 'Pilih',
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() => _date = dateOnly(picked));
     }
   }
@@ -106,11 +122,22 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
             minute: int.tryParse(_time!.split(':').last) ?? 0,
           );
     final picked = await showTimePickerSheet(context, initial: initial);
-    if (picked != null) {
+    if (picked != null && mounted) {
       final value =
           '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
       setState(() => _time = value);
     }
+  }
+
+  Future<void> _pickRepeat(DateTime date, String? time) async {
+    FocusScope.of(context).unfocus();
+    final picked = await showTaskRepeatPicker(
+      context,
+      current: _repeat,
+      date: date,
+      time: time,
+    );
+    if (picked != null && mounted) setState(() => _repeat = picked);
   }
 
   void _save() {
@@ -118,21 +145,39 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
     if (raw.isEmpty) return;
 
     final parsed = parseQuickAdd(raw);
-    final title = parsed.title.isEmpty ? raw : parsed.title;
-    final finalDate = parsed.dateFound ? parsed.date : _date;
+    final titleDraft = _dateLocked && parsed.dateFound
+        ? parsed.timeFound
+              ? stripTimePhrase(raw).trim()
+              : raw
+        : parsed.title;
+    final title = titleDraft.isEmpty ? raw : titleDraft;
+    final finalDate = !_dateLocked && parsed.dateFound ? parsed.date : _date;
     final finalTime = parsed.timeFound ? parsed.time : _time;
     final notes = _notesController.text.trim();
-
-    final task = Task(
-      id: widget.task?.id ?? const Uuid().v4(),
-      title: title,
-      scheduledDate: dateKey(finalDate),
-      scheduledTime: finalTime,
-      notes: notes.isEmpty ? null : notes,
-      isDone: widget.task?.isDone ?? false,
-      createdAt:
-          widget.task?.createdAt ?? DateTime.now().millisecondsSinceEpoch,
-    );
+    final repeatWeekdays = _canChangeRepeat
+        ? _repeat.weekdaysFor(finalDate)
+        : widget.task!.repeatWeekdays;
+    final original = widget.task;
+    final task = original == null
+        ? Task(
+            id: const Uuid().v4(),
+            title: title,
+            scheduledDate: dateKey(finalDate),
+            scheduledTime: finalTime,
+            notes: notes.isEmpty ? null : notes,
+            isDone: false,
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+            repeatWeekdays: repeatWeekdays,
+          )
+        : original.copyWith(
+            title: title,
+            scheduledDate: dateKey(finalDate),
+            scheduledTime: finalTime,
+            clearTime: finalTime == null,
+            notes: notes,
+            clearNotes: notes.isEmpty,
+            repeatWeekdays: repeatWeekdays,
+          );
 
     Navigator.of(context).pop(TaskEditorResult.save(task));
   }
@@ -143,7 +188,9 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
     final parsed = parseQuickAdd(_titleController.text);
     final canSave = _titleController.text.trim().isNotEmpty;
     final isEditing = widget.task != null;
-    final effectiveDate = parsed.dateFound ? parsed.date : _date;
+    final effectiveDate = !_dateLocked && parsed.dateFound
+        ? parsed.date
+        : _date;
     final effectiveTime = parsed.timeFound ? parsed.time : _time;
 
     return Container(
@@ -190,6 +237,19 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
               ],
             ),
             const SizedBox(height: 6),
+            if (widget.scope != null) ...[
+              Text(
+                switch (widget.scope!) {
+                  TaskEditScope.occurrence =>
+                    'Hanya kali ini · ${weekdayName(_date)}, ${dateTitle(_date)}',
+                  TaskEditScope.following =>
+                    'Mulai ${weekdayName(_date)}, ${dateTitle(_date)} dan seterusnya',
+                },
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: EsokColors.of(context).muted),
+              ),
+              const SizedBox(height: 10),
+            ],
             TextField(
               controller: _titleController,
               autofocus: !isEditing,
@@ -199,18 +259,16 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
               style: TextStyle(fontSize: 17, color: EsokColors.ink),
               decoration: _fieldDecoration(hint: 'Apa yang perlu dikerjakan?'),
             ),
-            if (parsed.dateFound || parsed.timeFound)
+            if ((!_dateLocked && parsed.dateFound) || parsed.timeFound)
               Padding(
                 padding: const EdgeInsets.only(top: 8, left: 4),
                 child: Text(
                   [
-                    if (parsed.dateFound) positionLabel(parsed.date),
+                    if (!_dateLocked && parsed.dateFound)
+                      positionLabel(parsed.date),
                     if (parsed.timeFound) timeText(parsed.time),
                   ].join(' · '),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: EsokColors.accent,
-                  ),
+                  style: TextStyle(fontSize: 12, color: EsokColors.accent),
                 ),
               ),
             const SizedBox(height: 16),
@@ -220,7 +278,7 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                   child: _PickerChip(
                     icon: Icons.calendar_today_outlined,
                     label: dateTitle(effectiveDate),
-                    onTap: _pickDate,
+                    onTap: _dateLocked ? null : _pickDate,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -250,6 +308,14 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                 ),
               ],
             ),
+            if (_canChangeRepeat) ...[
+              const SizedBox(height: 10),
+              _RepeatField(
+                summary: _repeat.summary(effectiveDate, compact: true),
+                accessibilitySummary: _repeat.summary(effectiveDate),
+                onTap: () => _pickRepeat(effectiveDate, effectiveTime),
+              ),
+            ],
             const SizedBox(height: 16),
             TextField(
               focusNode: _notesFocus,
@@ -281,7 +347,7 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                 child: const Text('Simpan'),
               ),
             ),
-            if (isEditing)
+            if (isEditing && widget.scope == null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: TextButton(
@@ -324,6 +390,71 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
   }
 }
 
+class _RepeatField extends StatelessWidget {
+  const _RepeatField({
+    required this.summary,
+    required this.accessibilitySummary,
+    required this.onTap,
+  });
+
+  final String summary;
+  final String accessibilitySummary;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final radius = BorderRadius.circular(12);
+    return Semantics(
+      button: true,
+      label: 'Ulangi',
+      value: accessibilitySummary,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        color: colors.surface,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.repeat, size: 18, color: colors.muted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 10,
+                      runSpacing: 2,
+                      children: [
+                        const Text(
+                          'Ulangi',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          summary,
+                          style: TextStyle(fontSize: 13, color: colors.muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(Icons.chevron_right, size: 18, color: colors.muted),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PickerChip extends StatelessWidget {
   const _PickerChip({
     required this.icon,
@@ -335,7 +466,7 @@ class _PickerChip extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool muted;
   final VoidCallback? onClear;
 

@@ -28,17 +28,34 @@ class UpdateController extends ChangeNotifier {
   UpdateController()
     : _clientFactory = (() => HttpClient()),
       _temporaryDirectory = getTemporaryDirectory,
+      _supportedAbis = _androidSupportedAbis,
       _installPollInterval = const Duration(milliseconds: 500);
   @visibleForTesting
   UpdateController.withClient(
     this._clientFactory, {
     this._temporaryDirectory = getTemporaryDirectory,
+    this._supportedAbis = _noAbis,
     this._installPollInterval = const Duration(milliseconds: 500),
   });
   final HttpClient Function() _clientFactory;
   final Future<Directory> Function() _temporaryDirectory;
+  final Future<List<String>> Function() _supportedAbis;
   final Duration _installPollInterval;
   static const _bridge = MethodChannel('ohmyesok/update');
+
+  static Future<List<String>> _noAbis() async => const [];
+
+  static Future<List<String>> _androidSupportedAbis() async {
+    try {
+      return await _bridge.invokeListMethod<String>('supportedAbis') ??
+          const [];
+    } on PlatformException {
+      return const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
   UpdatePhase phase = UpdatePhase.idle;
   String installedVersion = '…';
   int installedCode = 0;
@@ -103,6 +120,8 @@ class UpdateController extends ChangeNotifier {
       if (candidates is! List) {
         throw const FormatException('Daftar rilis tidak valid.');
       }
+      final supportedAbis = await _supportedAbis();
+      if (_disposed) return;
       ReleaseManifest? best;
       String bestNotes = '';
       for (final candidate in candidates) {
@@ -117,12 +136,12 @@ class UpdateController extends ChangeNotifier {
         final tag = candidate['tag_name'] as String;
         final assets = candidate['assets'];
         if (assets is! List) continue;
-        Map<String, dynamic>? metadata;
-        Map<String, dynamic>? binary;
-        for (final asset in assets.whereType<Map<String, dynamic>>()) {
-          if (asset['name'] == 'ota-android.json') metadata = asset;
-          if (asset['name'] == ReleaseManifest.apkName) binary = asset;
-        }
+        final assetsByName = {
+          for (final asset in assets.whereType<Map<String, dynamic>>())
+            if (asset['name'] is String) asset['name'] as String: asset,
+        };
+        final metadata = assetsByName['ota-android.json'];
+        final binary = assetsByName[ReleaseManifest.apkName];
         if (metadata == null || binary == null) continue;
         final metadataUri = ReleaseManifest.assetUri(tag, 'ota-android.json');
         final binaryUri = ReleaseManifest.assetUri(
@@ -141,14 +160,17 @@ class UpdateController extends ChangeNotifier {
           releaseTag: tag,
           prerelease: prerelease,
           allowPreview: allowPreview,
+          supportedAbis: supportedAbis,
+          isPublished: (name, size, sha256) {
+            final asset = assetsByName[name];
+            return asset != null &&
+                asset['browser_download_url'] ==
+                    ReleaseManifest.assetUri(tag, name).toString() &&
+                asset['size'] == size &&
+                (asset['digest'] == null ||
+                    asset['digest'] == 'sha256:$sha256');
+          },
         );
-        if (binary['size'] != manifest.sizeBytes ||
-            (binary['digest'] != null &&
-                binary['digest'] != 'sha256:${manifest.sha256}')) {
-          throw const FormatException(
-            'Ukuran atau checksum rilis tidak sesuai.',
-          );
-        }
         if (best == null || manifest.versionCode > best.versionCode) {
           best = manifest;
           final body = candidate['body'];
@@ -192,7 +214,7 @@ class UpdateController extends ChangeNotifier {
       _client = _clientFactory()
         ..connectionTimeout = const Duration(seconds: 15);
       final response = await _request(
-        ReleaseManifest.assetUri(target.tag, ReleaseManifest.apkName),
+        ReleaseManifest.assetUri(target.tag, target.assetName),
       );
       _requireOk(response);
       if (response.contentLength != -1 &&

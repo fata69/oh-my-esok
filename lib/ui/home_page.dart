@@ -21,6 +21,7 @@ import 'day_review_sheet.dart';
 import 'patch_notes.dart';
 import 'tab_layout.dart';
 import 'task_editor.dart';
+import 'task_repeat.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
 
@@ -39,6 +40,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   late final PageController _controller;
   StreamSubscription<Uri?>? _widgetClicks;
+  Set<Uri>? _startupWidgetLinks = <Uri>{};
+  bool _widgetAddPending = false;
+  bool _taskEditorOpen = false;
   bool _dayReviewOpen = false;
 
   @override
@@ -46,17 +50,39 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
     _controller = PageController(initialPage: _basePage);
     WidgetsBinding.instance.addObserver(this);
-    _widgetClicks = HomeWidget.widgetClicked.listen(_openFromWidget);
+    _widgetClicks = HomeWidget.widgetClicked.listen((uri) {
+      if (uri == null || !mounted) return;
+      final startup = _startupWidgetLinks;
+      if (startup != null) {
+        startup.add(uri);
+      } else {
+        unawaited(_openFromWidget(uri));
+      }
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       TaskNotifier.instance.requestPermissions().catchError((Object error) {
         debugPrint('Notification permission request failed: $error');
       });
-      HomeWidget.initiallyLaunchedFromHomeWidget().then((uri) {
-        if (mounted) _openFromWidget(uri);
-      });
+      unawaited(_readStartupWidgetLinks());
     });
+  }
+
+  Future<void> _readStartupWidgetLinks() async {
+    Uri? initial;
+    try {
+      initial = await HomeWidget.initiallyLaunchedFromHomeWidget();
+    } catch (error) {
+      debugPrint('Reading initial widget link failed: $error');
+    }
+    if (!mounted) return;
+    final queued = {?initial, ...?_startupWidgetLinks};
+    _startupWidgetLinks = null;
+    for (final uri in queued) {
+      if (!mounted) break;
+      await _openFromWidget(uri);
+    }
   }
 
   @override
@@ -72,7 +98,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state != AppLifecycleState.resumed || _dayReviewOpen) return;
     final store = context.read<TaskStore>();
     WidgetSync.drainPendingToggles(store).then((changed) async {
-      if (changed) await WidgetSync.push();
+      if (changed) await _syncRecurringEffects();
       await store.refresh();
     });
   }
@@ -83,9 +109,16 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int _pageForDate(DateTime date) => _basePage + daysBetween(today(), date);
 
   Future<void> _jumpTo(DateTime date) async {
+    if (!mounted) return;
     final page = _pageForDate(date).clamp(0, _basePage * 2);
     if (!_controller.hasClients) {
       await context.read<TaskStore>().selectDate(date);
+      return;
+    }
+    if (MediaQuery.reduceMotionOf(context) ||
+        MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context)) {
+      _controller.jumpToPage(page);
       return;
     }
     await _controller.animateToPage(
@@ -116,7 +149,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       tasks: tasks,
       transactionsForDate: context.read<MoneyStore>().transactionsForDate,
       reconcileWidget: () async {
-        await WidgetSync.drainPendingToggles(tasks, reportErrors: true);
+        if (await WidgetSync.drainPendingToggles(tasks, reportErrors: true)) {
+          await _syncRecurringEffects();
+        }
       },
       rescheduleReminder: TaskNotifier.instance.reschedule,
       pushWidget: () => WidgetSync.push(reportErrors: true),
@@ -131,15 +166,37 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> createNote() => _openEditor();
 
-  Future<void> _openEditor({Task? task}) async {
+  Future<void> _openEditor({
+    Task? task,
+    DateTime? initialDate,
+    TaskEditScope? scope,
+  }) async {
+    if (_taskEditorOpen || !mounted) return;
+    _taskEditorOpen = true;
+    try {
+      await _editTask(task, initialDate, scope);
+    } finally {
+      _taskEditorOpen = false;
+    }
+  }
+
+  Future<void> _editTask(
+    Task? task,
+    DateTime? initialDate,
+    TaskEditScope? scope,
+  ) async {
     final store = context.read<TaskStore>();
     final result = await showModalBottomSheet<TaskEditorResult>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
-      builder: (context) =>
-          TaskEditorSheet(task: task, initialDate: store.selectedDate),
+      sheetAnimationStyle: agendaSheetAnimation(context),
+      builder: (_) => TaskEditorSheet(
+        task: task,
+        initialDate: initialDate ?? store.selectedDate,
+        scope: scope,
+      ),
     );
     if (result == null || !mounted) return;
 
@@ -169,17 +226,195 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final saved = result.task;
     if (saved == null) return;
 
-    final isNew = task == null;
-    if (isNew) {
+    final recurring = saved.isRecurring || (task?.isRecurring ?? false);
+    if (task == null) {
       await store.add(saved);
-      await TaskNotifier.instance.schedule(saved);
+    } else if (scope != null) {
+      try {
+        await store.updateOccurrence(
+          task,
+          saved,
+          following: scope == TaskEditScope.following,
+        );
+      } on ArgumentError catch (error) {
+        final message = error.message;
+        _showMessage(
+          message is String ? message : 'Jadwal ini belum bisa diubah.',
+        );
+        return;
+      }
     } else {
       await store.update(saved);
-      await TaskNotifier.instance.reschedule(saved);
+    }
+    if (recurring) {
+      await _syncRecurringEffects();
+    } else {
+      await TaskNotifier.instance.schedule(saved);
+      await WidgetSync.push();
+    }
+    if (!mounted) return;
+    var destination = saved.date;
+    if (saved.repeatWeekdays.isNotEmpty && scope != TaskEditScope.occurrence) {
+      for (var offset = 0; offset < 7; offset++) {
+        final date = DateTime(
+          saved.date.year,
+          saved.date.month,
+          saved.date.day + offset,
+        );
+        if (saved.repeatWeekdays.contains(date.weekday)) {
+          destination = date;
+          break;
+        }
+      }
+    }
+    await _jumpTo(destination);
+  }
+
+  Future<void> _openTask(Task task) async {
+    if (!task.isRecurring) {
+      await _openEditor(task: task);
+      return;
+    }
+    final edit = await _showTaskOptions<bool>(
+      title: task.title,
+      date: task.date,
+      time: task.scheduledTime,
+      options: (sheet) => [
+        _TaskAction(
+          label: 'Ubah jadwal',
+          icon: Icons.chevron_right,
+          onTap: () => Navigator.pop(sheet, true),
+        ),
+        _TaskAction(
+          label: 'Lewati kali ini',
+          detail: 'Hanya untuk tanggal ini',
+          icon: Icons.skip_next_outlined,
+          onTap: () => Navigator.pop(sheet, false),
+        ),
+      ],
+    );
+    if (edit == null || !mounted) return;
+    if (!edit) {
+      await _skipTask(task);
+      return;
+    }
+    final scope = await _showTaskOptions<TaskEditScope>(
+      title: 'Ubah jadwal',
+      date: task.date,
+      options: (sheet) => [
+        _TaskAction(
+          label: 'Hanya kali ini',
+          detail: 'Ubah tugas untuk tanggal ini saja.',
+          icon: Icons.chevron_right,
+          onTap: () => Navigator.pop(sheet, TaskEditScope.occurrence),
+        ),
+        _TaskAction(
+          label: 'Kali ini dan seterusnya',
+          detail: 'Jadwal sebelum tanggal ini tetap sama.',
+          icon: Icons.chevron_right,
+          onTap: () => Navigator.pop(sheet, TaskEditScope.following),
+        ),
+      ],
+    );
+    if (scope != null && mounted) await _openEditor(task: task, scope: scope);
+  }
+
+  Future<T?> _showTaskOptions<T>({
+    required String title,
+    required DateTime date,
+    String? time,
+    required List<Widget> Function(BuildContext) options,
+  }) {
+    return showModalBottomSheet<T>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: EsokColors.of(context).canvas,
+      barrierColor: EsokColors.scrim,
+      sheetAnimationStyle: agendaSheetAnimation(context),
+      builder: (sheet) {
+        final colors = EsokColors.of(sheet);
+        final text = Theme.of(sheet).textTheme;
+        final actions = options(sheet);
+        return SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child: Text(title, style: text.titleLarge),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(sheet),
+                      tooltip: 'Tutup',
+                      icon: const Icon(Icons.close, size: 20),
+                    ),
+                  ],
+                ),
+                Text(
+                  '${weekdayName(date)}, ${dateTitle(date)}'
+                  '${time == null ? '' : ' · ${timeText(time)}'}',
+                  style: text.bodySmall?.copyWith(color: colors.muted),
+                ),
+                const SizedBox(height: 12),
+                Material(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      for (final (index, action) in actions.indexed) ...[
+                        if (index > 0) const Divider(height: 1),
+                        action,
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _skipTask(Task task) async {
+    final store = context.read<TaskStore>();
+    await store.skipOccurrence(task);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tugas dilewati untuk ${dateTitle(task.date)}.'),
+          action: SnackBarAction(
+            label: 'Urungkan',
+            textColor: EsokColors.of(context).canvas,
+            onPressed: () async {
+              await store.undoSkipOccurrence(task);
+              await _syncRecurringEffects();
+            },
+          ),
+        ),
+      );
+    }
+    await _syncRecurringEffects();
+  }
+
+  Future<void> _syncRecurringEffects() async {
+    try {
+      await TaskNotifier.instance.syncFromDatabase();
+    } catch (error, stack) {
+      debugPrint('Agenda reminder sync failed: $error\n$stack');
     }
     await WidgetSync.push();
-    if (!mounted) return;
-    await _jumpTo(saved.date);
   }
 
   Future<void> _toggle(Task task) async {
@@ -193,26 +428,28 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (settings.soundEnabled) {
         SoundFx.play(allDone ? settings.soundComplete : settings.soundCheck);
       }
-      await TaskNotifier.instance.cancel(task.id);
+      if (!task.isRecurring) await TaskNotifier.instance.cancel(task.id);
     } else {
       if (settings.soundEnabled) SoundFx.play(settings.soundUncheck);
-      await TaskNotifier.instance.schedule(updated);
+      if (!task.isRecurring) await TaskNotifier.instance.schedule(updated);
     }
-    await WidgetSync.push();
+    if (task.isRecurring) {
+      await _syncRecurringEffects();
+    } else {
+      await WidgetSync.push();
+    }
   }
 
   Future<void> _openFromWidget(Uri? uri) async {
-    if (uri == null || uri.scheme != 'ohmyesok') return;
+    if (!mounted || uri == null || uri.scheme != 'ohmyesok') return;
 
     if (uri.host == 'money') {
       if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'new') {
         if (!mounted) return;
         await Navigator.of(context).push<String>(
           MaterialPageRoute<String>(
-            builder: (_) => TxEditorPage(
-              initialDate: today(),
-              initialKind: 'expense',
-            ),
+            builder: (_) =>
+                TxEditorPage(initialDate: today(), initialKind: 'expense'),
           ),
         );
       } else {
@@ -224,7 +461,23 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (uri.host == 'day') {
       if (uri.pathSegments.isEmpty) return;
       final date = DateTime.tryParse(uri.pathSegments.first);
-      if (date != null) await _jumpTo(dateOnly(date));
+      if (date == null) return;
+      final day = dateOnly(date);
+      if (uri.queryParameters['add'] != '1') {
+        await _jumpTo(day);
+        return;
+      }
+      if (_widgetAddPending || _taskEditorOpen) return;
+      _widgetAddPending = true;
+      try {
+        final store = context.read<TaskStore>();
+        await _jumpTo(day);
+        if (!mounted) return;
+        await store.selectDate(day);
+        if (mounted) await _openEditor(initialDate: day);
+      } finally {
+        _widgetAddPending = false;
+      }
       return;
     }
 
@@ -234,7 +487,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (task == null || !mounted) return;
     await _jumpTo(task.date);
     if (!mounted) return;
-    await _openEditor(task: task);
+    await _openTask(task);
   }
 
   Future<void> _openBatterySettings() async {
@@ -292,11 +545,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return EsokTabLayout(
       headerAction: PopupMenuButton<String>(
         tooltip: 'Pengaturan',
-        icon: Icon(
-          Icons.more_horiz,
-          size: 20,
-          color: colors.muted,
-        ),
+        icon: Icon(Icons.more_horiz, size: 20, color: colors.muted),
         color: colors.surface,
         surfaceTintColor: Colors.transparent,
         onSelected: (value) {
@@ -311,63 +560,47 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           }
         },
         itemBuilder: (context) => const [
-          PopupMenuItem(
-            value: 'alarms',
-            child: Text('Alarm & pengingat'),
-          ),
-          PopupMenuItem(
-            value: 'battery',
-            child: Text('Baterai tanpa batas'),
-          ),
-          PopupMenuItem(
-            value: 'widget',
-            child: Text('Pasang widget'),
-          ),
-          PopupMenuItem(
-            value: 'release_notes',
-            child: Text('Catatan rilis'),
-          ),
+          PopupMenuItem(value: 'alarms', child: Text('Alarm & pengingat')),
+          PopupMenuItem(value: 'battery', child: Text('Baterai tanpa batas')),
+          PopupMenuItem(value: 'widget', child: Text('Pasang widget')),
+          PopupMenuItem(value: 'release_notes', child: Text('Catatan rilis')),
         ],
       ),
-      child: Column(
-        children: [
-          EsokPeriodHeader(
-            title: dateTitle(selected),
-            caption: positionLabel(selected),
-            detail: '${weekdayName(selected)} · ${taskCountLabel(store.tasks.length)}',
-            previousLabel: 'Hari sebelumnya',
-            nextLabel: 'Hari berikutnya',
-            onPrevious: store.canGoPrevious
-                ? () => _jumpTo(selected.subtract(const Duration(days: 1)))
-                : null,
-            onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
-            onSelect: _openCalendar,
-          ),
-          Expanded(
-            child: PageView.builder(
-              controller: _controller,
-              itemCount: _basePage * 2 + 1,
-              onPageChanged: (index) {
-                context.read<TaskStore>().selectDate(_dateForPage(index));
-              },
-              itemBuilder: (context, index) {
-                final date = _dateForPage(index);
-                return _DayPane(
-                  key: ValueKey(index),
-                  date: date,
-                  revision: store.revision,
-                  atEarliest: date == store.earliestAllowedDate,
-                  onToggle: _toggle,
-                  onOpen: (task) => _openEditor(task: task),
-                  onCloseDay: () => _openDayReview(date),
-                  onJumpToday: () => _jumpTo(today()),
-                  onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
-                  onOpenMoney: widget.onOpenMoney,
-                );
-              },
-            ),
-          ),
-        ],
+      period: EsokPeriodHeader(
+        title: dateTitle(selected),
+        detail:
+            '${weekdayName(selected)} · ${positionLabel(selected)}'
+            '${selected.year == today().year ? '' : ' · ${selected.year}'}',
+        selectLabel: 'Pilih tanggal',
+        previousLabel: 'Hari sebelumnya',
+        nextLabel: 'Hari berikutnya',
+        onPrevious: store.canGoPrevious
+            ? () => _jumpTo(selected.subtract(const Duration(days: 1)))
+            : null,
+        onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
+        onSelect: _openCalendar,
+      ),
+      child: PageView.builder(
+        controller: _controller,
+        itemCount: _basePage * 2 + 1,
+        onPageChanged: (index) {
+          context.read<TaskStore>().selectDate(_dateForPage(index));
+        },
+        itemBuilder: (context, index) {
+          final date = _dateForPage(index);
+          return _DayPane(
+            key: ValueKey(index),
+            date: date,
+            revision: store.revision,
+            atEarliest: date == store.earliestAllowedDate,
+            onToggle: _toggle,
+            onOpen: _openTask,
+            onCloseDay: () => _openDayReview(date),
+            onJumpToday: () => _jumpTo(today()),
+            onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
+            onOpenMoney: widget.onOpenMoney,
+          );
+        },
       ),
     );
   }
@@ -458,19 +691,30 @@ class _DayPaneState extends State<_DayPane> {
             EsokTabLayout.scrollBottomOf(context),
           ),
           children: [
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton.icon(
-                onPressed: widget.onCloseDay,
-                style: TextButton.styleFrom(
-                  foregroundColor: colors.ink,
-                  minimumSize: const Size(48, 48),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    'Agenda',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
-                icon: const Icon(Icons.fact_check_outlined, size: 18),
-                label: const Text('Tutup hari'),
-              ),
+                TextButton.icon(
+                  onPressed: widget.onCloseDay,
+                  style: TextButton.styleFrom(
+                    foregroundColor: colors.ink,
+                    minimumSize: const Size(48, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  icon: const Icon(Icons.fact_check_outlined, size: 16),
+                  label: const Text('Tutup hari'),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
             if (tasks.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -478,14 +722,28 @@ class _DayPaneState extends State<_DayPane> {
                   'Belum ada catatan.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: Text(
+                  '${tasks.length - undone} dari ${tasks.length} selesai',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ),
-            for (var index = 0; index < tasks.length; index++)
-              _TaskRow(
-                task: tasks[index],
-                showDivider: index != tasks.length - 1,
-                onToggle: () => widget.onToggle(tasks[index]),
-                onOpen: () => widget.onOpen(tasks[index]),
-              ),
+              for (final (index, task) in tasks.indexed)
+                EsokGroupedRow(
+                  key: ValueKey(task.id),
+                  first: index == 0,
+                  last: index == tasks.length - 1,
+                  child: _TaskRow(
+                    task: task,
+                    showDivider: index != tasks.length - 1,
+                    onToggle: () => widget.onToggle(task),
+                    onOpen: () => widget.onOpen(task),
+                  ),
+                ),
+            ],
             if (isPast && undone > 0) ...[
               const SizedBox(height: 20),
               _LateNote(count: undone),
@@ -507,6 +765,56 @@ class _DayPaneState extends State<_DayPane> {
   }
 }
 
+class _TaskAction extends StatelessWidget {
+  const _TaskAction({
+    required this.label,
+    this.detail,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String? detail;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 52),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    if (detail != null)
+                      Text(
+                        detail!,
+                        style: TextStyle(fontSize: 12, color: colors.muted),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(icon, size: 20, color: colors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TaskRow extends StatelessWidget {
   const _TaskRow({
     required this.task,
@@ -523,8 +831,18 @@ class _TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final titleStyle = TextStyle(
-      fontSize: 17,
+    final duration =
+        MediaQuery.disableAnimationsOf(context) ||
+            MediaQuery.reduceMotionOf(context) ||
+            MediaQuery.accessibleNavigationOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 100);
+    final checkedColor = Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF63D99A)
+        : const Color(0xFF08754A);
+    final titleStyle = Theme.of(context).textTheme.bodyLarge!.copyWith(
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
       height: 1.3,
       color: task.isDone ? colors.muted : colors.ink,
       decoration: task.isDone ? TextDecoration.lineThrough : null,
@@ -538,75 +856,160 @@ class _TaskRow extends StatelessWidget {
           label: '${task.title}, ${task.isDone ? 'selesai' : 'belum selesai'}',
           child: Row(
             children: [
-              GestureDetector(
+              Semantics(
+                label: task.title,
+                checked: task.isDone,
                 onTap: onToggle,
-                behavior: HitTestBehavior.opaque,
-                child: SizedBox(
-                  width: 48,
-                  height: 64,
-                  child: Center(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOutQuart,
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: task.isDone
-                            ? colors.done
-                            : Colors.transparent,
-                        border: Border.all(
+                excludeSemantics: true,
+                child: InkWell(
+                  onTap: onToggle,
+                  child: SizedBox(
+                    width: 48,
+                    height: 56,
+                    child: Center(
+                      child: AnimatedContainer(
+                        duration: duration,
+                        curve: Curves.easeOutQuart,
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
                           color: task.isDone
-                              ? colors.done
-                              : colors.muted,
-                          width: 1.5,
+                              ? checkedColor
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: task.isDone ? checkedColor : colors.muted,
+                            width: 1.5,
+                          ),
                         ),
+                        child: task.isDone
+                            ? Icon(Icons.check, size: 13, color: colors.canvas)
+                            : null,
                       ),
-                      child: task.isDone
-                          ? Icon(
-                              Icons.check,
-                              size: 13,
-                              color: colors.fabText,
-                            )
-                          : null,
                     ),
                   ),
                 ),
               ),
               Expanded(
-                child: GestureDetector(
+                child: InkWell(
                   onTap: onOpen,
-                  behavior: HitTestBehavior.opaque,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 64),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeOutQuart,
-                            style: titleStyle,
-                            child: Text(task.title),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          timeText(task.scheduledTime),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: colors.muted,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ],
+                    constraints: const BoxConstraints(minHeight: 56),
+                    child: Padding(
+                      padding: EdgeInsetsDirectional.fromSTEB(
+                        0,
+                        8,
+                        task.isRecurring ? 0 : 12,
+                        8,
+                      ),
+                      child: task.isRecurring
+                          ? _RecurringTaskDetails(
+                              task: task,
+                              titleStyle: titleStyle,
+                              duration: duration,
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: AnimatedDefaultTextStyle(
+                                    duration: duration,
+                                    curve: Curves.easeOutQuart,
+                                    style: titleStyle,
+                                    child: Text(task.title),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  timeText(task.scheduledTime),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: colors.muted,
+                                    fontFeatures: [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
                   ),
                 ),
               ),
+              if (task.isRecurring)
+                IconButton(
+                  onPressed: onOpen,
+                  icon: Icon(Icons.more_horiz, color: colors.muted, size: 20),
+                  tooltip: 'Tindakan untuk ${task.title}',
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                ),
             ],
           ),
         ),
-        if (showDivider) const Divider(height: 1),
+        if (showDivider) const Divider(height: 1, indent: 48, endIndent: 12),
+      ],
+    );
+  }
+}
+
+class _RecurringTaskDetails extends StatelessWidget {
+  const _RecurringTaskDetails({
+    required this.task,
+    required this.titleStyle,
+    required this.duration,
+  });
+
+  final Task task;
+  final TextStyle titleStyle;
+  final Duration duration;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final repeat = TaskRepeatRule.fromWeekdays(task.repeatWeekdays, task.date);
+    final metaStyle = TextStyle(
+      fontSize: 12,
+      color: colors.muted,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedDefaultTextStyle(
+          duration: duration,
+          style: titleStyle,
+          child: Text(task.title),
+        ),
+        const SizedBox(height: 3),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (task.scheduledTime != null)
+              Text(timeText(task.scheduledTime), style: metaStyle),
+            Semantics(
+              label: repeat.summary(task.date),
+              excludeSemantics: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.repeat, size: 14, color: colors.muted),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      repeat.summary(task.date, compact: true),
+                      style: metaStyle,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -727,10 +1130,7 @@ class _BottomCard extends StatelessWidget {
               Expanded(
                 child: RichText(
                   text: TextSpan(
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.inkSoft,
-                      ),
+                    style: TextStyle(fontSize: 12, color: colors.inkSoft),
                     children: [
                       if (prefix != null)
                         TextSpan(

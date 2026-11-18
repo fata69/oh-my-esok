@@ -29,6 +29,64 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.9',
+      date: '18 Nov 2026',
+      notes: [
+        'Ketuk pengingat hari ini di widget Agenda untuk mencentang atau membatalkan centang.',
+        'Tugas selesai tetap terlihat dan judulnya dicoret. Jadwal berikutnya ditampilkan terpisah.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.8',
+      date: '18 Nov 2026',
+      notes: [
+        'Agenda bisa diulang setiap hari, Senin–Jumat, mingguan, atau pada hari pilihan.',
+        'Widget Agenda menampilkan progres hari ini, pintasan tambah, dan jadwal berikutnya.',
+        'Cari transaksi dari semua bulan lewat catatan, kategori, atau nama dompet.',
+        'Edit catatan transaksi lama mempertahankan dompet, kategori, jam, dan tanda nominal.',
+        'Pembaruan berikutnya bisa memilih paket yang sesuai perangkat untuk unduhan lebih kecil.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.7',
+      date: '17 Nov 2026',
+      notes: [
+        'Ikon navbar monokrom, dengan garis sedikit lebih tebal pada tab aktif.',
+        'Pilih ikon saat membuat kategori atau ubah ikon kategori langsung dari Catat.',
+        'Catat menampilkan dua baris kategori dan sebagian baris berikutnya saat pilihan masih bisa digulir.',
+        'Keypad angka kembali dari bawah setelah keyboard teks menutup, tanpa melepas draf catatan atau kategori.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.6',
+      date: '17 Nov 2026',
+      notes: [
+        'Menahan tab tidak lagi menampilkan lapisan abu-abu. Penanda navbar meluncur dengan awal yang lebih lembut.',
+        'Tanggal dan bulan sejajar di tengah pada Hari, Uang, dan Laporan, dengan satu panah di setiap sisi.',
+        'Ketuk tanggal untuk membuka kalender, atau ketuk bulan untuk memilih bulan dan tahun pada Uang dan Laporan.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.5',
+      date: '17 Nov 2026',
+      notes: [
+        'Penanda tab meluncur di dalam navbar dan tetap mulus saat arah ketukan berubah.',
+        'Tab Uang memisahkan saldo, dompet, dan riwayat. Filter jenis dan urutan hanya mengubah riwayat.',
+        'Dompet dan kategori punya pilihan ikon yang tersimpan, termasuk saat cadangan dipulihkan.',
+        'Hari menampilkan progres agenda, Setelan dikelompokkan, dan warna aksen mengikuti garis ikon.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.4',
+      date: '17 Nov 2026',
+      notes: [
+        'Tema Gelap memakai latar AMOLED hitam dan kontrol abu netral.',
+        'Tombol tambah muncul dari sisi navbar tanpa mengubah ukuran dan posisi dock.',
+        'Cari dan pilih model pindai dari daftar Google di Setelan.',
+        'Riwayat lebih mudah dipindai, dan ekspor membedakan tabel CSV dari cadangan JSON.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.3',
       date: '17 Nov 2026',
       notes: [
@@ -259,12 +317,6 @@ class PatchNotesSheet extends StatelessWidget {
                   isLatest: i == 0,
                 ),
               ],
-              const SizedBox(height: 24),
-              Text(
-                'Dikembangkan dari Esok oleh notSeraphimXD.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
-              ),
             ],
           ),
         ),

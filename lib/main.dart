@@ -58,6 +58,9 @@ Future<void> main() async {
     }
   }
 
+  final recoveryPending = AutoBackup.recovery.blocksBackup;
+  if (!recoveryPending) await WidgetSync.drainPendingToggles(store);
+
   try {
     TaskNotifier.instance.configureLead(
       enabled: settings.leadEnabled,
@@ -71,7 +74,9 @@ Future<void> main() async {
   } catch (error, stack) {
     debugPrint('Notification init failed: $error\n$stack');
   }
-  await WidgetSync.push();
+  if (!recoveryPending) await WidgetSync.push();
+
+  _startReminderTopUps();
 
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
@@ -103,6 +108,39 @@ Future<void> main() async {
 
   if (!empty) {
     unawaited(AutoBackup.runIfChanged());
+  }
+}
+
+void _startReminderTopUps() {
+  Future<void> topUp() async {
+    if (AutoBackup.recovery.blocksBackup) return;
+    try {
+      await TaskNotifier.instance.topUpRecurring();
+    } catch (error, stack) {
+      debugPrint('Reminder top-up failed: $error\n$stack');
+    }
+  }
+
+  Timer? timer;
+  AppLifecycleListener(
+    onResume: () {
+      unawaited(topUp());
+      timer ??= Timer.periodic(
+        const Duration(minutes: 15),
+        (_) => unawaited(topUp()),
+      );
+    },
+    onPause: () {
+      timer?.cancel();
+      timer = null;
+    },
+  );
+  // main() may finish after the initial resume event.
+  if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+    timer ??= Timer.periodic(
+      const Duration(minutes: 15),
+      (_) => unawaited(topUp()),
+    );
   }
 }
 

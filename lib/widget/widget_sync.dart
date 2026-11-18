@@ -21,31 +21,11 @@ class WidgetSync {
   static Future<void> push({bool reportErrors = false}) async {
     try {
       final db = await AppDatabase.open();
-      final dao = TaskDao(db);
-      final start = today();
-      final taskDays = <String, Object?>{};
-      for (var offset = 0; offset < 14; offset++) {
-        final date = start.add(Duration(days: offset));
-        final tasks = await dao.forDate(dateKey(date));
-        taskDays[dateKey(date)] = {
-          'total': tasks.length,
-          'done': tasks.where((task) => task.isDone).length,
-          'label': offset == 0
-              ? 'Hari ini'
-              : offset == 1
-              ? 'Besok'
-              : shortDayDate(date),
-          'tasks': tasks.map((task) => task.toWidgetJson()).toList(),
-        };
-      }
-
-      await _saveTaskSnapshot(
-        jsonEncode(taskDays),
-        reportErrors: reportErrors,
-      );
+      final now = today();
+      final taskDays = _agendaSnapshot(await TaskDao(db).all(), now);
+      await _saveTaskSnapshot(jsonEncode(taskDays), reportErrors: reportErrors);
       await HomeWidget.updateWidget(qualifiedAndroidName: androidProvider);
 
-      final now = today();
       final moneyDao = MoneyTransactionDao(db);
       final todayTransactions = await moneyDao.forDate(dateKey(now));
       final monthTransactions = await moneyDao.between(
@@ -134,6 +114,55 @@ class WidgetSync {
       debugPrint('WidgetSync.push failed: $error\n$stack');
       if (reportErrors) rethrow;
     }
+  }
+
+  static Map<String, Object?> _agendaSnapshot(List<Task> rows, DateTime now) {
+    final first = dateKey(DateTime(now.year, now.month, now.day - 1));
+    final last = dateKey(DateTime(now.year, now.month, now.day + 27));
+    final currentDay = dateKey(now);
+    final tasks = TaskDao.expandTasks(rows, first, last);
+    if (!tasks.any(
+      (task) => !task.isDone && task.scheduledDate.compareTo(currentDay) > 0,
+    )) {
+      // A one-time task or a series starting after the widget's regular window
+      // can still be the nearest appointment. A full week reaches each
+      // possible start weekday after its anchor date.
+      final laterDates =
+          rows
+              .where(
+                (task) =>
+                    !task.isDone &&
+                    !task.isSkipped &&
+                    task.scheduledDate.compareTo(last) > 0,
+              )
+              .map((task) => task.scheduledDate)
+              .toSet()
+              .toList()
+            ..sort();
+      for (final firstDate in laterDates) {
+        final date = DateTime.parse(firstDate);
+        final lastDate = dateKey(DateTime(date.year, date.month, date.day + 6));
+        final later = TaskDao.expandTasks(rows, firstDate, lastDate);
+        if (later.any((task) => !task.isDone)) {
+          tasks.addAll(later);
+          break;
+        }
+      }
+    }
+
+    final byDay = <String, List<Task>>{};
+    for (final task in tasks) {
+      byDay.putIfAbsent(task.scheduledDate, () => []).add(task);
+    }
+    return {
+      for (final entry in byDay.entries)
+        entry.key: {
+          'total': entry.value.length,
+          'done': entry.value.where((task) => task.isDone).length,
+          'label': shortDayDate(DateTime.parse(entry.key)),
+          'tasks': entry.value.map((task) => task.toWidgetJson()).toList(),
+        },
+    };
   }
 
   static Future<void> _saveTaskSnapshot(

@@ -114,6 +114,28 @@ class TaskStore extends ChangeNotifier {
     await loadMonth(_selectedDate);
   }
 
+  Future<void> updateOccurrence(
+    Task original,
+    Task updated, {
+    required bool following,
+  }) async {
+    if (original.isOccurrence) {
+      await _dao.updateOccurrence(original, updated, following: following);
+      await refresh();
+      await loadMonth(_selectedDate);
+    } else {
+      await update(updated);
+    }
+  }
+
+  Future<void> skipOccurrence(Task task) => delete(task.id);
+
+  Future<void> undoSkipOccurrence(Task task) async {
+    await _dao.undoSkipOccurrence(task);
+    await refresh();
+    await loadMonth(_selectedDate);
+  }
+
   /// Return the committed row before refreshing caches or platform effects.
   /// A later refresh failure must not be reported as a failed database write.
   /// The review service refreshes this store without changing selectedDate.

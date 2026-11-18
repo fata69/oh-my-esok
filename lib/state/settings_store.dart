@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../ai/gemini_model_catalog.dart';
 import '../util/sound_library.dart';
 
 class SettingsStore extends ChangeNotifier {
@@ -118,10 +119,9 @@ class SettingsStore extends ChangeNotifier {
         prefs.getString(_soundCompleteKey) ?? _soundCompleteId;
     _importedSounds = _decodeImports(prefs.getString(_soundImportsKey));
     _aiKey = prefs.getString(_aiApiKey) ?? '';
-    final storedModel = prefs.getString(_aiModelKey);
-    _aiModel = (storedModel == null || storedModel == 'gemini-2.5-flash')
-        ? defaultAiModel
-        : storedModel;
+    _aiModel =
+        GeminiModelCatalog.canonicalId(prefs.getString(_aiModelKey) ?? '') ??
+        defaultAiModel;
     notifyListeners();
   }
 
@@ -134,12 +134,20 @@ class SettingsStore extends ChangeNotifier {
   }
 
   Future<void> setAiModel(String value) async {
-    final model = value.trim().isEmpty ? defaultAiModel : value.trim();
+    final model = value.trim().isEmpty
+        ? defaultAiModel
+        : GeminiModelCatalog.canonicalId(value);
+    if (model == null) {
+      throw const GeminiModelCatalogException('ID model Gemini tidak valid.');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString(_aiModelKey) != model &&
+        !await prefs.setString(_aiModelKey, model)) {
+      throw const GeminiModelCatalogException('Model Gemini gagal disimpan.');
+    }
     if (_aiModel == model) return;
     _aiModel = model;
     notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_aiModelKey, model);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

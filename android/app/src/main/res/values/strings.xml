@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Oh My Esok</string>
-    <string name="widget_toggle">Tandai selesai</string>
-    <string name="widget_empty">Tidak ada catatan</string>
+    <string name="widget_check_task">Tandai %1$s selesai</string>
+    <string name="widget_uncheck_task">Tandai %1$s belum selesai</string>
+    <string name="widget_empty">Belum ada jadwal.</string>
+    <string name="widget_today">Hari ini</string>
+    <string name="widget_agenda">Agenda</string>
+    <string name="widget_agenda_name">Oh My Esok — Agenda</string>
+    <string name="widget_add_task">Tambah tugas hari ini</string>
+    <string name="widget_progress">%1$s · %2$d/%3$d selesai</string>
+    <string name="widget_next">Berikutnya · %1$s</string>
     <string name="widget_open">Buka Oh My Esok</string>
 </resources>

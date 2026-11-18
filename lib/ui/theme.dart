@@ -64,7 +64,7 @@ const _lightPalette = EsokPalette._(
 );
 
 const _darkPalette = EsokPalette._(
-  canvas: Color(0xFF111111),
+  canvas: Color(0xFF000000),
   surface: Color(0xFF191919),
   subtle: Color(0xFF191919),
   control: Color(0xFF222222),
@@ -74,12 +74,21 @@ const _darkPalette = EsokPalette._(
   ink: Color(0xFFEEEEEE),
   muted: Color(0xFFB4B4B4),
   action: Color(0xFFEEEEEE),
-  onAction: Color(0xFF111111),
-  accentContainer: Color(0xFF263248),
+  onAction: Color(0xFF000000),
+  accentContainer: Color(0xFF262626),
 );
 
 class EsokColors {
   EsokColors._();
+
+  static Color incomeInk(Brightness brightness) => brightness == Brightness.dark
+      ? const Color(0xFF548CFF)
+      : const Color(0xFF1558D4);
+
+  static Color expenseInk(Brightness brightness) =>
+      brightness == Brightness.dark
+      ? const Color(0xFFFF8836)
+      : const Color(0xFFB64A0B);
 
   /// Use this in widgets so offscreen tabs subscribe to the inherited theme.
   static EsokPalette of(BuildContext context) =>

@@ -1,9 +1,68 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'chevron.dart';
+import 'theme.dart';
+
+/// A quiet surface for one related group of content, with room for row ink.
+class EsokContentGroup extends StatelessWidget {
+  const EsokContentGroup({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _groupColor(context),
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+  }
+}
+
+Color _groupColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFF141414)
+    : const Color(0xFFF3F3F5);
+
+/// Separate list children share one silhouette while still building lazily.
+class EsokGroupedRow extends StatelessWidget {
+  const EsokGroupedRow({
+    super.key,
+    required this.first,
+    required this.last,
+    required this.child,
+  });
+
+  final bool first;
+  final bool last;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = Radius.circular(16);
+    return Material(
+      color: _groupColor(context),
+      borderRadius: BorderRadius.vertical(
+        top: first ? radius : Radius.zero,
+        bottom: last ? radius : Radius.zero,
+      ),
+      clipBehavior: first || last ? Clip.antiAlias : Clip.none,
+      child: child,
+    );
+  }
+}
 
 class EsokTabLayout extends StatelessWidget {
-  const EsokTabLayout({super.key, this.headerAction, required this.child});
+  const EsokTabLayout({
+    super.key,
+    this.headerAction,
+    this.period,
+    required this.child,
+  });
 
   static const gutter = 24.0;
 
@@ -13,6 +72,7 @@ class EsokTabLayout extends StatelessWidget {
       MediaQuery.paddingOf(context).bottom + 16;
 
   final Widget? headerAction;
+  final Widget? period;
   final Widget child;
 
   @override
@@ -52,6 +112,7 @@ class EsokTabLayout extends StatelessWidget {
               ),
             ),
           ),
+          ?period,
           Expanded(child: child),
         ],
       ),
@@ -67,79 +128,87 @@ class EsokPeriodHeader extends StatelessWidget {
     required this.nextLabel,
     this.onPrevious,
     required this.onNext,
-    this.caption,
     this.detail,
-    this.onSelect,
+    required this.selectLabel,
+    required this.onSelect,
   });
 
   final String title;
   final String previousLabel;
   final String nextLabel;
   final VoidCallback? onPrevious;
-  final VoidCallback onNext;
-  final String? caption;
+  final VoidCallback? onNext;
   final String? detail;
-  final VoidCallback? onSelect;
+  final String selectLabel;
+  final VoidCallback onSelect;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final period = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+    final colors = EsokColors.of(context);
+    final compact = MediaQuery.sizeOf(context).height < 480;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, compact ? 0 : 6, 16, compact ? 0 : 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (caption != null) ...[
-            Text(
-              caption!,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 2),
-          ],
-          Semantics(
-            header: true,
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                height: 1.2,
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 292),
+              child: Row(
+                children: [
+                  _PeriodArrow(
+                    label: previousLabel,
+                    left: true,
+                    onTap: onPrevious,
+                  ),
+                  Expanded(
+                    child: Tooltip(
+                      message: selectLabel,
+                      child: TextButton(
+                        onPressed: onSelect,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                          foregroundColor: colors.ink,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(width: 16),
+                            Flexible(
+                              child: Text(
+                                title,
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.14,
+                                  letterSpacing: -.35,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 16,
+                              color: colors.muted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  _PeriodArrow(label: nextLabel, left: false, onTap: onNext),
+                ],
               ),
             ),
           ),
-          if (detail != null) ...[
-            const SizedBox(height: 3),
+          if (!compact && detail != null)
             Text(
               detail!,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium,
             ),
-          ],
-        ],
-      ),
-    );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        EsokTabLayout.gutter,
-        8,
-        EsokTabLayout.gutter,
-        8,
-      ),
-      child: Row(
-        children: [
-          _PeriodArrow(label: previousLabel, left: true, onTap: onPrevious),
-          Expanded(
-            child: onSelect == null
-                ? period
-                : InkWell(
-                    onTap: onSelect,
-                    borderRadius: BorderRadius.circular(8),
-                    child: period,
-                  ),
-          ),
-          _PeriodArrow(label: nextLabel, left: false, onTap: onNext),
         ],
       ),
     );

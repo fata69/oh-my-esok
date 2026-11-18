@@ -6,6 +6,8 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../data/task.dart';
+import '../data/database.dart';
+import '../data/task_dao.dart';
 import '../util/format.dart';
 
 class TaskNotifier {
@@ -34,6 +36,7 @@ class TaskNotifier {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  bool _timezoneKnown = false;
 
   int notificationId(String taskId) => taskId.hashCode & 0x7fffffff;
 
@@ -43,12 +46,7 @@ class TaskNotifier {
   Future<void> init() async {
     if (_ready) return;
     tzdata.initializeTimeZones();
-    try {
-      final info = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(info.identifier));
-    } catch (error, stack) {
-      debugPrint('Timezone init failed: $error\n$stack');
-    }
+    await _refreshTimezone();
 
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('ic_stat_esok'),
@@ -56,6 +54,21 @@ class TaskNotifier {
     await _plugin.initialize(settings: settings);
     _ready = true;
     await _ensureChannel();
+  }
+
+  Future<bool> _refreshTimezone() async {
+    try {
+      final info = await FlutterTimezone.getLocalTimezone();
+      final location = tz.getLocation(info.identifier);
+      final changed = !_timezoneKnown || tz.local.name != location.name;
+      _timezoneKnown = true;
+      if (!changed) return false;
+      tz.setLocalLocation(location);
+      return true;
+    } catch (error, stack) {
+      debugPrint('Timezone init failed: $error\n$stack');
+      return false;
+    }
   }
 
   /// Kanal Android mengunci nada saat dibuat, jadi tiap pilihan suara
@@ -118,29 +131,42 @@ class TaskNotifier {
   }
 
   Future<void> schedule(Task task) async {
+    if (task.isRecurring) {
+      await syncFromDatabase();
+      return;
+    }
+    await _scheduleOccurrence(task);
+  }
+
+  Future<void> _scheduleOccurrence(Task task, {Set<int>? pending}) async {
     await init();
     await _ensureChannel();
-    await cancel(task.id);
+    if (pending == null) await cancel(task.id);
 
-    final when = task.scheduledDateTime;
+    final when = _scheduledTime(task);
     if (when == null || task.isDone) return;
     final now = DateTime.now();
     if (!when.isAfter(now)) return;
 
     final details = NotificationDetails(android: _details);
 
-    await _scheduleOne(
-      id: notificationId(task.id),
-      title: task.title,
-      body: 'Pengingat jam ${timeText(task.scheduledTime)}',
-      when: when,
-      payload: task.id,
-      details: details,
-    );
+    if (pending?.contains(notificationId(task.id)) != true) {
+      await _scheduleOne(
+        id: notificationId(task.id),
+        title: task.title,
+        body: 'Pengingat jam ${timeText(task.scheduledTime)}',
+        when: when,
+        payload: task.id,
+        details: details,
+      );
+    }
 
     if (!_leadEnabled || task.scheduledTime == null) return;
     final leadWhen = when.subtract(Duration(minutes: _leadMinutes));
-    if (!leadWhen.isAfter(now)) return;
+    if (!leadWhen.isAfter(now) ||
+        pending?.contains(leadNotificationId(task.id)) == true) {
+      return;
+    }
     await _scheduleOne(
       id: leadNotificationId(task.id),
       title: task.title,
@@ -150,6 +176,24 @@ class TaskNotifier {
       details: details,
     );
   }
+
+  DateTime? _scheduledTime(Task task) {
+    final hour = task.hour;
+    if (hour == null) return null;
+    if (!_timezoneKnown) return task.scheduledDateTime;
+    final day = task.date;
+    return tz.TZDateTime(
+      tz.local,
+      day.year,
+      day.month,
+      day.day,
+      hour,
+      task.minute ?? 0,
+    );
+  }
+
+  DateTime _localNow() =>
+      _timezoneKnown ? tz.TZDateTime.now(tz.local) : DateTime.now();
 
   Future<void> _scheduleOne({
     required int id,
@@ -195,16 +239,83 @@ class TaskNotifier {
     await _plugin.cancelAllPendingNotifications();
   }
 
-  Future<void> rescheduleAll(Iterable<Task> tasks) async {
+  Future<List<Task>> _readTasks() async {
+    final db = await AppDatabase.open();
+    return TaskDao(db).all();
+  }
+
+  Future<void> syncFromDatabase() =>
+      _enqueue(() async => _replaceSchedule(await _readTasks()));
+
+  Future<void> _pendingSync = Future<void>.value();
+  String? _filledDay;
+
+  Future<void> _enqueue(Future<void> Function() work) {
+    final operation = _pendingSync.then((_) => work());
+    _pendingSync = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
+
+  Future<void> rescheduleAll(Iterable<Task> tasks) {
+    final rows = tasks.toList(growable: false);
+    return _enqueue(() => _replaceSchedule(rows));
+  }
+
+  Future<void> topUpRecurring() => _enqueue(() async {
     await init();
+    if (await _refreshTimezone()) {
+      _filledDay = null;
+      await _replaceSchedule(await _readTasks());
+      return;
+    }
+    final now = _localNow();
+    final day = dateKey(now);
+    if (_filledDay == day) return;
+    final rows = await _readTasks();
+    final pending = await _plugin.pendingNotificationRequests();
+    await _scheduleRecurring(
+      rows,
+      now,
+      pending: pending.map((request) => request.id).toSet(),
+    );
+    _filledDay = day;
+  });
+
+  Future<void> _replaceSchedule(List<Task> rows) async {
+    await init();
+    await _refreshTimezone();
+    _filledDay = null;
     await _plugin.cancelAllPendingNotifications();
-    for (final task in tasks) {
-      await schedule(task);
+    final now = _localNow();
+    for (final task in rows.where((task) => !task.isRecurring)) {
+      await _scheduleOccurrence(task);
+    }
+    await _scheduleRecurring(rows, now);
+    _filledDay = dateKey(now);
+  }
+
+  Future<void> _scheduleRecurring(
+    List<Task> rows,
+    DateTime now, {
+    Set<int>? pending,
+  }) async {
+    final from = dateKey(now);
+    final to = dateKey(DateTime(now.year, now.month, now.day + 60));
+    final occurrences =
+        TaskDao.expandTasks(
+          rows.where((task) => task.isRecurring),
+          from,
+          to,
+        ).where(
+          (task) =>
+              !task.isDone && (_scheduledTime(task)?.isAfter(now) ?? false),
+        );
+    for (final task in occurrences.take(200)) {
+      await _scheduleOccurrence(task, pending: pending);
     }
   }
 
   Future<void> reschedule(Task task) async {
-    await cancel(task.id);
     await schedule(task);
   }
 }

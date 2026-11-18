@@ -76,8 +76,7 @@ class MoneyStore extends ChangeNotifier {
     for (final transaction in _allTransactions) {
       if (transaction.kind == 'income' && transaction.accountId == id) {
         balance += transaction.amount;
-      } else if (transaction.kind == 'expense' &&
-          transaction.accountId == id) {
+      } else if (transaction.kind == 'expense' && transaction.accountId == id) {
         balance -= transaction.amount;
       } else if (transaction.kind == 'transfer') {
         if (transaction.accountId == id) balance -= transaction.amount;
@@ -135,6 +134,23 @@ class MoneyStore extends ChangeNotifier {
   }
 
   int get monthCount => _monthTransactions.length;
+
+  List<MoneyTransaction> searchTransactions(String query) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return const [];
+    final words = normalized.split(RegExp(r'\s+'));
+
+    return _allTransactions.where((transaction) {
+      final fields = [
+        transaction.note ?? '',
+        if (!transaction.isTransfer && transaction.kind != 'adjustment')
+          categoryName(transaction.categoryId),
+        accountName(transaction.accountId),
+        if (transaction.isTransfer) accountName(transaction.toAccountId),
+      ].map((field) => field.toLowerCase()).toList();
+      return words.every((word) => fields.any((field) => field.contains(word)));
+    }).toList();
+  }
 
   String categoryName(String? id) {
     if (id == null) return 'Tanpa kategori';
@@ -255,7 +271,13 @@ class MoneyStore extends ChangeNotifier {
     return category;
   }
 
-  Future<void> renameCategory(String id, String name) async {
+  /// A missing icon preserves the current choice; [clearIcon] restores default.
+  Future<void> renameCategory(
+    String id,
+    String name, {
+    String? iconId,
+    bool clearIcon = false,
+  }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Nama kategori kosong');
     final current = _categories.firstWhere((category) => category.id == id);
@@ -266,7 +288,9 @@ class MoneyStore extends ChangeNotifier {
           category.name.toLowerCase() == trimmed.toLowerCase(),
     );
     if (duplicate) throw NameConflictException();
-    await _categoryDao.update(current.copyWith(name: trimmed));
+    await _categoryDao.update(
+      current.copyWith(name: trimmed, iconId: iconId, clearIcon: clearIcon),
+    );
     await _loadMeta();
     notifyListeners();
   }
@@ -303,6 +327,7 @@ class MoneyStore extends ChangeNotifier {
     String name,
     String type, {
     int openingBalance = 0,
+    String? iconKey,
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Nama dompet kosong');
@@ -320,6 +345,7 @@ class MoneyStore extends ChangeNotifier {
       archived: false,
       createdAt: DateTime.now().millisecondsSinceEpoch,
       openingBalance: openingBalance,
+      iconKey: iconKey,
     );
     await _accountDao.insert(account);
     await _loadMeta();
@@ -327,7 +353,13 @@ class MoneyStore extends ChangeNotifier {
     return account;
   }
 
-  Future<void> renameAccount(String id, String name) async {
+  /// A missing icon preserves the current choice; [clearIcon] restores default.
+  Future<void> renameAccount(
+    String id,
+    String name, {
+    String? iconKey,
+    bool clearIcon = false,
+  }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Nama dompet kosong');
     final current = _accounts.firstWhere((account) => account.id == id);
@@ -337,7 +369,9 @@ class MoneyStore extends ChangeNotifier {
           account.name.toLowerCase() == trimmed.toLowerCase(),
     );
     if (duplicate) throw NameConflictException();
-    await _accountDao.update(current.copyWith(name: trimmed));
+    await _accountDao.update(
+      current.copyWith(name: trimmed, iconKey: iconKey, clearIcon: clearIcon),
+    );
     await _loadMeta();
     notifyListeners();
   }

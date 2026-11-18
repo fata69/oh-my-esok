@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,6 +19,8 @@ import '../util/sound_fx.dart';
 import 'category_icon.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
+import 'money_icon_catalog.dart';
+import 'money_icon_picker.dart';
 import 'receipt_scan_review.dart';
 import 'theme.dart';
 
@@ -48,6 +51,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
   late final TextEditingController _noteController;
   bool _creatingCategory = false;
   final _categoryNameController = TextEditingController();
+  final _categoryScroll = ScrollController(keepScrollOffset: false);
+  bool _addingCategory = false;
+  String? _draftCategoryIconId;
   String? _categoryError;
   bool _saving = false;
   bool _scanning = false;
@@ -56,6 +62,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
   bool get _isEditing => widget.transaction != null;
   bool get _isTransfer => _kind == 'transfer';
+  bool get _sameKind => widget.transaction?.kind == _kind;
+  int get _signedAmount =>
+      _sameKind && widget.transaction!.amount < 0 ? -_amount : _amount;
 
   @override
   void initState() {
@@ -72,13 +81,18 @@ class _TxEditorPageState extends State<TxEditorPage> {
         ? dateOnly(widget.initialDate ?? today())
         : DateTime.parse(transaction.date);
     _noteController = TextEditingController(text: transaction?.note ?? '');
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSelections());
+    if (!_isEditing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensureSelections();
+      });
+    }
   }
 
   @override
   void dispose() {
     _noteController.dispose();
     _categoryNameController.dispose();
+    _categoryScroll.dispose();
     super.dispose();
   }
 
@@ -97,13 +111,14 @@ class _TxEditorPageState extends State<TxEditorPage> {
       changed = true;
     }
     if (_accountId == null ||
-        !accounts.any((account) => account.id == _accountId)) {
+        (!_isEditing && !accounts.any((account) => account.id == _accountId))) {
       _accountId = accounts.isEmpty ? null : accounts.first.id;
       changed = true;
     }
     if (_isTransfer &&
         (_toAccountId == null ||
-            !accounts.any((account) => account.id == _toAccountId) ||
+            (!_isEditing &&
+                !accounts.any((account) => account.id == _toAccountId)) ||
             _toAccountId == _accountId)) {
       final other = accounts
           .where((account) => account.id != _accountId)
@@ -115,6 +130,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   void _pressKey(String key) {
+    FocusManager.instance.primaryFocus?.unfocus();
     HapticFeedback.lightImpact();
     if (key == 'back') {
       setState(() => _amount = _amount ~/ 10);
@@ -137,11 +153,13 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   void _changeKind(String kind) {
+    if (_addingCategory) return;
     _manualKindChosen = true;
     if (_kind == kind) return;
     setState(() {
       _kind = kind;
       _creatingCategory = false;
+      _draftCategoryIconId = null;
       _categoryError = null;
       if (kind == 'transfer') {
         _categoryId = null;
@@ -181,10 +199,18 @@ class _TxEditorPageState extends State<TxEditorPage> {
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (_) => _WalletSheet(
-        title: to ? 'Ke sumber dana' : 'Dari sumber dana',
+        title: switch (_kind) {
+          'income' => 'Terima ke dompet',
+          'expense' => 'Bayar dari dompet',
+          _ => to ? 'Ke dompet' : 'Dari dompet',
+        },
         accounts: accounts,
         selectedId: to ? _toAccountId : _accountId,
-        excludedId: to ? _accountId : null,
+        excludedId: to
+            ? _accountId
+            : _isEditing && _isTransfer
+            ? _toAccountId
+            : null,
       ),
     );
     if (selected == null || !mounted) return;
@@ -195,10 +221,15 @@ class _TxEditorPageState extends State<TxEditorPage> {
       if (!mounted) return;
       final refreshed = context.read<MoneyStore>().activeAccounts;
       setState(() {
-        if (!refreshed.any((account) => account.id == _accountId)) {
+        if (_accountId == null ||
+            (!_isEditing &&
+                !refreshed.any((account) => account.id == _accountId))) {
           _accountId = refreshed.isEmpty ? null : refreshed.first.id;
         }
-        if (to && !refreshed.any((account) => account.id == _toAccountId)) {
+        if (to &&
+            (_toAccountId == null ||
+                (!_isEditing &&
+                    !refreshed.any((account) => account.id == _toAccountId)))) {
           _toAccountId = refreshed
               .where((account) => account.id != _accountId)
               .firstOrNull
@@ -224,33 +255,82 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
   Future<void> _addCategoryInline() async {
     final name = _categoryNameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty || _addingCategory) return;
+    final kind = _kind;
+    setState(() => _addingCategory = true);
     try {
       final category = await context.read<MoneyStore>().addCategory(
         name,
-        _kind,
+        kind,
+        iconId: _draftCategoryIconId,
       );
-      if (!mounted) return;
+      if (!mounted || _kind != kind || !_creatingCategory) return;
+      FocusScope.of(context).unfocus();
       setState(() {
         _categoryId = category.id;
         _creatingCategory = false;
+        _draftCategoryIconId = null;
         _categoryError = null;
         _categoryNameController.clear();
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            _categoryScroll.hasClients &&
+            _categoryId == category.id) {
+          _categoryScroll.jumpTo(_categoryScroll.position.maxScrollExtent);
+        }
+      });
     } on NameConflictException {
-      if (!mounted) return;
+      if (!mounted || _kind != kind || !_creatingCategory) return;
       setState(() => _categoryError = 'Kategori itu sudah ada.');
+    } finally {
+      if (mounted) setState(() => _addingCategory = false);
     }
   }
 
+  Future<void> _changeCategoryIcon(MoneyCategory category) async {
+    final store = context.read<MoneyStore>();
+    final choice = await showMoneyIconPicker(
+      context,
+      iconSet: MoneyIconSet.category,
+      value: category.iconId,
+      automatic: categoryIconSpec(null, categoryId: category.id),
+      categoryKind: category.kind,
+    );
+    if (!mounted || choice == null || choice.id == category.iconId) return;
+    await store.renameCategory(
+      category.id,
+      category.name,
+      iconId: choice.id,
+      clearIcon: choice.id == null,
+    );
+  }
+
+  void _cancelCategory() {
+    if (_addingCategory) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _creatingCategory = false;
+      _draftCategoryIconId = null;
+      _categoryNameController.clear();
+      _categoryError = null;
+    });
+  }
+
   bool get _canSave {
-    if (_amount <= 0 || _date == null || _scanning) return false;
+    final original = widget.transaction;
+    final preservingZero = _sameKind && !_hasScanDraft && original?.amount == 0;
+    if ((_amount <= 0 && !preservingZero) || _date == null || _scanning) {
+      return false;
+    }
     if (_isTransfer) {
       return _accountId != null &&
           _toAccountId != null &&
           _accountId != _toAccountId;
     }
-    return _categoryId != null && _accountId != null;
+    final preservingNoCategory =
+        _sameKind && !_hasScanDraft && original?.categoryId == null;
+    return (_categoryId != null || preservingNoCategory) && _accountId != null;
   }
 
   Future<void> _save() async {
@@ -262,12 +342,15 @@ class _TxEditorPageState extends State<TxEditorPage> {
       final note = _noteController.text.trim();
       final transaction = MoneyTransaction(
         id: widget.transaction?.id ?? const Uuid().v4(),
-        amount: _amount,
+        amount: _signedAmount,
         kind: _kind,
-        categoryId: _isTransfer ? null : _categoryId,
+        categoryId: _isTransfer
+            ? (_sameKind ? widget.transaction?.categoryId : null)
+            : _categoryId,
         accountId: _accountId!,
         toAccountId: _isTransfer ? _toAccountId : null,
         date: dateKey(_date!),
+        time: widget.transaction?.time,
         note: note.isEmpty ? null : note,
         detail: _detail,
         createdAt:
@@ -420,6 +503,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       _noteController.text = _summaryForScan(scan);
       _detail = scan.detailText(numberText);
       _creatingCategory = false;
+      _draftCategoryIconId = null;
     });
     _ensureSelections();
     _toast('Draf pindai perlu diperiksa. Simpan hanya setelah cocok.');
@@ -453,9 +537,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -464,36 +547,60 @@ class _TxEditorPageState extends State<TxEditorPage> {
     final categories = _kind == 'income'
         ? store.incomeCategories
         : store.expenseCategories;
-    final accounts = store.activeAccounts;
     final selectedCategory = categories
         .where((category) => category.id == _categoryId)
         .firstOrNull;
-    final selectedAccount = accounts
-        .where((account) => account.id == _accountId)
-        .firstOrNull;
-    final selectedToAccount = accounts
-        .where((account) => account.id == _toAccountId)
-        .firstOrNull;
+    final selectedAccount = _accountId == null
+        ? null
+        : store.accountById(_accountId!);
+    final selectedToAccount = _toAccountId == null
+        ? null
+        : store.accountById(_toAccountId!);
 
+    final media = MediaQuery.of(context);
+    final keyboardOpen = media.viewInsets.bottom > 0;
     return Scaffold(
       backgroundColor: EsokColors.canvas,
       body: SafeArea(
+        maintainBottomViewPadding: true,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final categoryHeight = (constraints.maxHeight - 510).clamp(
-              158.0,
-              226.0,
-            );
-            final categoryGrid = Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _CategoryGrid(
-                categories: categories,
-                selectedId: _categoryId,
-                onSelect: (id) => setState(() => _categoryId = id),
-                onNew: () => setState(() {
-                  _creatingCategory = true;
-                  _categoryError = null;
-                }),
+            final wide = constraints.maxWidth >= 520;
+            final columns = wide ? 6 : 3;
+            const keyHeight = 48.0;
+            final keypadHeight = (12 ~/ columns) * (keyHeight + 7) - 7 + 16;
+            // Choose the dock's placement once for this viewport, irrespective
+            // of insets from Android's keyboard.
+            final safeHeight = media.size.height - media.viewPadding.vertical;
+            final docked = safeHeight >= keypadHeight + 168;
+            final reduceMotion =
+                media.reduceMotion ||
+                media.disableAnimations ||
+                media.accessibleNavigation;
+            final dock = _TransactionDock(
+              visible: !keyboardOpen,
+              reduceMotion: reduceMotion,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: _Keypad(
+                      key: const ValueKey('transaction-keypad'),
+                      onKey: _pressKey,
+                      columns: columns,
+                      keyHeight: keyHeight,
+                    ),
+                  ),
+                  _BottomActions(
+                    canSave: _canSave,
+                    saving: _saving,
+                    scanning: _scanning,
+                    onCancel: () => Navigator.of(context).pop(),
+                    onScan: _scanReceipt,
+                    onSave: _save,
+                  ),
+                ],
               ),
             );
 
@@ -501,55 +608,20 @@ class _TxEditorPageState extends State<TxEditorPage> {
               SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Text(
-                      _isEditing ? 'Ubah' : 'Catat',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: EsokColors.ink,
-                      ),
+                child: Center(
+                  child: Text(
+                    _isEditing ? 'Ubah' : 'Catat',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: EsokColors.ink,
                     ),
-                    if (!_saving)
-                      Positioned(
-                        right: 8,
-                        child: _scanning
-                            ? const SizedBox(
-                                width: 36,
-                                height: 36,
-                                child: Padding(
-                                  padding: EdgeInsets.all(10),
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : GestureDetector(
-                                onTap: _scanReceipt,
-                                behavior: HitTestBehavior.opaque,
-                                child: Container(
-                                  width: 36,
-                                  height: 36,
-                                  alignment: Alignment.center,
-                                  child: Icon(
-                                    Icons.photo_camera_outlined,
-                                    size: 19,
-                                    color: EsokColors.muted,
-                                  ),
-                                ),
-                              ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _Segments(
-                  selected: _kind,
-                  onChanged: _changeKind,
-                ),
+                child: _Segments(selected: _kind, onChanged: _changeKind),
               ),
               if (_hasScanDraft)
                 const Padding(
@@ -560,25 +632,42 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     style: TextStyle(fontSize: 11),
                   ),
                 ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               if (!_isTransfer) ...[
-                SizedBox(height: categoryHeight, child: categoryGrid),
-                if (_creatingCategory) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _InlineCategory(
-                      controller: _categoryNameController,
-                      error: _categoryError,
-                      onCancel: () => setState(() {
-                        _creatingCategory = false;
-                        _categoryNameController.clear();
-                        _categoryError = null;
-                      }),
-                      onSave: _addCategoryInline,
-                    ),
-                  ),
-                ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _creatingCategory
+                      ? _InlineCategory(
+                          controller: _categoryNameController,
+                          kind: _kind,
+                          error: _categoryError,
+                          iconId: _draftCategoryIconId,
+                          saving: _addingCategory,
+                          onIconChanged: (iconId) =>
+                              setState(() => _draftCategoryIconId = iconId),
+                          onCancel: _cancelCategory,
+                          onSave: _addCategoryInline,
+                        )
+                      : _CategorySection(
+                          categories: categories,
+                          selected: selectedCategory,
+                          historicalLabel:
+                              _sameKind &&
+                                  !_hasScanDraft &&
+                                  selectedCategory == null
+                              ? store.categoryName(_categoryId)
+                              : null,
+                          controller: _categoryScroll,
+                          onSelect: (id) => setState(() => _categoryId = id),
+                          onEditIcon: _changeCategoryIcon,
+                          onNew: () => setState(() {
+                            _creatingCategory = true;
+                            _draftCategoryIconId = null;
+                            _categoryError = null;
+                            _categoryNameController.clear();
+                          }),
+                        ),
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   child: Row(
@@ -586,7 +675,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
                       Expanded(
                         flex: 5,
                         child: _WalletPill(
-                          label: selectedAccount?.name ?? 'Sumber dana',
+                          label: selectedAccount?.name ?? 'Pilih dompet',
+                          account: selectedAccount,
                           onTap: () => _pickAccount(to: false),
                         ),
                       ),
@@ -610,11 +700,13 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     children: [
                       _WalletPill(
                         label: 'Dari ${selectedAccount?.name ?? '—'}',
+                        account: selectedAccount,
                         onTap: () => _pickAccount(to: false),
                       ),
                       const SizedBox(height: 8),
                       _WalletPill(
                         label: 'Ke ${selectedToAccount?.name ?? '—'}',
+                        account: selectedToAccount,
                         onTap: () => _pickAccount(to: true),
                       ),
                       const SizedBox(height: 8),
@@ -628,146 +720,155 @@ class _TxEditorPageState extends State<TxEditorPage> {
                 ),
                 const SizedBox(height: 8),
               ],
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Container(
-                height: 62,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: EsokColors.soft,
-                  borderRadius: BorderRadius.circular(12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Container(
+                  height: 62,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: EsokColors.soft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _isTransfer
+                              ? 'PINDAH'
+                              : (selectedCategory?.name ?? 'JUMLAH')
+                                    .toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.06,
+                            color: EsokColors.muted,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            _hasScanDraft && _amount == 0
+                                ? 'Isi nominal'
+                                : 'Rp ${numberText(_signedAmount)}',
+                            style: TextStyle(
+                              fontSize: 25,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.02,
+                              color: _amount == 0
+                                  ? EsokColors.disabled
+                                  : EsokColors.ink,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        _isTransfer
-                            ? 'PINDAH'
-                            : (selectedCategory?.name ?? 'JUMLAH')
-                                  .toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.06,
-                          color: EsokColors.muted,
+                      child: _DateChip(
+                        label: 'Hari ini',
+                        selected: _date == today(),
+                        onTap: () => setState(() => _date = today()),
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: _DateChip(
+                        label: 'Kemarin',
+                        selected:
+                            _date == today().subtract(const Duration(days: 1)),
+                        onTap: () => setState(
+                          () =>
+                              _date = today().subtract(const Duration(days: 1)),
                         ),
                       ),
                     ),
-                    Text(
-                      _hasScanDraft && _amount == 0
-                          ? 'Isi nominal'
-                          : 'Rp ${numberText(_amount)}',
-                      style: TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.02,
-                        color: _amount == 0
-                            ? EsokColors.disabled
-                            : EsokColors.ink,
-                        fontFeatures: const [
-                          FontFeature.tabularFigures(),
-                        ],
+                    const SizedBox(width: 7),
+                    GestureDetector(
+                      onTap: _pickDate,
+                      child: Container(
+                        height: 38,
+                        padding: const EdgeInsets.symmetric(horizontal: 11),
+                        decoration: BoxDecoration(
+                          color: EsokColors.soft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.calendar_today_outlined,
+                              size: 15,
+                              color: EsokColors.ink,
+                            ),
+                            if (_date == null) ...[
+                              const SizedBox(width: 6),
+                              const Text('Pilih tanggal'),
+                            ] else if (_date != today() &&
+                                _date !=
+                                    today().subtract(
+                                      const Duration(days: 1),
+                                    )) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                shortDateTitle(_date!),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: EsokColors.ink,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _DateChip(
-                      label: 'Hari ini',
-                      selected: _date == today(),
-                      onTap: () => setState(() => _date = today()),
+              if (_isEditing)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: TextButton(
+                    onPressed: _delete,
+                    style: TextButton.styleFrom(
+                      foregroundColor: EsokColors.lateInk,
+                      textStyle: const TextStyle(fontSize: 13),
                     ),
+                    child: const Text('Hapus transaksi'),
                   ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: _DateChip(
-                      label: 'Kemarin',
-                      selected:
-                          _date == today().subtract(const Duration(days: 1)),
-                      onTap: () => setState(
-                        () => _date = today().subtract(
-                          const Duration(days: 1),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  GestureDetector(
-                    onTap: _pickDate,
-                    child: Container(
-                      height: 38,
-                      padding: const EdgeInsets.symmetric(horizontal: 11),
-                      decoration: BoxDecoration(
-                        color: EsokColors.soft,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.calendar_today_outlined,
-                            size: 15,
-                            color: EsokColors.ink,
-                          ),
-                          if (_date == null) ...[
-                            const SizedBox(width: 6),
-                            const Text('Pilih tanggal'),
-                          ] else if (_date != today() &&
-                              _date !=
-                                  today().subtract(
-                                    const Duration(days: 1),
-                                  )) ...[
-                            const SizedBox(width: 6),
-                            Text(
-                              shortDateTitle(_date!),
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: EsokColors.ink,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: _Keypad(onKey: _pressKey),
-            ),
-            if (_isEditing)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: TextButton(
-                  onPressed: _delete,
-                  style: TextButton.styleFrom(
-                    foregroundColor: EsokColors.lateInk,
-                    textStyle: const TextStyle(fontSize: 13),
-                  ),
-                  child: const Text('Hapus transaksi'),
                 ),
-              ),
-              _BottomActions(
-                canSave: _canSave,
-                saving: _saving,
-                onCancel: () => Navigator.of(context).pop(),
-                onSave: _save,
-              ),
+              const SizedBox(height: 8),
+              if (!docked) dock,
             ];
 
-            // Keep the note field mounted when the Android keyboard resizes
-            // the viewport. Replacing this subtree would drop its focus.
-            return SingleChildScrollView(child: Column(children: children));
+            // Keep the editable scroll view mounted across IME changes so
+            // the note and category fields never lose focus.
+            return Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.manual,
+                    child: Column(children: children),
+                  ),
+                ),
+                if (docked) dock,
+              ],
+            );
           },
         ),
       ),
@@ -1022,48 +1123,114 @@ class _Segments extends StatelessWidget {
   }
 }
 
-class _CategoryGrid extends StatelessWidget {
-  const _CategoryGrid({
+class _CategorySection extends StatelessWidget {
+  const _CategorySection({
     required this.categories,
-    required this.selectedId,
+    required this.selected,
+    required this.historicalLabel,
+    required this.controller,
     required this.onSelect,
+    required this.onEditIcon,
     required this.onNew,
   });
 
   final List<MoneyCategory> categories;
-  final String? selectedId;
+  final MoneyCategory? selected;
+  final String? historicalLabel;
+  final ScrollController controller;
   final ValueChanged<String> onSelect;
+  final ValueChanged<MoneyCategory> onEditIcon;
   final VoidCallback onNew;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      primary: false,
-      padding: EdgeInsets.zero,
-      itemCount: categories.length + 1,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        mainAxisExtent: 70,
-      ),
-      itemBuilder: (context, index) {
-        if (index == categories.length) {
-          return _CategoryTile(
-            onTap: onNew,
-            selected: false,
-            newTile: true,
-            label: 'Baru',
-          );
-        }
-        final category = categories[index];
-        return _CategoryTile(
-          onTap: () => onSelect(category.id),
-          selected: category.id == selectedId,
-          icon: CategoryIconView(category: category, size: 20),
-          label: category.name,
-        );
-      },
+    const columns = 4;
+    const gap = 6.0;
+    final rowHeight = math.max(
+      60.0,
+      40 + MediaQuery.textScalerOf(context).scale(11) * 1.35,
+    );
+    final rows = (categories.length + columns - 1) ~/ columns;
+    final height = math.min(
+      rows * (rowHeight + gap) - gap,
+      rowHeight * 2.5 + gap * 2,
+    );
+    final action = TextButton.styleFrom(
+      foregroundColor: EsokColors.ink,
+      minimumSize: const Size(48, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      textStyle: const TextStyle(fontSize: 12),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  'Kategori',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                children: [
+                  if (selected case final category?)
+                    TextButton(
+                      onPressed: () => onEditIcon(category),
+                      style: action,
+                      child: const Text('Ubah ikon'),
+                    ),
+                  TextButton.icon(
+                    onPressed: onNew,
+                    style: action,
+                    icon: const Icon(Icons.add, size: 15),
+                    label: const Text('Baru'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (historicalLabel case final label?)
+          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        if (rows == 0 && historicalLabel == null)
+          Text(
+            'Belum ada kategori.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          )
+        else if (rows > 0)
+          SizedBox(
+            key: const ValueKey('transaction-categories'),
+            height: height,
+            child: GridView.builder(
+              controller: controller,
+              primary: false,
+              padding: EdgeInsets.zero,
+              itemCount: categories.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: gap,
+                crossAxisSpacing: gap,
+                mainAxisExtent: rowHeight,
+              ),
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                return _CategoryTile(
+                  onTap: () => onSelect(category.id),
+                  selected: category.id == selected?.id,
+                  icon: CategoryIconView(category: category, size: 20),
+                  label: category.name,
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1072,54 +1239,49 @@ class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     required this.onTap,
     required this.selected,
-    this.icon,
-    this.label,
-    this.newTile = false,
+    required this.icon,
+    required this.label,
   });
 
   final VoidCallback onTap;
   final bool selected;
-  final Widget? icon;
-  final String? label;
-  final bool newTile;
+  final Widget icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-        decoration: BoxDecoration(
-          color: selected ? EsokColors.canvas : EsokColors.soft,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: selected
-                ? EsokColors.ink
-                : newTile
-                ? EsokColors.lineStrong
-                : Colors.transparent,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (newTile)
-              Icon(Icons.add, size: 19, color: EsokColors.muted)
-            else
-              icon ?? const SizedBox.shrink(),
-            const SizedBox(height: 5),
-            Text(
-              label ?? '',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9.5,
-                color: selected ? EsokColors.ink : EsokColors.inkSoft,
-              ),
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          decoration: BoxDecoration(
+            color: selected ? EsokColors.canvas : EsokColors.soft,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: selected ? EsokColors.ink : Colors.transparent,
+              width: selected ? 1.5 : 1,
             ),
-          ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: selected ? EsokColors.ink : EsokColors.inkSoft,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1129,94 +1291,122 @@ class _CategoryTile extends StatelessWidget {
 class _InlineCategory extends StatelessWidget {
   const _InlineCategory({
     required this.controller,
+    required this.kind,
     required this.error,
+    required this.iconId,
+    required this.saving,
+    required this.onIconChanged,
     required this.onCancel,
     required this.onSave,
   });
 
   final TextEditingController controller;
+  final String kind;
   final String? error;
+  final String? iconId;
+  final bool saving;
+  final ValueChanged<String?> onIconChanged;
   final VoidCallback onCancel;
   final VoidCallback onSave;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(11, 9, 11, 7),
-      decoration: BoxDecoration(
-        color: EsokColors.surface,
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: EsokColors.lineStrong),
+    final field = TextField(
+      controller: controller,
+      enabled: !saving,
+      autofocus: true,
+      textCapitalization: TextCapitalization.sentences,
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => onSave(),
+      style: TextStyle(fontSize: 14, color: EsokColors.ink),
+      decoration: InputDecoration(
+        hintText: 'Nama kategori baru',
+        hintStyle: TextStyle(fontSize: 14, color: EsokColors.muted),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 13,
+        ),
+        filled: true,
+        fillColor: EsokColors.soft,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            onSubmitted: (_) => onSave(),
-            style: TextStyle(fontSize: 14, color: EsokColors.ink),
-            decoration: InputDecoration(
-              hintText: 'Nama kategori baru',
-              errorText: error,
-              hintStyle: TextStyle(fontSize: 14, color: EsokColors.muted),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 10,
-              ),
-              filled: true,
-              fillColor: EsokColors.soft,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
+    );
+    final cancel = TextButton(
+      onPressed: saving ? null : onCancel,
+      style: TextButton.styleFrom(
+        foregroundColor: EsokColors.muted,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
+      child: const Text('Batal'),
+    );
+    final save = ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => TextButton(
+        onPressed: saving || value.text.trim().isEmpty ? null : onSave,
+        style: TextButton.styleFrom(
+          foregroundColor: EsokColors.accent,
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        child: const Text('Tambah'),
+      ),
+    );
+    final icon = MoneyIconField(
+      iconSet: MoneyIconSet.category,
+      categoryKind: kind,
+      value: iconId,
+      automatic: categoryIconSpec(null),
+      onChanged: onIconChanged,
+      compact: true,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (MediaQuery.textScalerOf(context).scale(14) <= 19)
+          Row(
+            children: [
+              Expanded(child: field),
+              const SizedBox(width: 8),
+              icon,
+            ],
+          )
+        else ...[
+          field,
+          Align(alignment: AlignmentDirectional.centerStart, child: icon),
+        ],
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 3, 0, 2),
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                error!,
+                style: TextStyle(fontSize: 12, color: EsokColors.lateInk),
               ),
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: onCancel,
-                style: TextButton.styleFrom(
-                  foregroundColor: EsokColors.muted,
-                  textStyle: const TextStyle(fontSize: 12),
-                ),
-                child: const Text('Batal'),
-              ),
-              TextButton(
-                onPressed: onSave,
-                style: TextButton.styleFrom(
-                  foregroundColor: EsokColors.accent,
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('Tambah'),
-              ),
-            ],
-          ),
-        ],
-      ),
+        Wrap(alignment: WrapAlignment.end, children: [cancel, save]),
+      ],
     );
   }
 }
 
 class _WalletPill extends StatelessWidget {
-  const _WalletPill({required this.label, required this.onTap});
+  const _WalletPill({required this.label, required this.onTap, this.account});
 
   final String label;
   final VoidCallback onTap;
+  final Account? account;
 
   @override
   Widget build(BuildContext context) {
@@ -1231,11 +1421,14 @@ class _WalletPill extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 16,
-              color: EsokColors.muted,
-            ),
+            if (account case final selected?)
+              WalletIconView(account: selected, size: 16)
+            else
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 16,
+                color: EsokColors.muted,
+              ),
             const SizedBox(width: 7),
             Expanded(
               child: Text(
@@ -1312,14 +1505,13 @@ class _NoteFieldState extends State<_NoteField> {
               controller: widget.controller,
               focusNode: _focusNode,
               textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _focusNode.unfocus(),
               textAlignVertical: TextAlignVertical.center,
               style: TextStyle(fontSize: 13.5, color: EsokColors.ink),
               decoration: InputDecoration(
                 hintText: 'Catatan',
-                hintStyle: TextStyle(
-                  fontSize: 13.5,
-                  color: EsokColors.muted,
-                ),
+                hintStyle: TextStyle(fontSize: 13.5, color: EsokColors.muted),
                 isCollapsed: true,
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -1383,9 +1575,16 @@ class _DateChip extends StatelessWidget {
 }
 
 class _Keypad extends StatelessWidget {
-  const _Keypad({required this.onKey});
+  const _Keypad({
+    super.key,
+    required this.onKey,
+    required this.columns,
+    required this.keyHeight,
+  });
 
   final ValueChanged<String> onKey;
+  final int columns;
+  final double keyHeight;
 
   static const _keys = [
     '1',
@@ -1406,15 +1605,16 @@ class _Keypad extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (var row = 0; row < 4; row++) ...[
+        for (var row = 0; row < _keys.length ~/ columns; row++) ...[
           if (row > 0) const SizedBox(height: 7),
           Row(
             children: [
-              for (var col = 0; col < 3; col++) ...[
+              for (var col = 0; col < columns; col++) ...[
                 if (col > 0) const SizedBox(width: 7),
                 Expanded(
                   child: _KeyButton(
-                    value: _keys[row * 3 + col],
+                    value: _keys[row * columns + col],
+                    height: keyHeight,
                     onTap: onKey,
                   ),
                 ),
@@ -1427,10 +1627,69 @@ class _Keypad extends StatelessWidget {
   }
 }
 
+class _TransactionDock extends StatefulWidget {
+  const _TransactionDock({
+    required this.visible,
+    required this.reduceMotion,
+    required this.child,
+  });
+
+  final bool visible;
+  final bool reduceMotion;
+  final Widget child;
+
+  @override
+  State<_TransactionDock> createState() => _TransactionDockState();
+}
+
+class _TransactionDockState extends State<_TransactionDock>
+    with SingleTickerProviderStateMixin {
+  late final _reveal = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 160),
+    value: widget.visible ? 1 : 0,
+  );
+  late final _progress = _reveal.drive(CurveTween(curve: Curves.easeOutCubic));
+
+  @override
+  void didUpdateWidget(covariant _TransactionDock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.visible || widget.reduceMotion) {
+      _reveal.value = widget.visible ? 1 : 0;
+    } else if (!oldWidget.visible) {
+      _reveal.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _reveal.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizeTransition(
+    alignment: Alignment.bottomCenter,
+    sizeFactor: _progress,
+    child: FadeTransition(
+      opacity: _progress,
+      child: ExcludeFocus(
+        excluding: !widget.visible,
+        child: IgnorePointer(ignoring: !widget.visible, child: widget.child),
+      ),
+    ),
+  );
+}
+
 class _KeyButton extends StatelessWidget {
-  const _KeyButton({required this.value, required this.onTap});
+  const _KeyButton({
+    required this.value,
+    required this.height,
+    required this.onTap,
+  });
 
   final String value;
+  final double height;
   final ValueChanged<String> onTap;
 
   @override
@@ -1439,26 +1698,20 @@ class _KeyButton extends StatelessWidget {
     return GestureDetector(
       onTap: () => onTap(value),
       child: Container(
-        height: 52,
+        height: height,
         decoration: BoxDecoration(
           color: EsokColors.soft,
           borderRadius: BorderRadius.circular(11),
         ),
         alignment: Alignment.center,
         child: isBack
-            ? Icon(
-                Icons.backspace_outlined,
-                size: 19,
-                color: EsokColors.muted,
-              )
+            ? Icon(Icons.backspace_outlined, size: 19, color: EsokColors.muted)
             : Text(
                 value,
                 style: TextStyle(
                   fontSize: value == '000' ? 13 : 19,
                   fontWeight: FontWeight.w500,
-                  color: value == '000'
-                      ? EsokColors.muted
-                      : EsokColors.ink,
+                  color: value == '000' ? EsokColors.muted : EsokColors.ink,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
@@ -1471,17 +1724,27 @@ class _BottomActions extends StatelessWidget {
   const _BottomActions({
     required this.canSave,
     required this.saving,
+    required this.scanning,
     required this.onCancel,
+    required this.onScan,
     required this.onSave,
   });
 
   final bool canSave;
   final bool saving;
+  final bool scanning;
   final VoidCallback onCancel;
+  final VoidCallback onScan;
   final VoidCallback onSave;
 
   @override
   Widget build(BuildContext context) {
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(11),
+    );
+    final compactIcon = MediaQuery.textScalerOf(context).scale(13) <= 17;
+    final padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 8);
+    const minimum = Size(0, 48);
     return SafeArea(
       top: false,
       child: Padding(
@@ -1489,40 +1752,72 @@ class _BottomActions extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              flex: 10,
-              child: SizedBox(
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: saving ? null : onCancel,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: EsokColors.ink,
-                    side: BorderSide(color: EsokColors.lineStrong),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                  ),
-                  child: const Text('Batal'),
+              flex: 7,
+              child: TextButton(
+                onPressed: scanning || saving ? null : onScan,
+                style: TextButton.styleFrom(
+                  foregroundColor: EsokColors.ink,
+                  disabledForegroundColor: EsokColors.muted,
+                  minimumSize: minimum,
+                  padding: padding,
+                  textStyle: const TextStyle(fontSize: 13),
                 ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (scanning) ...[
+                      const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 5),
+                    ] else if (compactIcon) ...[
+                      const Icon(Icons.document_scanner_outlined, size: 16),
+                      const SizedBox(width: 5),
+                    ],
+                    Flexible(
+                      child: Semantics(
+                        liveRegion: scanning,
+                        child: Text(
+                          scanning ? 'Memindai…' : 'Pindai struk',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              flex: 5,
+              child: OutlinedButton(
+                onPressed: saving ? null : onCancel,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: EsokColors.ink,
+                  minimumSize: minimum,
+                  padding: padding,
+                  side: BorderSide(color: EsokColors.lineStrong),
+                  shape: shape,
+                ),
+                child: const Text('Batal'),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              flex: 14,
-              child: SizedBox(
-                height: 48,
-                child: FilledButton(
-                  onPressed: canSave && !saving ? onSave : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: EsokColors.accent,
-                    foregroundColor: EsokColors.onAccent,
-                    disabledBackgroundColor: EsokColors.soft,
-                    disabledForegroundColor: EsokColors.disabled,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                  ),
-                  child: Text(saving ? 'Menyimpan…' : 'Simpan'),
+              flex: 8,
+              child: FilledButton(
+                onPressed: canSave && !saving ? onSave : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: EsokColors.accent,
+                  foregroundColor: EsokColors.onAccent,
+                  disabledBackgroundColor: EsokColors.soft,
+                  disabledForegroundColor: EsokColors.disabled,
+                  minimumSize: minimum,
+                  padding: padding,
+                  shape: shape,
                 ),
+                child: Text(saving ? 'Menyimpan…' : 'Simpan'),
               ),
             ),
           ],
@@ -1583,10 +1878,7 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
             const SizedBox(height: 4),
             Text(
               'Gambar berisi ${widget.transactions.length} baris. Pilih satu.',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: EsokColors.muted,
-              ),
+              style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
             ),
             const SizedBox(height: 10),
             Flexible(
@@ -1636,10 +1928,13 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
                                   [
                                     if (scan.tanggal != null)
                                       shortDateTitle(scan.tanggal!),
-                                    if (scan.tanggal == null) 'Tanggal belum terbaca',
+                                    if (scan.tanggal == null)
+                                      'Tanggal belum terbaca',
                                     scan.arah == null
                                         ? 'Arah perlu diperiksa'
-                                        : incoming ? 'Masuk' : 'Keluar',
+                                        : incoming
+                                        ? 'Masuk'
+                                        : 'Keluar',
                                     if (scan.kategori != null) scan.kategori!,
                                   ].join(' · '),
                                   maxLines: 1,
@@ -1656,7 +1951,11 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
                           Text(
                             scan.nominal == null
                                 ? 'Nominal belum terbaca'
-                                : '${scan.arah == null ? '' : incoming ? '+' : '−'}'
+                                : '${scan.arah == null
+                                          ? ''
+                                          : incoming
+                                          ? '+'
+                                          : '−'}'
                                       '${numberText(scan.nominal!)}',
                             style: TextStyle(
                               fontSize: 13,
@@ -1681,9 +1980,9 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
               child: FilledButton(
                 onPressed: widget.transactions.isEmpty
                     ? null
-                    : () => Navigator.of(context).pop(
-                        widget.transactions[_selected],
-                      ),
+                    : () =>
+                          Navigator.of(context)
+                              .pop(widget.transactions[_selected]),
                 style: FilledButton.styleFrom(
                   backgroundColor: EsokColors.accent,
                   foregroundColor: EsokColors.onAccent,
@@ -1750,39 +2049,50 @@ class _WalletSheet extends StatelessWidget {
             const SizedBox(height: 8),
             for (final account in accounts)
               if (account.id != excludedId)
-                InkWell(
-                  onTap: () => Navigator.of(context).pop(account.id),
-                  child: SizedBox(
-                    height: 52,
-                    child: Row(
-                      children: [
-                        Icon(
-                          selectedId == account.id
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          size: 18,
-                          color: selectedId == account.id
-                              ? EsokColors.accent
-                              : EsokColors.muted,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            account.name,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: EsokColors.ink,
+                Semantics(
+                  selected: selectedId == account.id,
+                  child: InkWell(
+                    onTap: () => Navigator.of(context).pop(account.id),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 52),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          WalletIconView(account: account, size: 18),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              account.name,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: EsokColors.ink,
+                              ),
                             ),
                           ),
-                        ),
-                        Text(
-                          accountTypeLabel(account.type),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: EsokColors.muted,
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              accountTypeLabel(account.type),
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: EsokColors.muted,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 18,
+                            child: selectedId == account.id
+                                ? Icon(
+                                    Icons.check,
+                                    size: 18,
+                                    color: EsokColors.ink,
+                                  )
+                                : null,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1793,7 +2103,7 @@ class _WalletSheet extends StatelessWidget {
                 foregroundColor: EsokColors.accent,
                 alignment: Alignment.centerLeft,
               ),
-              child: const Text('Kelola sumber dana'),
+              child: const Text('Kelola dompet'),
             ),
           ],
         ),

@@ -35,6 +35,7 @@ class UpdateBridge(private val activity: Activity, messenger: BinaryMessenger) {
         currentActivity = WeakReference(activity)
         MethodChannel(messenger, "ohmyesok/update").setMethodCallHandler { call, result ->
             when (call.method) {
+                "supportedAbis" -> result.success(Build.SUPPORTED_ABIS.toList())
                 "canInstall" -> result.success(Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls())
                 "openSources" -> try {
                     activity.startActivity(if (Build.VERSION.SDK_INT >= 26) Intent(

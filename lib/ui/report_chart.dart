@@ -5,16 +5,15 @@ import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../util/format.dart';
+import 'theme.dart';
 
 typedef ReportFlowPoint = ({DateTime date, int income, int expense});
 
-Color reportIncomeColor(Brightness brightness) => brightness == Brightness.dark
-    ? const Color(0xFF548CFF)
-    : const Color(0xFF1558D4);
+Color reportIncomeColor(Brightness brightness) =>
+    EsokColors.incomeInk(brightness);
 
-Color reportExpenseColor(Brightness brightness) => brightness == Brightness.dark
-    ? const Color(0xFFFF8836)
-    : const Color(0xFFB64A0B);
+Color reportExpenseColor(Brightness brightness) =>
+    EsokColors.expenseInk(brightness);
 
 String reportAmount(int amount) =>
     amount < 0 ? '−${rupiahText(-amount)}' : rupiahText(amount);

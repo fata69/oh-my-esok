@@ -170,6 +170,87 @@ void main() {
     expect(controller.phase, UpdatePhase.upToDate);
     expect(controller.release, isNull);
   });
+
+  test('selects and downloads a compatible standalone APK', () async {
+    const name = 'oh-my-esok-arm64-v8a.apk';
+    final bytes = [1, 2, 3];
+    final hash = sha256.convert(bytes).toString();
+    final info = metadata()
+      ..['apkByAbi'] = {
+        'arm64-v8a': {'name': name, 'sizeBytes': bytes.length, 'sha256': hash},
+      };
+    final tag = info['tag'];
+    final url =
+        'https://github.com/fata69/oh-my-esok/releases/download/$tag/$name';
+    final releaseData = release();
+    (releaseData['assets']! as List).add({
+      'name': name,
+      'size': bytes.length,
+      'digest': 'sha256:$hash',
+      'browser_download_url': url,
+    });
+    final client = _Client([
+      _Response(200, releaseData),
+      _Response(200, info),
+      _Response.bytes(200, bytes),
+    ]);
+    final cache = await Directory.systemTemp.createTemp('oh-my-esok-abi-test');
+    addTearDown(() => cache.delete(recursive: true));
+    const bridge = MethodChannel('ohmyesok/update');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(bridge, (call) async {
+      expect(call.method, 'checkApk');
+      expect(call.arguments['versionCode'], 21);
+      expect(call.arguments['sha256'], hash);
+      expect(call.arguments['sizeBytes'], bytes.length);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(bridge, null));
+    final controller = UpdateController.withClient(
+      () => client,
+      supportedAbis: () async => ['arm64-v8a', 'armeabi-v7a'],
+      temporaryDirectory: () async => cache,
+    );
+    addTearDown(controller.dispose);
+    await controller.check();
+    expect(controller.release?.assetName, name);
+    await controller.download();
+    expect(client.requested.last.toString(), url);
+    expect(controller.phase, UpdatePhase.ready);
+  });
+
+  test(
+    'falls back to universal if a compatible asset is absent or invalid',
+    () async {
+      const name = 'oh-my-esok-arm64-v8a.apk';
+      final info = metadata()
+        ..['apkByAbi'] = {
+          'arm64-v8a': {'name': name, 'sizeBytes': 3, 'sha256': 'b' * 64},
+        };
+      for (final invalidAsset in [
+        null,
+        {
+          'name': name,
+          'size': 3,
+          'browser_download_url': 'https://example.org/$name',
+        },
+      ]) {
+        final releaseData = release();
+        if (invalidAsset != null) {
+          (releaseData['assets']! as List).add(invalidAsset);
+        }
+        final controller = UpdateController.withClient(
+          () => _Client([_Response(200, releaseData), _Response(200, info)]),
+          supportedAbis: () async => ['arm64-v8a'],
+        );
+        addTearDown(controller.dispose);
+        await controller.check();
+        expect(controller.phase, UpdatePhase.available);
+        expect(controller.release?.assetName, 'oh-my-esok-universal.apk');
+      }
+    },
+  );
   test('metadata identity mismatch fails without offering the APK', () async {
     final info = metadata()..['applicationId'] = 'com.habib.jadwal';
     final controller = UpdateController.withClient(

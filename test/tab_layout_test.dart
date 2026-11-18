@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -9,6 +10,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:jadwal/app.dart';
 import 'package:jadwal/data/account.dart';
 import 'package:jadwal/data/account_dao.dart';
+import 'package:jadwal/data/category.dart';
 import 'package:jadwal/data/category_dao.dart';
 import 'package:jadwal/data/money_transaction.dart';
 import 'package:jadwal/data/money_transaction_dao.dart';
@@ -16,6 +18,7 @@ import 'package:jadwal/data/task.dart';
 import 'package:jadwal/state/money_store.dart';
 import 'package:jadwal/state/settings_store.dart';
 import 'package:jadwal/state/task_store.dart';
+import 'package:jadwal/ui/calendar_sheet.dart';
 import 'package:jadwal/ui/home_page.dart';
 import 'package:jadwal/ui/money_page.dart';
 import 'package:jadwal/ui/reports_page.dart';
@@ -25,6 +28,7 @@ import 'package:jadwal/ui/tx_editor_page.dart';
 import 'package:jadwal/util/format.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -60,6 +64,7 @@ void main() {
   Future<SettingsStore> launch(
     WidgetTester tester, {
     int notes = 0,
+    int categoryCount = 0,
     bool preview = false,
   }) async {
     // Only the native I/O boundaries use test data. The shell, pages, stores,
@@ -99,7 +104,7 @@ void main() {
           ),
       ], []),
     );
-    final db = _LedgerDatabase(preview: preview);
+    final db = _LedgerDatabase(preview: preview, categoryCount: categoryCount);
     final money = MoneyStore(
       CategoryDao(db),
       AccountDao(db),
@@ -147,7 +152,7 @@ void main() {
       expect(Scaffold.of(tester.element(label)).widget.backgroundColor, canvas);
     }
 
-    const dark = (Color(0xFF111111), Color(0xFFEEEEEE), Color(0xFFB4B4B4));
+    const dark = (Color(0xFF000000), Color(0xFFEEEEEE), Color(0xFFB4B4B4));
     const light = (Color(0xFFFCFCFC), Color(0xFF202020), Color(0xFF646464));
     await verifyLedger(dark.$1, dark.$2, dark.$3);
     for (final (mode, expected) in [
@@ -201,8 +206,15 @@ void main() {
 
     void verifyDock() {
       final list = find.byType(ListView).first;
-      expect(tester.getRect(list).bottom, lessThan(tester.getRect(create).top));
-      expect(tester.getRect(create).bottom, lessThan(tester.getRect(nav).top));
+      final dock = tester.getRect(nav);
+      final button = tester.getRect(create);
+      expect(tester.getRect(list).bottom, lessThanOrEqualTo(dock.top));
+      expect(button.left - dock.right, closeTo(8, .01));
+      expect(button.center.dy, closeTo(dock.center.dy, 0.01));
+      expect(
+        button.left,
+        greaterThan(tester.getRect(find.bySemanticsLabel('Setelan')).right),
+      );
       expect(tester.getSize(create), const Size.square(52));
     }
 
@@ -304,7 +316,14 @@ void main() {
 
     final create = find.byKey(const ValueKey('bottom-create'));
     final nav = find.byKey(const ValueKey('floating-navigation'));
-    expect(tester.getRect(create).left, greaterThan(tester.getRect(nav).right));
+    expect(
+      tester.getRect(create).left - tester.getRect(nav).right,
+      closeTo(8, .01),
+    );
+    expect(
+      tester.getCenter(create).dy,
+      closeTo(tester.getCenter(nav).dy, 0.01),
+    );
     await tester.tap(find.byTooltip('Hari berikutnya'));
     await tester.pumpAndSettle();
     await tester.tap(create);
@@ -333,6 +352,382 @@ void main() {
     expect(find.byType(TxEditorPage), findsOneWidget);
     expect(create.hitTestable(), findsNothing);
   });
+
+  testWidgets(
+    'dock accessory animates without losing tab state or hit targets',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+      tester.view.viewPadding = tester.view.padding;
+      addTearDown(tester.view.reset);
+      await launch(tester);
+      final nav = find.byKey(const ValueKey('floating-navigation'));
+      final slot = find.byKey(const ValueKey('create-accessory-slot'));
+      final initial = tester.getSize(nav).width;
+      expect(tester.getSize(nav).height, 56);
+      expect(tester.getRect(nav).bottom, closeTo(844 - 24 - 6, .01));
+      await tester.tap(find.bySemanticsLabel('Laporan').hitTestable());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 65));
+      expect(tester.getSize(slot).width, inExclusiveRange(0, 60));
+      expect(tester.getSize(nav).width, greaterThan(initial));
+      expect(find.byKey(const ValueKey('bottom-create')), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(slot).width, 0);
+      await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 65));
+      expect(tester.getSize(slot).width, inExclusiveRange(0, 60));
+      final openWidth = tester.getSize(slot).width;
+      await tester.tap(find.bySemanticsLabel('Setelan').hitTestable());
+      await tester.pump();
+      expect(tester.getSize(slot).width, closeTo(openWidth, .01));
+      await tester.pump(const Duration(milliseconds: 50));
+      final reverseWidth = tester.getSize(slot).width;
+      expect(reverseWidth, lessThan(openWidth));
+      await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
+      await tester.pump();
+      expect(tester.getSize(slot).width, closeTo(reverseWidth, .01));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.getSize(slot).width, 60);
+      expect(find.text('Pengeluaran terakhir').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('holding an inactive tab does not paint a second dock pill', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final settings = await launch(tester);
+    await settings.setThemeMode(ThemeMode.dark);
+    await tester.pumpAndSettle();
+
+    final dock = find.byKey(const ValueKey('floating-navigation'));
+    final pill = find.byKey(const ValueKey('dock-selection'));
+    final target = find.bySemanticsLabel('Uang').hitTestable();
+    final initialCenter = tester.getCenter(pill);
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('preview-boundary')),
+    );
+    final bounds = tester.getRect(dock);
+
+    Future<List<int>?> pixels() => tester.runAsync(() async {
+      final image = await boundary.toImage();
+      try {
+        final rgba = (await image.toByteData())!;
+        final bytes = rgba.buffer.asUint8List();
+        return [
+          for (var y = bounds.top.round(); y < bounds.bottom.round(); y++)
+            ...Uint8List.sublistView(
+              bytes,
+              (y * image.width + bounds.left.round()) * 4,
+              (y * image.width + bounds.right.round()) * 4,
+            ),
+        ];
+      } finally {
+        image.dispose();
+      }
+    });
+
+    final idle = await pixels();
+    expect(idle, isNotNull);
+    final finger = await tester.startGesture(tester.getCenter(target));
+    await tester.pump(const Duration(milliseconds: 550));
+    expect(tester.getCenter(pill), initialCenter);
+    expect(listEquals(await pixels(), idle), isTrue);
+
+    await finger.up();
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(pill).dx,
+      closeTo(tester.getCenter(target).dx, .01),
+    );
+  });
+
+  testWidgets('dock selection keeps its momentum on a quick reverse tap', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    await launch(tester);
+    final nav = find.byKey(const ValueKey('floating-navigation'));
+    final selection = find.byKey(const ValueKey('dock-selection'));
+    final hari = find.bySemanticsLabel('Hari').hitTestable();
+    final uang = find.bySemanticsLabel('Uang').hitTestable();
+    final dockBefore = tester.getRect(nav);
+    final start = tester.getCenter(hari);
+    final destination = tester.getCenter(uang);
+
+    await tester.tap(uang);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 32));
+    final midway = tester.getCenter(selection);
+    expect(midway.dx, inExclusiveRange(start.dx, destination.dx));
+    expect(midway.dy, closeTo(start.dy, .01));
+
+    await tester.tap(hari);
+    await tester.pump();
+    expect(tester.getCenter(selection).dx, closeTo(midway.dx, .01));
+    await tester.pump(const Duration(milliseconds: 8));
+    expect(tester.getCenter(selection).dx, greaterThan(midway.dx));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getCenter(selection).dx, closeTo(start.dx, .01));
+    expect(tester.getRect(nav), dockBefore);
+  });
+
+  testWidgets('dock honours reduced motion and settles immediately', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(reduceMotion: true);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await launch(tester);
+    final slot = find.byKey(const ValueKey('create-accessory-slot'));
+    await tester.tap(find.bySemanticsLabel('Laporan').hitTestable());
+    await tester.pump();
+    expect(tester.getSize(slot).width, 0);
+    await tester.tap(find.bySemanticsLabel('Uang').hitTestable());
+    await tester.pump();
+    expect(tester.getSize(slot).width, 60);
+    expect(
+      tester.getCenter(find.byKey(const ValueKey('dock-selection'))).dx,
+      closeTo(
+        tester.getCenter(find.bySemanticsLabel('Uang').hitTestable()).dx,
+        .01,
+      ),
+    );
+    expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
+  });
+
+  testWidgets(
+    'periods align and open the appropriate picker on all three tabs',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      await launch(tester);
+
+      final day = find.byTooltip('Pilih tanggal').hitTestable();
+      final center = tester.getCenter(day);
+      expect(center.dx, 195);
+      final left = tester.getCenter(find.byTooltip('Hari sebelumnya'));
+      final right = tester.getCenter(find.byTooltip('Hari berikutnya'));
+      expect(left.dx + right.dx, closeTo(center.dx * 2, .01));
+      await tester.tap(day);
+      await tester.pumpAndSettle();
+      expect(find.byType(CalendarSheet), findsOneWidget);
+      await tester.tap(find.text('Tutup').hitTestable());
+      await tester.pumpAndSettle();
+
+      await select(tester, 'Uang');
+      final month = find.byTooltip('Pilih bulan').hitTestable();
+      expect(tester.getCenter(month), center);
+      await tester.tap(month);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Pilih tahun').hitTestable());
+      await tester.pumpAndSettle();
+      final lastYear = today().year - 1;
+      await tester.tap(find.text('$lastYear').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('Januari').hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
+
+      await select(tester, 'Laporan');
+      expect(tester.getCenter(month), center);
+      expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
+      await tester.tap(month);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bulan ini').hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text(monthTitle(today())).hitTestable(), findsOneWidget);
+    },
+  );
+
+  testWidgets('transaction filters leave the wallet summary intact', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    await launch(tester, preview: true);
+    await select(tester, 'Uang');
+    final salary = find.text('Gaji');
+    final meal = find.text('Makan siang');
+    expect(salary, findsOneWidget);
+    expect(meal, findsOneWidget);
+
+    Future<void> filter(String type, {String? sort}) async {
+      await tester.tap(find.widgetWithText(TextButton, 'Filter').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, type));
+      if (sort != null) {
+        await tester.tap(find.widgetWithText(ChoiceChip, sort));
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Terapkan').hitTestable());
+      await tester.pumpAndSettle();
+    }
+
+    final total = find.text('8.122.000');
+    final occurrences = total.evaluate().length;
+    await filter('Pemasukan');
+    expect(salary, findsOneWidget);
+    expect(meal, findsNothing);
+    // Only the date subtotal is hidden; the main and wallet totals stay.
+    expect(total, findsNWidgets(occurrences - 1));
+    await filter('Transfer');
+    expect(
+      find.text('Tidak ada transaksi yang cocok dengan filter.'),
+      findsOneWidget,
+    );
+    await filter('Semua', sort: 'Terlama dulu');
+    expect(tester.getTopLeft(salary).dy, lessThan(tester.getTopLeft(meal).dy));
+    expect(total, findsNWidgets(occurrences));
+  });
+
+  testWidgets(
+    'Catat shows more categories and creates or changes icons in place',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      await launch(tester, categoryCount: 12);
+      await select(tester, 'Uang');
+      await tester.tap(find.byTooltip('Catat transaksi'));
+      await tester.pumpAndSettle();
+
+      final grid = find.byKey(const ValueKey('transaction-categories'));
+      final firstTile = find.text('Kategori 1');
+      expect(firstTile.hitTestable(), findsOneWidget);
+      expect(tester.getSize(grid).height, inExclusiveRange(150, 180));
+      await tester.tap(find.text('Baru').hitTestable());
+      await tester.pumpAndSettle();
+
+      final name = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'Nama kategori baru',
+      );
+      await tester.enterText(name, 'Jajan baru');
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+      expect(find.text('7').hitTestable(), findsNothing);
+      await tester.tap(find.text('Pilih ikon').hitTestable());
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Makanan').hitTestable());
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(name).controller!.text, 'Jajan baru');
+      await tester.tap(find.text('Tambah').hitTestable());
+      await tester.pumpAndSettle();
+
+      final store = tester
+          .element(find.byType(TxEditorPage))
+          .read<MoneyStore>();
+      MoneyCategory created() => store.expenseCategories.singleWhere(
+        (category) => category.name == 'Jajan baru',
+      );
+      expect(created().iconId, 'makan');
+      await tester.tap(find.text('Ubah ikon').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Minuman').hitTestable());
+      await tester.pumpAndSettle();
+      expect(created().iconId, 'minuman');
+    },
+  );
+
+  testWidgets(
+    'Catat keeps the amount keypad mounted through Android IME insets',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 24);
+      tester.view.padding = tester.view.viewPadding;
+      addTearDown(tester.view.reset);
+      await launch(tester, categoryCount: 12);
+      await select(tester, 'Uang');
+      await tester.tap(find.byTooltip('Catat transaksi'));
+      await tester.pumpAndSettle();
+
+      final keypad = find.byKey(const ValueKey('transaction-keypad'));
+      final mountedKeypad = tester.element(keypad);
+      final grid = find.byKey(const ValueKey('transaction-categories'));
+      final categoryHeight = tester.getSize(grid).height;
+      final note = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'Catatan',
+      );
+      await tester.enterText(note, 'Beli makan');
+      for (final bottom in [300.0, 120.0, 8.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: bottom);
+        tester.view.padding = const FakeViewPadding(top: 24);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(tester.element(keypad), same(mountedKeypad));
+        expect(tester.getSize(grid).height, categoryHeight);
+        expect(find.text('7').hitTestable(), findsNothing);
+        expect(find.text('Simpan').hitTestable(), findsNothing);
+      }
+      tester.view.resetViewInsets();
+      await tester.pump();
+      expect(find.text('7').hitTestable(), findsNothing);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 8);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(find.text('7').hitTestable(), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      tester.view.resetViewInsets();
+      tester.view.padding = tester.view.viewPadding;
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(tester.element(keypad), same(mountedKeypad));
+      expect(tester.widget<TextField>(note).controller!.text, 'Beli makan');
+      await tester.tap(find.text('7').hitTestable());
+      await tester.pump();
+      expect(find.text('Rp 7'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('capture the actual dock emergence motion', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(412, 892);
+    tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 20);
+    tester.view.padding = tester.view.viewPadding;
+    addTearDown(tester.view.reset);
+    final settings = await launch(tester, notes: 3, preview: true);
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      await settings.setThemeMode(mode);
+      await select(tester, 'Laporan');
+      for (final (tab, name) in [('Uang', 'show'), ('Laporan', 'hide')]) {
+        await tester.tap(find.bySemanticsLabel(tab).hitTestable());
+        await tester.pump();
+        for (var frame = 0; frame < 15; frame++) {
+          if (frame > 0) await tester.pump(const Duration(milliseconds: 33));
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(const ValueKey('preview-boundary')),
+          );
+          await tester.runAsync(() async {
+            final image = await boundary.toImage(pixelRatio: 1.5);
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            image.dispose();
+            final directory = Directory('build/design-captures')
+              ..createSync(recursive: true);
+            File('${directory.path}/motion-$name-${mode.name}-$frame.png')
+                .writeAsBytesSync(bytes!.buffer.asUint8List());
+          });
+        }
+        await tester.pumpAndSettle();
+      }
+    }
+  }, skip: !makePreviews);
 
   testWidgets('render the glass dock on production Hari, Uang and Laporan', (
     tester,
@@ -373,9 +768,63 @@ void main() {
 }
 
 class _LedgerDatabase implements Database {
-  _LedgerDatabase({required this.preview});
+  _LedgerDatabase({required this.preview, required int categoryCount})
+    : _categories = [
+        for (var i = 0; i < categoryCount; i++)
+          MoneyCategory(
+            id: 'category-$i',
+            name: 'Kategori ${i + 1}',
+            kind: 'expense',
+            sortOrder: i,
+            archived: false,
+            createdAt: i,
+          ).toMap(),
+      ];
 
   final bool preview;
+  final List<Map<String, Object?>> _categories;
+
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(
+    String sql, [
+    List<Object?>? arguments,
+  ]) async {
+    if (!sql.startsWith('SELECT MAX(sort_order)')) {
+      throw ArgumentError.value(sql);
+    }
+    return [
+      {'m': _categories.length - 1},
+    ];
+  }
+
+  @override
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    String? nullColumnHack,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
+    if (table != 'categories') throw ArgumentError.value(table);
+    _categories.add(values);
+    return 1;
+  }
+
+  @override
+  Future<int> update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
+    if (table != 'categories') throw ArgumentError.value(table);
+    final index = _categories.indexWhere(
+      (row) => row['id'] == whereArgs?.single,
+    );
+    if (index == -1) return 0;
+    _categories[index] = {..._categories[index], ...values};
+    return 1;
+  }
 
   @override
   Future<List<Map<String, Object?>>> query(
@@ -401,7 +850,7 @@ class _LedgerDatabase implements Database {
           createdAt: 0,
         ).toMap(),
       ],
-      'categories' => [],
+      'categories' => _categories,
       'transactions' => [
         if (whereArgs == null || whereArgs.contains(dateKey(today())))
           MoneyTransaction(
