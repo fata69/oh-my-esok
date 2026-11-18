@@ -69,6 +69,65 @@
         android:contentDescription="@null"
         android:importantForAccessibility="no" />
 
+    <LinearLayout
+        android:id="@+id/widget_single"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:visibility="gone">
+
+        <ViewFlipper
+            android:id="@+id/widget_single_titles"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:animateFirstView="false"
+            android:inAnimation="@anim/agenda_widget_mark_in"
+            android:outAnimation="@anim/agenda_widget_mark_out">
+
+            <TextView
+                android:id="@+id/widget_single_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/agenda_widget_ink"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/widget_single_done_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/agenda_widget_muted"
+                android:textSize="14sp" />
+        </ViewFlipper>
+
+        <TextView
+            android:id="@+id/widget_single_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFeatureSettings="tnum"
+            android:textColor="@color/agenda_widget_muted"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/widget_single_check"
+            android:layout_width="44dp"
+            android:layout_height="48dp"
+            android:importantForAccessibility="no"
+            android:padding="11dp"
+            android:src="@drawable/widget_check_off" />
+    </LinearLayout>
+
     <ListView
         android:id="@+id/widget_list"
         android:layout_width="match_parent"

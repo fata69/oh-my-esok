@@ -9,6 +9,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.StrikethroughSpan
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
@@ -54,17 +57,9 @@ class TaskWidgetProvider : AppWidgetProvider() {
             val tasks: List<JSONObject>,
             val next: Upcoming?,
         ) {
-            private val firstOpen = tasks.firstOrNull { !it.optBoolean("done") }
             val done = tasks.count { it.optBoolean("done") }
 
-            fun rows(tall: Boolean): List<JSONObject> = when {
-                tall -> tasks
-                firstOpen != null -> listOf(firstOpen)
-                next != null -> emptyList()
-                else -> tasks.takeLast(1)
-            }
-
-            fun showsNext(tall: Boolean): Boolean = next != null && (tall || firstOpen == null)
+            fun showsNext(tall: Boolean): Boolean = next != null && (tall || tasks.isEmpty())
         }
 
         internal fun agenda(context: Context): Agenda {
@@ -123,9 +118,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         private fun isTall(options: Bundle) =
             options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) >= TALL_HEIGHT_DP
 
-        internal fun isTallWidget(context: Context, appWidgetId: Int) =
-            isTall(AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId))
-
         fun refreshAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, TaskWidgetProvider::class.java))
@@ -143,6 +135,25 @@ class TaskWidgetProvider : AppWidgetProvider() {
         }
 
         private fun visibility(visible: Boolean) = if (visible) View.VISIBLE else View.GONE
+
+        internal fun doneLabel(title: String): CharSequence =
+            if (title.isNotEmpty()) SpannableString(title).apply {
+                setSpan(StrikethroughSpan(), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            } else title
+
+        internal fun toggleExtras(item: JSONObject, date: LocalDate) = Intent().apply {
+            putExtra(TaskToggleReceiver.EXTRA_TASK_ID, item.getString("id"))
+            putExtra(TaskToggleReceiver.EXTRA_TASK_DAY, date.toString())
+            putExtra(TaskToggleReceiver.EXTRA_DONE, !item.optBoolean("done"))
+        }
+
+        private fun toggleIntent(context: Context, widgetId: Int, vararg path: String) =
+            Intent(context, TaskToggleReceiver::class.java).apply {
+                action = TaskToggleReceiver.ACTION_TOGGLE
+                val uri = Uri.Builder().scheme("ohmyesok").authority("widget").appendPath(widgetId.toString())
+                for (segment in path) uri.appendPath(segment)
+                data = uri.build()
+            }
 
         private fun dayIntent(
             context: Context,
@@ -168,7 +179,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         private fun buildViews(context: Context, id: Int, tall: Boolean): RemoteViews {
             val agenda = agenda(context)
             val views = RemoteViews(context.packageName, R.layout.task_widget)
-            val current = agenda.rows(tall)
+            val single = agenda.tasks.singleOrNull()
             val showNext = agenda.showsNext(tall)
             val date = agenda.date.format(dateLabel)
             val title = if (agenda.tasks.isEmpty() && !showNext) R.string.widget_agenda else R.string.widget_today
@@ -182,21 +193,48 @@ class TaskWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_header, dayIntent(context, id, agenda.date))
             views.setOnClickPendingIntent(R.id.widget_add, dayIntent(context, id, agenda.date, add = true))
 
-            val service = Intent(context, TaskWidgetService::class.java).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
-                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            // A standalone row uses a direct broadcast and can animate in place.
+            // Multiple tasks use a scrollable collection with one broadcast per row.
+            if (single != null) {
+                val title = single.optString("title")
+                val done = single.optBoolean("done")
+                views.setTextViewText(R.id.widget_single_title, title)
+                views.setTextViewText(R.id.widget_single_done_title, doneLabel(title))
+                views.setTextViewText(R.id.widget_single_time, single.optString("time").replace(':', '.'))
+                views.setDisplayedChild(R.id.widget_single_titles, if (done) 1 else 0)
+                views.setImageViewResource(
+                    R.id.widget_single_check,
+                    if (done) R.drawable.widget_check_on else R.drawable.widget_check_off,
+                )
+                views.setContentDescription(
+                    R.id.widget_single,
+                    context.getString(if (done) R.string.widget_uncheck_task else R.string.widget_check_task, title),
+                )
+                val toggle = toggleIntent(context, id, agenda.date.toString(), single.getString("id"))
+                    .putExtras(toggleExtras(single, agenda.date))
+                views.setOnClickPendingIntent(
+                    R.id.widget_single,
+                    PendingIntent.getBroadcast(
+                        context, id, toggle, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    ),
+                )
+            } else if (agenda.tasks.size > 1) {
+                val service = Intent(context, TaskWidgetService::class.java).apply {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                    data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+                }
+                views.setRemoteAdapter(R.id.widget_list, service)
+                val mutability = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+                views.setPendingIntentTemplate(
+                    R.id.widget_list,
+                    PendingIntent.getBroadcast(
+                        context, id, toggleIntent(context, id), PendingIntent.FLAG_UPDATE_CURRENT or mutability,
+                    ),
+                )
             }
-            views.setRemoteAdapter(R.id.widget_list, service)
-            val listAction = Intent(context, TaskWidgetActionActivity::class.java).apply {
-                data = Uri.parse("ohmyesok://widget/$id")
-            }
-            val mutability = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
-            views.setPendingIntentTemplate(
-                R.id.widget_list,
-                PendingIntent.getActivity(context, id, listAction, PendingIntent.FLAG_UPDATE_CURRENT or mutability),
-            )
-            views.setViewVisibility(R.id.widget_list, visibility(current.isNotEmpty()))
-            views.setViewVisibility(R.id.widget_empty, visibility(current.isEmpty() && !showNext))
+            views.setViewVisibility(R.id.widget_single, visibility(single != null))
+            views.setViewVisibility(R.id.widget_list, visibility(agenda.tasks.size > 1))
+            views.setViewVisibility(R.id.widget_empty, visibility(agenda.tasks.isEmpty() && !showNext))
             val next = agenda.next
             views.setViewVisibility(R.id.widget_next, visibility(showNext))
             if (showNext && next != null) {

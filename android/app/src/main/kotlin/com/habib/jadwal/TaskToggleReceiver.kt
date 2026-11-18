@@ -6,93 +6,60 @@ import android.content.Intent
 import android.media.AudioManager
 import android.media.MediaPlayer
 import es.antonborri.home_widget.HomeWidgetPlugin
-import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.time.LocalDate
 
 class TaskToggleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_TOGGLE) return
         val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return
+        val today = LocalDate.now().toString()
+        val tappedDay = intent.getStringExtra(EXTRA_TASK_DAY)
+        if (tappedDay != null && tappedDay != today) {
+            TaskWidgetProvider.refreshAll(context)
+            return
+        }
+        if (!intent.hasExtra(EXTRA_DONE)) return
         val newDone = intent.getBooleanExtra(EXTRA_DONE, false)
 
         val prefs = HomeWidgetPlugin.getData(context)
         val raw = prefs.getString("tasks_json", "{}") ?: "{}"
-        var completedAll = false
-        val serialized: String = if (raw.trimStart().startsWith("[")) {
-            val items = try {
-                JSONArray(raw)
-            } catch (error: Exception) {
-                JSONArray()
-            }
-            var changed = false
-            for (index in 0 until items.length()) {
-                val item = items.optJSONObject(index) ?: continue
-                if (item.optString("id") == taskId) {
-                    item.put("done", newDone)
-                    changed = true
-                }
-            }
-            if (changed && newDone && items.length() > 0) {
-                var allDone = true
-                for (index in 0 until items.length()) {
-                    if (items.optJSONObject(index)?.optBoolean("done", false) != true) {
-                        allDone = false
-                        break
-                    }
-                }
-                completedAll = allDone
-            }
-            items.toString()
-        } else {
-            val root = try {
-                JSONObject(raw)
-            } catch (error: Exception) {
-                JSONObject()
-            }
-            for (key in root.keys()) {
-                val day = root.optJSONObject(key) ?: continue
-                val items = day.optJSONArray("tasks") ?: continue
-                var changed = false
-                for (index in 0 until items.length()) {
-                    val item = items.optJSONObject(index) ?: continue
-                    if (item.optString("id") == taskId) {
-                        item.put("done", newDone)
-                        changed = true
-                    }
-                }
-                if (changed) {
-                    var doneCount = 0
-                    for (index in 0 until items.length()) {
-                        if (items.optJSONObject(index)?.optBoolean("done", false) == true) {
-                            doneCount++
-                        }
-                    }
-                    day.put("done", doneCount)
-                    day.put("total", items.length())
-                    if (newDone && items.length() > 0 && doneCount == items.length()) {
-                        completedAll = true
-                    }
-                }
-            }
-            root.toString()
+        val snapshot = try {
+            JSONObject(raw)
+        } catch (_: JSONException) {
+            return
         }
-
+        val day = snapshot.optJSONObject(today) ?: return
+        val items = day.optJSONArray("tasks") ?: return
+        val tasks = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
+        val task = tasks.firstOrNull { it.optString("id") == taskId } ?: return
         val pendingRaw = prefs.getString("pending_toggles", "{}") ?: "{}"
         val pending = try {
             JSONObject(pendingRaw)
-        } catch (error: Exception) {
+        } catch (_: JSONException) {
             JSONObject()
         }
+        val previousDone = pending.opt(taskId) as? Boolean ?: task.optBoolean("done")
+        if (previousDone == newDone) return
+
         pending.put(taskId, newDone)
+        for (item in tasks) {
+            val queued = pending.opt(item.optString("id")) as? Boolean ?: continue
+            item.put("done", queued)
+        }
+        val doneCount = tasks.count { it.optBoolean("done") }
+        day.put("done", doneCount)
+        day.put("total", tasks.size)
 
         prefs.edit()
-            .putString("tasks_json", serialized)
+            .putString("tasks_json", snapshot.toString())
             .putString("pending_toggles", pending.toString())
             .apply()
 
         TaskWidgetProvider.refreshAll(context)
-        playToggleSound(context, newDone, completedAll)
+        playToggleSound(context, newDone, newDone && doneCount == tasks.size)
     }
 
     /**
@@ -207,6 +174,7 @@ class TaskToggleReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_TOGGLE = "io.github.fata69.ohmyesok.ACTION_TOGGLE"
         const val EXTRA_TASK_ID = "task_id"
+        const val EXTRA_TASK_DAY = "task_day"
         const val EXTRA_DONE = "done"
         private var player: MediaPlayer? = null
     }

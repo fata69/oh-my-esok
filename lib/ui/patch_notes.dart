@@ -29,6 +29,14 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.9',
+      date: '18 Nov 2026',
+      notes: [
+        'Ketuk pengingat hari ini di widget Agenda untuk mencentang atau membatalkan centang.',
+        'Tugas selesai tetap terlihat dan judulnya dicoret. Jadwal berikutnya ditampilkan terpisah.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.8',
       date: '18 Nov 2026',
       notes: [
