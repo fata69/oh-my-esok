@@ -62,6 +62,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
   bool get _isEditing => widget.transaction != null;
   bool get _isTransfer => _kind == 'transfer';
+  bool get _sameKind => widget.transaction?.kind == _kind;
+  int get _signedAmount =>
+      _sameKind && widget.transaction!.amount < 0 ? -_amount : _amount;
 
   @override
   void initState() {
@@ -78,7 +81,11 @@ class _TxEditorPageState extends State<TxEditorPage> {
         ? dateOnly(widget.initialDate ?? today())
         : DateTime.parse(transaction.date);
     _noteController = TextEditingController(text: transaction?.note ?? '');
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSelections());
+    if (!_isEditing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensureSelections();
+      });
+    }
   }
 
   @override
@@ -104,13 +111,14 @@ class _TxEditorPageState extends State<TxEditorPage> {
       changed = true;
     }
     if (_accountId == null ||
-        !accounts.any((account) => account.id == _accountId)) {
+        (!_isEditing && !accounts.any((account) => account.id == _accountId))) {
       _accountId = accounts.isEmpty ? null : accounts.first.id;
       changed = true;
     }
     if (_isTransfer &&
         (_toAccountId == null ||
-            !accounts.any((account) => account.id == _toAccountId) ||
+            (!_isEditing &&
+                !accounts.any((account) => account.id == _toAccountId)) ||
             _toAccountId == _accountId)) {
       final other = accounts
           .where((account) => account.id != _accountId)
@@ -198,7 +206,11 @@ class _TxEditorPageState extends State<TxEditorPage> {
         },
         accounts: accounts,
         selectedId: to ? _toAccountId : _accountId,
-        excludedId: to ? _accountId : null,
+        excludedId: to
+            ? _accountId
+            : _isEditing && _isTransfer
+            ? _toAccountId
+            : null,
       ),
     );
     if (selected == null || !mounted) return;
@@ -209,10 +221,15 @@ class _TxEditorPageState extends State<TxEditorPage> {
       if (!mounted) return;
       final refreshed = context.read<MoneyStore>().activeAccounts;
       setState(() {
-        if (!refreshed.any((account) => account.id == _accountId)) {
+        if (_accountId == null ||
+            (!_isEditing &&
+                !refreshed.any((account) => account.id == _accountId))) {
           _accountId = refreshed.isEmpty ? null : refreshed.first.id;
         }
-        if (to && !refreshed.any((account) => account.id == _toAccountId)) {
+        if (to &&
+            (_toAccountId == null ||
+                (!_isEditing &&
+                    !refreshed.any((account) => account.id == _toAccountId)))) {
           _toAccountId = refreshed
               .where((account) => account.id != _accountId)
               .firstOrNull
@@ -301,13 +318,19 @@ class _TxEditorPageState extends State<TxEditorPage> {
   }
 
   bool get _canSave {
-    if (_amount <= 0 || _date == null || _scanning) return false;
+    final original = widget.transaction;
+    final preservingZero = _sameKind && !_hasScanDraft && original?.amount == 0;
+    if ((_amount <= 0 && !preservingZero) || _date == null || _scanning) {
+      return false;
+    }
     if (_isTransfer) {
       return _accountId != null &&
           _toAccountId != null &&
           _accountId != _toAccountId;
     }
-    return _categoryId != null && _accountId != null;
+    final preservingNoCategory =
+        _sameKind && !_hasScanDraft && original?.categoryId == null;
+    return (_categoryId != null || preservingNoCategory) && _accountId != null;
   }
 
   Future<void> _save() async {
@@ -319,12 +342,15 @@ class _TxEditorPageState extends State<TxEditorPage> {
       final note = _noteController.text.trim();
       final transaction = MoneyTransaction(
         id: widget.transaction?.id ?? const Uuid().v4(),
-        amount: _amount,
+        amount: _signedAmount,
         kind: _kind,
-        categoryId: _isTransfer ? null : _categoryId,
+        categoryId: _isTransfer
+            ? (_sameKind ? widget.transaction?.categoryId : null)
+            : _categoryId,
         accountId: _accountId!,
         toAccountId: _isTransfer ? _toAccountId : null,
         date: dateKey(_date!),
+        time: widget.transaction?.time,
         note: note.isEmpty ? null : note,
         detail: _detail,
         createdAt:
@@ -521,16 +547,15 @@ class _TxEditorPageState extends State<TxEditorPage> {
     final categories = _kind == 'income'
         ? store.incomeCategories
         : store.expenseCategories;
-    final accounts = store.activeAccounts;
     final selectedCategory = categories
         .where((category) => category.id == _categoryId)
         .firstOrNull;
-    final selectedAccount = accounts
-        .where((account) => account.id == _accountId)
-        .firstOrNull;
-    final selectedToAccount = accounts
-        .where((account) => account.id == _toAccountId)
-        .firstOrNull;
+    final selectedAccount = _accountId == null
+        ? null
+        : store.accountById(_accountId!);
+    final selectedToAccount = _toAccountId == null
+        ? null
+        : store.accountById(_toAccountId!);
 
     final media = MediaQuery.of(context);
     final keyboardOpen = media.viewInsets.bottom > 0;
@@ -626,6 +651,12 @@ class _TxEditorPageState extends State<TxEditorPage> {
                       : _CategorySection(
                           categories: categories,
                           selected: selectedCategory,
+                          historicalLabel:
+                              _sameKind &&
+                                  !_hasScanDraft &&
+                                  selectedCategory == null
+                              ? store.categoryName(_categoryId)
+                              : null,
                           controller: _categoryScroll,
                           onSelect: (id) => setState(() => _categoryId = id),
                           onEditIcon: _changeCategoryIcon,
@@ -724,7 +755,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                           child: Text(
                             _hasScanDraft && _amount == 0
                                 ? 'Isi nominal'
-                                : 'Rp ${numberText(_amount)}',
+                                : 'Rp ${numberText(_signedAmount)}',
                             style: TextStyle(
                               fontSize: 25,
                               fontWeight: FontWeight.w600,
@@ -1096,6 +1127,7 @@ class _CategorySection extends StatelessWidget {
   const _CategorySection({
     required this.categories,
     required this.selected,
+    required this.historicalLabel,
     required this.controller,
     required this.onSelect,
     required this.onEditIcon,
@@ -1104,6 +1136,7 @@ class _CategorySection extends StatelessWidget {
 
   final List<MoneyCategory> categories;
   final MoneyCategory? selected;
+  final String? historicalLabel;
   final ScrollController controller;
   final ValueChanged<String> onSelect;
   final ValueChanged<MoneyCategory> onEditIcon;
@@ -1164,12 +1197,14 @@ class _CategorySection extends StatelessWidget {
             ),
           ],
         ),
-        if (rows == 0)
+        if (historicalLabel case final label?)
+          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        if (rows == 0 && historicalLabel == null)
           Text(
             'Belum ada kategori.',
             style: Theme.of(context).textTheme.bodyMedium,
           )
-        else
+        else if (rows > 0)
           SizedBox(
             key: const ValueKey('transaction-categories'),
             height: height,

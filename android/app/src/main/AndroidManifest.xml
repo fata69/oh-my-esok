@@ -53,7 +53,7 @@
 
         <receiver
             android:name="com.habib.jadwal.TaskWidgetProvider"
-            android:label="Oh My Esok — Catatan"
+            android:label="@string/widget_agenda_name"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

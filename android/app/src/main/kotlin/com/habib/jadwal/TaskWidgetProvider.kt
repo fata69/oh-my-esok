@@ -9,21 +9,21 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.util.TypedValue
+import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
-import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Locale
-import kotlin.math.roundToInt
 
 class TaskWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
-            refreshAll(context)
-        }
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) refreshAll(context)
     }
 
     override fun onUpdate(
@@ -31,14 +31,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
-        for (appWidgetId in appWidgetIds) {
-            appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId))
-            appWidgetManager.notifyAppWidgetViewDataChanged(
-                appWidgetId,
-                R.id.widget_list,
-            )
-        }
-        super.onUpdate(context, appWidgetManager, appWidgetIds)
+        for (id in appWidgetIds) update(context, appWidgetManager, id)
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -47,239 +40,174 @@ class TaskWidgetProvider : AppWidgetProvider() {
         appWidgetId: Int,
         newOptions: Bundle,
     ) {
-        appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId))
-        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
+        update(context, appWidgetManager, appWidgetId, newOptions)
     }
 
     companion object {
-        private const val DEFAULT_WIDTH_DP = 320
-        private const val DEFAULT_HEIGHT_DP = 160
+        private const val TALL_HEIGHT_DP = 206
+        private val dateLabel = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.forLanguageTag("id-ID"))
 
-        private const val REFERENCE_WIDTH_DP = 320f
-        private const val REFERENCE_HEIGHT_DP = 160f
-        private const val MIN_SCALE = 0.85f
-        private const val MAX_SCALE = 1.9f
+        internal data class Upcoming(val date: LocalDate, val item: JSONObject)
 
-        internal data class Metrics(
-            val labelSp: Float,
-            val counterSp: Float,
-            val titleSp: Float,
-            val timeSp: Float,
-            val emptySp: Float,
-            val paddingDp: Int,
-            val rowHeightDp: Int,
-            val checkSizeDp: Int,
-        )
+        internal data class Agenda(
+            val date: LocalDate,
+            val tasks: List<JSONObject>,
+            val next: Upcoming?,
+        ) {
+            private val firstOpen = tasks.firstOrNull { !it.optBoolean("done") }
+            val done = tasks.count { it.optBoolean("done") }
 
-        internal data class TaskDay(
-            val date: String,
-            val label: String,
-            val tasks: JSONArray,
-            val total: Int,
-            val done: Int,
-        )
-
-        internal fun metricsFor(widthDp: Int, heightDp: Int): Metrics {
-            val widthScale = widthDp / REFERENCE_WIDTH_DP
-            val heightScale = heightDp / REFERENCE_HEIGHT_DP
-            val weighted = widthScale * 0.6f + heightScale * 0.4f
-            val widthCap = widthDp / 240f
-            val scale = minOf(weighted, widthCap).coerceIn(MIN_SCALE, MAX_SCALE)
-
-            val labelSp = 12f * scale
-            val counterSp = 13f * scale
-            val titleSp = 16f * scale
-            val timeSp = 12.5f * scale
-            val emptySp = 14f * scale
-            val paddingDp = (16f * scale).roundToInt().coerceAtLeast(10)
-            val rowHeightDp = (44f * scale).roundToInt().coerceAtLeast(36)
-
-            return Metrics(
-                labelSp = labelSp,
-                counterSp = counterSp,
-                titleSp = titleSp,
-                timeSp = timeSp,
-                emptySp = emptySp,
-                paddingDp = paddingDp,
-                rowHeightDp = rowHeightDp,
-                checkSizeDp = rowHeightDp,
-            )
-        }
-
-        internal fun metricsForWidget(context: Context, appWidgetId: Int): Metrics {
-            val options = try {
-                AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
-            } catch (error: Exception) {
-                Bundle()
+            fun rows(tall: Boolean): List<JSONObject> = when {
+                tall -> tasks
+                firstOpen != null -> listOf(firstOpen)
+                next != null -> emptyList()
+                else -> tasks.takeLast(1)
             }
-            val widthDp = options
-                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
-                .takeIf { it > 0 } ?: DEFAULT_WIDTH_DP
-            val heightDp = options
-                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
-                .takeIf { it > 0 } ?: DEFAULT_HEIGHT_DP
-            return metricsFor(widthDp, heightDp)
+
+            fun showsNext(tall: Boolean): Boolean = next != null && (tall || firstOpen == null)
         }
 
-        private fun dp(context: Context, value: Int): Int =
-            (value * context.resources.displayMetrics.density).roundToInt()
-
-        private fun applyFrame(context: Context, views: RemoteViews, metrics: Metrics) {
-            val padding = dp(context, metrics.paddingDp)
-            views.setViewPadding(R.id.widget_root, padding, padding, padding, padding)
-            views.setTextViewTextSize(
-                R.id.widget_label,
-                TypedValue.COMPLEX_UNIT_SP,
-                metrics.labelSp,
-            )
-            views.setTextViewTextSize(
-                R.id.widget_counter,
-                TypedValue.COMPLEX_UNIT_SP,
-                metrics.counterSp,
-            )
-            views.setTextViewTextSize(
-                R.id.widget_empty,
-                TypedValue.COMPLEX_UNIT_SP,
-                metrics.emptySp,
+        internal fun agenda(context: Context): Agenda {
+            val data = HomeWidgetPlugin.getData(context)
+            return agendaFromSnapshot(
+                data.getString("tasks_json", "{}").orEmpty(),
+                LocalDate.now(),
+                data.getString("pending_toggles", "{}").orEmpty(),
             )
         }
 
-        internal fun applyRow(row: RemoteViews, metrics: Metrics) {
-            row.setTextViewTextSize(
-                R.id.task_title,
-                TypedValue.COMPLEX_UNIT_SP,
-                metrics.titleSp,
-            )
-            row.setTextViewTextSize(
-                R.id.task_time,
-                TypedValue.COMPLEX_UNIT_SP,
-                metrics.timeSp,
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                row.setViewLayoutHeight(
-                    R.id.task_row,
-                    metrics.rowHeightDp.toFloat(),
-                    TypedValue.COMPLEX_UNIT_DIP,
-                )
-                row.setViewLayoutWidth(
-                    R.id.task_check,
-                    metrics.checkSizeDp.toFloat(),
-                    TypedValue.COMPLEX_UNIT_DIP,
-                )
-                row.setViewLayoutHeight(
-                    R.id.task_check,
-                    metrics.checkSizeDp.toFloat(),
-                    TypedValue.COMPLEX_UNIT_DIP,
-                )
-            }
-        }
-
-        internal fun selectedDay(context: Context): TaskDay? {
-            val raw = HomeWidgetPlugin.getData(context).getString("tasks_json", "{}") ?: "{}"
-            val root = try {
-                JSONObject(raw)
-            } catch (error: Exception) {
-                JSONObject()
-            }
-            val dates = root.keys().asSequence().sorted().toList()
-            for (key in dates) {
-                val day = root.optJSONObject(key) ?: continue
-                val total = day.optInt("total", 0)
-                if (total <= 0) continue
-                val tasks = day.optJSONArray("tasks") ?: JSONArray()
-                var done = 0
-                for (index in 0 until tasks.length()) {
-                    if (tasks.optJSONObject(index)?.optBoolean("done", false) == true) {
-                        done++
+        internal fun agendaFromSnapshot(
+            raw: String,
+            today: LocalDate,
+            pendingToggles: String = "{}",
+        ): Agenda {
+            val snapshot = parseObject(raw)
+            val pending = parseObject(pendingToggles)
+            val date = today.toString()
+            val current = tasksFrom(snapshot, date, pending)
+            val next = snapshot.keys().asSequence()
+                .filter { it > date }
+                .sorted()
+                .firstNotNullOfOrNull { key ->
+                    val day = try {
+                        LocalDate.parse(key)
+                    } catch (_: DateTimeParseException) {
+                        return@firstNotNullOfOrNull null
                     }
+                    tasksFrom(snapshot, key, pending)
+                        .firstOrNull { !it.optBoolean("done") }
+                        ?.let { Upcoming(day, it) }
                 }
-                return TaskDay(
-                    date = key,
-                    label = day.optString("label", ""),
-                    tasks = tasks,
-                    total = total,
-                    done = done,
-                )
-            }
-            return null
+            return Agenda(today, current, next)
         }
+
+        private fun parseObject(raw: String) = try {
+            JSONObject(raw)
+        } catch (_: JSONException) {
+            JSONObject()
+        }
+
+        private fun tasksFrom(snapshot: JSONObject, date: String, pending: JSONObject): List<JSONObject> {
+            val items = snapshot.optJSONObject(date)?.optJSONArray("tasks") ?: return emptyList()
+            return (0 until items.length())
+                .mapNotNull { items.optJSONObject(it) }
+                .filter { it.optString("id").isNotBlank() }
+                .onEach { item ->
+                    // A Dart snapshot refresh can finish before a widget tap is
+                    // drained to SQLite. Keep displaying the pending choice.
+                    (pending.opt(item.optString("id")) as? Boolean)?.let { item.put("done", it) }
+                }
+                .sortedWith(compareBy({ it.optString("time").isBlank() }, { it.optString("time") }))
+        }
+
+        private fun isTall(options: Bundle) =
+            options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) >= TALL_HEIGHT_DP
+
+        internal fun isTallWidget(context: Context, appWidgetId: Int) =
+            isTall(AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId))
 
         fun refreshAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
-            val ids = manager.getAppWidgetIds(
-                ComponentName(context, TaskWidgetProvider::class.java),
-            )
-            for (id in ids) {
-                manager.updateAppWidget(id, buildViews(context, id))
-                manager.notifyAppWidgetViewDataChanged(id, R.id.widget_list)
-            }
+            val ids = manager.getAppWidgetIds(ComponentName(context, TaskWidgetProvider::class.java))
+            for (id in ids) update(context, manager, id)
         }
 
-        fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
-            val metrics = metricsForWidget(context, appWidgetId)
-            val views = RemoteViews(context.packageName, R.layout.task_widget)
-            applyFrame(context, views, metrics)
+        private fun update(
+            context: Context,
+            manager: AppWidgetManager,
+            id: Int,
+            options: Bundle = manager.getAppWidgetOptions(id),
+        ) {
+            manager.updateAppWidget(id, buildViews(context, id, isTall(options)))
+            manager.notifyAppWidgetViewDataChanged(id, R.id.widget_list)
+        }
 
-            val muted = context.getColor(R.color.widget_muted)
-            val doneColor = context.getColor(R.color.widget_positive)
-            val day = selectedDay(context)
+        private fun visibility(visible: Boolean) = if (visible) View.VISIBLE else View.GONE
 
-            val serviceIntent = Intent(context, TaskWidgetService::class.java).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
-            }
-            views.setRemoteAdapter(R.id.widget_list, serviceIntent)
-            views.setEmptyView(R.id.widget_list, R.id.widget_empty)
-
-            var templateFlags = PendingIntent.FLAG_UPDATE_CURRENT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                templateFlags = templateFlags or PendingIntent.FLAG_MUTABLE
-            }
-            views.setPendingIntentTemplate(
-                R.id.widget_list,
-                PendingIntent.getActivity(
-                    context,
-                    200 + appWidgetId,
-                    Intent(context, TaskWidgetActionActivity::class.java),
-                    templateFlags,
-                ),
-            )
-
-            if (day == null) {
-                views.setTextViewText(R.id.widget_label, "TIDAK ADA CATATAN")
-                views.setTextColor(R.id.widget_label, muted)
-                views.setTextViewText(R.id.widget_counter, "")
-            } else {
-                if (day.done == day.total) {
-                    views.setTextViewText(R.id.widget_label, "✓ Semua selesai")
-                    views.setTextColor(R.id.widget_label, doneColor)
-                } else {
-                    views.setTextViewText(
-                        R.id.widget_label,
-                        day.label.uppercase(Locale("id", "ID")),
-                    )
-                    views.setTextColor(R.id.widget_label, muted)
-                }
-                views.setTextViewText(R.id.widget_counter, "${day.done}/${day.total}")
-            }
-
-            val headerIntent = Intent(context, MainActivity::class.java).apply {
-                if (day != null) {
-                    data = Uri.parse("ohmyesok://day/${day.date}")
-                }
+        private fun dayIntent(
+            context: Context,
+            id: Int,
+            date: LocalDate,
+            add: Boolean = false,
+        ): PendingIntent {
+            val uri = Uri.Builder().scheme("ohmyesok").authority("day").appendPath(date.toString())
+            if (add) uri.appendQueryParameter("add", "1")
+            val launch = Intent(context, MainActivity::class.java).apply {
+                data = uri.build()
                 action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
-            views.setOnClickPendingIntent(
-                R.id.widget_header,
-                PendingIntent.getActivity(
-                    context,
-                    100,
-                    headerIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                ),
+            return PendingIntent.getActivity(
+                context,
+                id,
+                launch,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
+        }
 
+        private fun buildViews(context: Context, id: Int, tall: Boolean): RemoteViews {
+            val agenda = agenda(context)
+            val views = RemoteViews(context.packageName, R.layout.task_widget)
+            val current = agenda.rows(tall)
+            val showNext = agenda.showsNext(tall)
+            val date = agenda.date.format(dateLabel)
+            val title = if (agenda.tasks.isEmpty() && !showNext) R.string.widget_agenda else R.string.widget_today
+            val description = if (agenda.tasks.isEmpty()) {
+                date
+            } else {
+                context.getString(R.string.widget_progress, date, agenda.done, agenda.tasks.size)
+            }
+            views.setTextViewText(R.id.widget_label, context.getText(title))
+            views.setTextViewText(R.id.widget_counter, description)
+            views.setOnClickPendingIntent(R.id.widget_header, dayIntent(context, id, agenda.date))
+            views.setOnClickPendingIntent(R.id.widget_add, dayIntent(context, id, agenda.date, add = true))
+
+            val service = Intent(context, TaskWidgetService::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            }
+            views.setRemoteAdapter(R.id.widget_list, service)
+            val listAction = Intent(context, TaskWidgetActionActivity::class.java).apply {
+                data = Uri.parse("ohmyesok://widget/$id")
+            }
+            val mutability = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+            views.setPendingIntentTemplate(
+                R.id.widget_list,
+                PendingIntent.getActivity(context, id, listAction, PendingIntent.FLAG_UPDATE_CURRENT or mutability),
+            )
+            views.setViewVisibility(R.id.widget_list, visibility(current.isNotEmpty()))
+            views.setViewVisibility(R.id.widget_empty, visibility(current.isEmpty() && !showNext))
+            val next = agenda.next
+            views.setViewVisibility(R.id.widget_next, visibility(showNext))
+            if (showNext && next != null) {
+                views.setTextViewText(
+                    R.id.widget_next_date,
+                    context.getString(R.string.widget_next, next.date.format(dateLabel)),
+                )
+                views.setTextViewText(R.id.widget_next_title, next.item.optString("title"))
+                views.setTextViewText(R.id.widget_next_time, next.item.optString("time").replace(':', '.'))
+                views.setOnClickPendingIntent(R.id.widget_next, dayIntent(context, id, next.date))
+            }
             return views
         }
     }

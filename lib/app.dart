@@ -161,13 +161,15 @@ class _RestoreGateState extends State<_RestoreGate> {
                       warnings = await AutoBackup.recovery.restore(
                         replace: () => BackupService.replaceAll(candidate),
                         refreshStores: () async {
+                          await WidgetSync.drainPendingToggles(taskStore);
                           await Future.wait([
                             taskStore.refresh(),
+                            taskStore.loadMonth(taskStore.selectedDate),
                             moneyStore.refresh(),
                           ]);
                         },
-                        rescheduleReminders: () => TaskNotifier.instance
-                            .rescheduleAll(candidate.tasks),
+                        rescheduleReminders:
+                            TaskNotifier.instance.syncFromDatabase,
                         syncWidgets: WidgetSync.push,
                       );
                     } catch (_) {

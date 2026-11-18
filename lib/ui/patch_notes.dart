@@ -29,6 +29,17 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.8',
+      date: '18 Nov 2026',
+      notes: [
+        'Agenda bisa diulang setiap hari, Senin–Jumat, mingguan, atau pada hari pilihan.',
+        'Widget Agenda menampilkan progres hari ini, pintasan tambah, dan jadwal berikutnya.',
+        'Cari transaksi dari semua bulan lewat catatan, kategori, atau nama dompet.',
+        'Edit catatan transaksi lama mempertahankan dompet, kategori, jam, dan tanda nominal.',
+        'Pembaruan berikutnya bisa memilih paket yang sesuai perangkat untuk unduhan lebih kecil.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.7',
       date: '17 Nov 2026',
       notes: [

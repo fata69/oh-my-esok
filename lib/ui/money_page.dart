@@ -28,6 +28,7 @@ class MoneyPage extends StatefulWidget {
     BuildContext context, {
     MoneyTransaction? transaction,
     DateTime? initialDate,
+    bool revealSavedMonth = true,
   }) async {
     final store = context.read<MoneyStore>();
     final saved = await Navigator.of(context).push<String>(
@@ -37,7 +38,7 @@ class MoneyPage extends StatefulWidget {
       ),
     );
     if (saved == null || !context.mounted) return;
-    await store.setMonth(DateTime.parse(saved));
+    if (revealSavedMonth) await store.setMonth(DateTime.parse(saved));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -45,46 +46,13 @@ class MoneyPage extends StatefulWidget {
       ),
     );
   }
-}
 
-enum _LedgerKind {
-  all('Semua'),
-  income('Pemasukan'),
-  expense('Pengeluaran'),
-  transfer('Transfer');
-
-  const _LedgerKind(this.label);
-  final String label;
-}
-
-typedef _LedgerFilter = ({_LedgerKind kind, bool newestFirst});
-
-class _MoneyPageState extends State<MoneyPage> {
-  static const _defaultFilter = (kind: _LedgerKind.all, newestFirst: true);
-  _LedgerFilter _filter = _defaultFilter;
-
-  Future<void> _editFilter() async {
-    final filter = await showModalBottomSheet<_LedgerFilter>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _LedgerFilterSheet(initial: _filter),
-    );
-    if (mounted && filter != null) setState(() => _filter = filter);
-  }
-
-  bool _matches(MoneyTransaction transaction) => switch (_filter.kind) {
-    _LedgerKind.all => true,
-    _LedgerKind.income => transaction.isIncome,
-    _LedgerKind.expense => transaction.isExpense,
-    _LedgerKind.transfer => transaction.isTransfer,
-  };
-
-  Future<void> _showActions(
+  static Future<void> _showActions(
     BuildContext context,
     MoneyStore store,
-    MoneyTransaction transaction,
-  ) async {
+    MoneyTransaction transaction, {
+    bool revealSavedMonth = true,
+  }) async {
     if (transaction.kind == 'adjustment') return;
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -134,7 +102,11 @@ class _MoneyPageState extends State<MoneyPage> {
     );
     if (action == null || !context.mounted) return;
     if (action == 'edit') {
-      await MoneyPage._openEditor(context, transaction: transaction);
+      await _openEditor(
+        context,
+        transaction: transaction,
+        revealSavedMonth: revealSavedMonth,
+      );
       return;
     }
     if (action == 'items') {
@@ -170,6 +142,40 @@ class _MoneyPageState extends State<MoneyPage> {
       if (confirmed == true) await store.deleteTransaction(transaction.id);
     }
   }
+}
+
+enum _LedgerKind {
+  all('Semua'),
+  income('Pemasukan'),
+  expense('Pengeluaran'),
+  transfer('Transfer');
+
+  const _LedgerKind(this.label);
+  final String label;
+}
+
+typedef _LedgerFilter = ({_LedgerKind kind, bool newestFirst});
+
+class _MoneyPageState extends State<MoneyPage> {
+  static const _defaultFilter = (kind: _LedgerKind.all, newestFirst: true);
+  _LedgerFilter _filter = _defaultFilter;
+
+  Future<void> _editFilter() async {
+    final filter = await showModalBottomSheet<_LedgerFilter>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _LedgerFilterSheet(initial: _filter),
+    );
+    if (mounted && filter != null) setState(() => _filter = filter);
+  }
+
+  bool _matches(MoneyTransaction transaction) => switch (_filter.kind) {
+    _LedgerKind.all => true,
+    _LedgerKind.income => transaction.isIncome,
+    _LedgerKind.expense => transaction.isExpense,
+    _LedgerKind.transfer => transaction.isTransfer,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -225,6 +231,30 @@ class _MoneyPageState extends State<MoneyPage> {
               ),
             ],
           ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: EsokContentGroup(
+              children: [
+                InkWell(
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const _TransactionSearchPage(),
+                    ),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                    child: Row(
+                      children: [
+                        Icon(Icons.search, size: 22),
+                        SizedBox(width: 10),
+                        Expanded(child: Text('Cari transaksi')),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (filterActive)
             Text(
               '${_filter.kind.label} · ${_filter.newestFirst ? 'Terbaru dulu' : 'Terlama dulu'}',
@@ -249,26 +279,162 @@ class _MoneyPageState extends State<MoneyPage> {
                     : null,
               ),
               for (final (index, transaction) in entry.value.indexed)
-                EsokGroupedRow(
+                _TransactionRow(
                   key: ValueKey(transaction.id),
                   first: index == 0,
                   last: index == entry.value.length - 1,
-                  child: Column(
-                    children: [
-                      if (index > 0)
-                        const Divider(height: 1, indent: 54, endIndent: 12),
-                      _TransactionRow(
-                        transaction: transaction,
-                        store: store,
-                        onTap: transaction.kind == 'adjustment'
-                            ? null
-                            : () => _showActions(context, store, transaction),
-                      ),
-                    ],
-                  ),
+                  transaction: transaction,
+                  store: store,
+                  onTap: () =>
+                      MoneyPage._showActions(context, store, transaction),
                 ),
             ],
         ],
+      ),
+    );
+  }
+}
+
+class _TransactionSearchPage extends StatefulWidget {
+  const _TransactionSearchPage();
+
+  @override
+  State<_TransactionSearchPage> createState() => _TransactionSearchPageState();
+}
+
+class _TransactionSearchPageState extends State<_TransactionSearchPage> {
+  final _search = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<MoneyStore>();
+    final colors = EsokColors.of(context);
+    final text = Theme.of(context).textTheme;
+    final query = _search.text.trim();
+    final results = store.searchTransactions(query);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cari transaksi'),
+        centerTitle: true,
+        backgroundColor: colors.canvas,
+        scrolledUnderElevation: 0,
+      ),
+      body: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: EsokTabLayout.gutter),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 4),
+              TextField(
+                controller: _search,
+                focusNode: _focus,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'Catatan, kategori, atau dompet',
+                  prefixIcon: const Icon(Icons.search, size: 22),
+                  suffixIcon: _search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Hapus pencarian',
+                          onPressed: () {
+                            setState(_search.clear);
+                            _focus.requestFocus();
+                          },
+                          icon: const Icon(Icons.close, size: 20),
+                        ),
+                  filled: true,
+                  fillColor: colors.control,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: colors.outline),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 2),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    query.isEmpty
+                        ? 'Cari di semua bulan.'
+                        : '${results.length} transaksi · Semua bulan',
+                    style: text.bodyMedium,
+                  ),
+                ),
+              ),
+              if (query.isNotEmpty && results.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: Text(
+                    'Tidak ada transaksi yang cocok.',
+                    style: text.bodyLarge,
+                  ),
+                ),
+              if (results.isNotEmpty)
+                Expanded(
+                  child: ListView.builder(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.only(bottom: 16),
+                    itemCount: results.length,
+                    itemBuilder: (_, index) {
+                      final transaction = results[index];
+                      final first =
+                          index == 0 ||
+                          results[index - 1].date != transaction.date;
+                      final last =
+                          index == results.length - 1 ||
+                          results[index + 1].date != transaction.date;
+                      final date = first
+                          ? DateTime.tryParse(transaction.date)
+                          : null;
+
+                      return Column(
+                        key: ValueKey(transaction.id),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (first)
+                            _DayHeader(date: date, net: null, showYear: true),
+                          _TransactionRow(
+                            first: first,
+                            last: last,
+                            transaction: transaction,
+                            store: store,
+                            onTap: () {
+                              _focus.unfocus();
+                              MoneyPage._showActions(
+                                context,
+                                store,
+                                transaction,
+                                revealSavedMonth: false,
+                              );
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -639,14 +805,23 @@ class _AccountBalanceRow extends StatelessWidget {
 }
 
 class _DayHeader extends StatelessWidget {
-  const _DayHeader({required this.date, required this.net});
+  const _DayHeader({
+    required this.date,
+    required this.net,
+    this.showYear = false,
+  });
 
-  final DateTime date;
+  final DateTime? date;
   final int? net;
+  final bool showYear;
 
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
+    final day = date;
+    final label = day == null
+        ? 'Tanggal tidak tersedia'
+        : '${moneyDayLabel(day)}${showYear ? ' ${day.year}' : ''}';
     final amount = net;
     final color = (amount ?? 0) < 0
         ? colors.negative
@@ -660,7 +835,7 @@ class _DayHeader extends StatelessWidget {
           Expanded(
             flex: 3,
             child: Text(
-              moneyDayLabel(date),
+              label,
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
@@ -689,14 +864,19 @@ class _DayHeader extends StatelessWidget {
 
 class _TransactionRow extends StatelessWidget {
   const _TransactionRow({
+    super.key,
+    required this.first,
+    required this.last,
     required this.transaction,
     required this.store,
     required this.onTap,
   });
 
+  final bool first;
+  final bool last;
   final MoneyTransaction transaction;
   final MoneyStore store;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   bool get _isAdjustment => transaction.kind == 'adjustment';
 
@@ -750,8 +930,8 @@ class _TransactionRow extends StatelessWidget {
         : store.categories
               .where((item) => item.id == transaction.categoryId)
               .firstOrNull;
-    return InkWell(
-      onTap: onTap,
+    final row = InkWell(
+      onTap: _isAdjustment ? null : onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: _LedgerColumns(
@@ -815,6 +995,16 @@ class _TransactionRow extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+    return EsokGroupedRow(
+      first: first,
+      last: last,
+      child: Column(
+        children: [
+          if (!first) const Divider(height: 1, indent: 54, endIndent: 12),
+          row,
+        ],
       ),
     );
   }

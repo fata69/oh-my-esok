@@ -40,7 +40,7 @@ class BackupData {
 class BackupService {
   BackupService._();
 
-  static const schemaVersion = 5;
+  static const schemaVersion = 6;
 
   static Future<BackupData> collect() async {
     final db = await AppDatabase.open();
@@ -60,7 +60,9 @@ class BackupService {
 
   static Map<String, Object?> toJsonMap(BackupData data) => {
     'app': 'esok',
-    'schemaVersion': schemaVersion,
+    'schemaVersion': data.tasks.any((task) => task.isRecurring)
+        ? schemaVersion
+        : 5,
     'exportedAt': DateTime.now().toIso8601String(),
     'counts': {
       'tasks': data.tasks.length,
@@ -84,6 +86,11 @@ class BackupService {
     'notes': task.notes,
     'isDone': task.isDone,
     'createdAt': task.createdAt,
+    if (task.isRecurring) 'repeatWeekdays': task.repeatWeekdays,
+    if (task.seriesId != null) 'seriesId': task.seriesId,
+    if (task.repeatUntil != null) 'repeatUntil': task.repeatUntil,
+    if (task.isSkipped) 'isSkipped': true,
+    if (task.isSkipped && task.isProjected) 'isProjected': true,
   };
 
   static Map<String, Object?> _categoryJson(MoneyCategory category) => {
@@ -197,6 +204,17 @@ class BackupService {
           notes: json['notes'] as String?,
           isDone: json['isDone'] == true || json['isDone'] == 1,
           createdAt: _epoch(json['createdAt']),
+          repeatWeekdays: version >= 6
+              ? (json['repeatWeekdays'] as List?)?.cast<int>().toList() ??
+                    const []
+              : const [],
+          seriesId: version >= 6 ? json['seriesId'] as String? : null,
+          repeatUntil: version >= 6 ? json['repeatUntil'] as String? : null,
+          isSkipped: version >= 6 && json['isSkipped'] == true,
+          isProjected:
+              version >= 6 &&
+              json['isSkipped'] == true &&
+              json['isProjected'] == true,
         ),
       ),
       categories: _parseRows(
@@ -261,6 +279,10 @@ class BackupService {
     }
 
     uniqueIds(data.tasks.map((task) => task.id));
+    final seriesRoots = {
+      for (final task in data.tasks)
+        if (task.isRepeatRule && task.seriesId == null) task.id,
+    };
     uniqueIds(data.transactions.map((transaction) => transaction.id));
     final accountIds = uniqueIds(data.accounts.map((account) => account.id));
     uniqueIds(data.categories.map((category) => category.id));
@@ -269,6 +291,27 @@ class BackupService {
     };
     for (final task in data.tasks) {
       _validateDateAndTime(task.scheduledDate, task.scheduledTime);
+      if (task.repeatWeekdays.any((day) => day < 1 || day > 7) ||
+          task.repeatWeekdays.toSet().length != task.repeatWeekdays.length ||
+          (task.seriesId != null && !seriesRoots.contains(task.seriesId)) ||
+          (task.isSkipped && !task.isOccurrence) ||
+          (task.isRecurring && task.repeatWeekdays.isEmpty)) {
+        throw const FormatException('Aturan agenda berulang tidak valid.');
+      }
+      if (task.repeatUntil case final until?) {
+        _validateDateAndTime(until, null);
+        if (!task.isRepeatRule || until.compareTo(task.scheduledDate) < 0) {
+          throw const FormatException('Akhir agenda berulang tidak valid.');
+        }
+      }
+      if (task.isOccurrence) {
+        if (task.id.length < 16 ||
+            task.id !=
+                Task.occurrenceId(task.recurrenceId, task.occurrenceDay)) {
+          throw const FormatException('ID kejadian agenda tidak valid.');
+        }
+        _validateDateAndTime(task.occurrenceDay, null);
+      }
     }
     for (final transaction in data.transactions) {
       _validateDateAndTime(transaction.date, transaction.time);

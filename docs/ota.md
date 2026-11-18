@@ -30,6 +30,18 @@ The metadata filename is `ota-android.json`. The APK filename is
 `preview` for prerelease, `stable` for a full release. Both assets must belong to
 the same tag. Never use the illustrative size/checksum above for an actual release.
 
+Build 23 and later can select an optional standalone APK using the device's
+ordered list of supported Android ABIs. Keep the universal `apk` entry and
+asset so older builds still update. Add an optional `apkByAbi` object under
+the same schema. Its keys are `arm64-v8a`, `armeabi-v7a`, or `x86_64` and
+its values use the same `name`, `sizeBytes`, and `sha256` fields as `apk`.
+The fixed filenames are `oh-my-esok-arm64-v8a.apk`,
+`oh-my-esok-armeabi-v7a.apk`, and `oh-my-esok-x86_64.apk`. The app uses the
+universal asset if no published variant matches. All variants must be standalone
+APK files with the same package ID, signing certificate, versionCode and minSdk
+as the universal APK. Check the final manifest versionCode of every variant
+before publishing because Flutter's default ABI-split output may change it.
+
 The app accepts only HTTPS release paths in this repository and exact GitHub CDN
 hosts for redirects. Metadata is size bounded; APK downloads are streamed to an
 app-private `.part` file with a 300 MiB upper bound and idle timeout. Interrupted

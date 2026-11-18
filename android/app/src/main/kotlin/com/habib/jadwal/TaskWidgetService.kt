@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Paint
+import android.net.Uri
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import org.json.JSONObject
@@ -21,7 +22,6 @@ private class TaskWidgetFactory(
         AppWidgetManager.EXTRA_APPWIDGET_ID,
         AppWidgetManager.INVALID_APPWIDGET_ID,
     )
-    private var metrics = TaskWidgetProvider.metricsForWidget(context, appWidgetId)
     private var tasks: List<JSONObject> = emptyList()
 
     override fun onCreate() {
@@ -33,15 +33,8 @@ private class TaskWidgetFactory(
     }
 
     private fun reload() {
-        metrics = TaskWidgetProvider.metricsForWidget(context, appWidgetId)
-        val day = TaskWidgetProvider.selectedDay(context)
-        val items = ArrayList<JSONObject>()
-        if (day != null) {
-            for (index in 0 until day.tasks.length()) {
-                day.tasks.optJSONObject(index)?.let { items.add(it) }
-            }
-        }
-        tasks = items
+        val tall = TaskWidgetProvider.isTallWidget(context, appWidgetId)
+        tasks = TaskWidgetProvider.agenda(context).rows(tall)
     }
 
     override fun getCount(): Int = tasks.size
@@ -49,23 +42,22 @@ private class TaskWidgetFactory(
     override fun getViewAt(position: Int): RemoteViews {
         val row = RemoteViews(context.packageName, R.layout.task_widget_item)
         val item = tasks.getOrNull(position) ?: return row
-        TaskWidgetProvider.applyRow(row, metrics)
-
         val isDone = item.optBoolean("done", false)
-        row.setTextViewText(R.id.task_title, item.optString("title"))
+        val title = item.optString("title")
+        row.setTextViewText(R.id.task_title, title)
         row.setTextViewText(R.id.task_time, item.optString("time").replace(":", "."))
-        if (isDone) {
-            row.setTextColor(R.id.task_title, context.getColor(R.color.widget_muted))
-            row.setInt(
-                R.id.task_title,
-                "setPaintFlags",
-                Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG,
-            )
-            row.setImageViewResource(R.id.task_check, R.drawable.widget_check_on)
-        } else {
-            row.setTextColor(R.id.task_title, context.getColor(R.color.widget_ink))
-            row.setImageViewResource(R.id.task_check, R.drawable.widget_check_off)
-        }
+        val tint = if (isDone) R.color.agenda_widget_muted else R.color.agenda_widget_ink
+        row.setTextColor(R.id.task_title, context.getColor(tint))
+        val strike = if (isDone) Paint.STRIKE_THRU_TEXT_FLAG else 0
+        row.setInt(R.id.task_title, "setPaintFlags", Paint.ANTI_ALIAS_FLAG or strike)
+        row.setImageViewResource(
+            R.id.task_check,
+            if (isDone) R.drawable.widget_check_on else R.drawable.widget_check_off,
+        )
+        row.setContentDescription(
+            R.id.task_check,
+            context.getString(if (isDone) R.string.widget_uncheck_task else R.string.widget_check_task, title),
+        )
 
         val taskId = item.optString("id")
         val toggleFill = Intent().apply {
@@ -83,7 +75,8 @@ private class TaskWidgetFactory(
                 TaskWidgetActionActivity.EXTRA_ACTION,
                 TaskWidgetActionActivity.ACTION_OPEN,
             )
-            putExtra(TaskWidgetActionActivity.EXTRA_URI, "ohmyesok://task/$taskId")
+            val uri = Uri.Builder().scheme("ohmyesok").authority("task").appendPath(taskId).build()
+            putExtra(TaskWidgetActionActivity.EXTRA_URI, uri.toString())
         }
         row.setOnClickFillInIntent(R.id.task_body, openFill)
         row.setOnClickFillInIntent(R.id.task_row, openFill)

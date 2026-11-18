@@ -13,7 +13,7 @@ class AppDatabase {
     final directory = await getDatabasesPath();
     final db = await openDatabase(
       p.join(directory, 'esok.db'),
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await _createTasks(db);
         await _createMoney(db);
@@ -40,6 +40,14 @@ class AppDatabase {
         if (oldVersion >= 2 && oldVersion < 6) {
           await db.execute('ALTER TABLE accounts ADD COLUMN icon_key TEXT');
         }
+        if (oldVersion < 7) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN repeat_weekdays TEXT');
+          await db.execute('ALTER TABLE tasks ADD COLUMN series_id TEXT');
+          await db.execute('ALTER TABLE tasks ADD COLUMN repeat_until TEXT');
+          await db.execute(
+            'ALTER TABLE tasks ADD COLUMN is_skipped INTEGER NOT NULL DEFAULT 0',
+          );
+        }
       },
     );
 
@@ -56,7 +64,11 @@ CREATE TABLE tasks (
   scheduled_time TEXT,
   notes          TEXT,
   is_done        INTEGER NOT NULL DEFAULT 0,
-  created_at     INTEGER NOT NULL
+  created_at     INTEGER NOT NULL,
+  repeat_weekdays TEXT,
+  series_id       TEXT,
+  repeat_until    TEXT,
+  is_skipped      INTEGER NOT NULL DEFAULT 0
 )
 ''');
     await db.execute('CREATE INDEX idx_tasks_date ON tasks(scheduled_date)');

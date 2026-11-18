@@ -104,15 +104,16 @@ class _DataPageState extends State<DataPage> {
       if (confirmed != true || !mounted) return;
 
       setState(() => _busy = true);
-      await BackupService.replaceAll(data);
-      await AutoBackup.runIfChanged(force: true);
-      if (!mounted) return;
       final taskStore = context.read<TaskStore>();
       final moneyStore = context.read<MoneyStore>();
+      await BackupService.replaceAll(data);
+      await WidgetSync.drainPendingToggles(taskStore);
+      await AutoBackup.runIfChanged(force: true);
+      if (!mounted) return;
       await taskStore.refresh();
+      await taskStore.loadMonth(taskStore.selectedDate);
       await moneyStore.refresh();
-      final db = await AppDatabase.open();
-      await TaskNotifier.instance.rescheduleAll(await TaskDao(db).all());
+      await TaskNotifier.instance.syncFromDatabase();
       await WidgetSync.push();
       await _loadStats();
       if (!mounted) return;

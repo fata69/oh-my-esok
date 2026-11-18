@@ -76,8 +76,7 @@ class MoneyStore extends ChangeNotifier {
     for (final transaction in _allTransactions) {
       if (transaction.kind == 'income' && transaction.accountId == id) {
         balance += transaction.amount;
-      } else if (transaction.kind == 'expense' &&
-          transaction.accountId == id) {
+      } else if (transaction.kind == 'expense' && transaction.accountId == id) {
         balance -= transaction.amount;
       } else if (transaction.kind == 'transfer') {
         if (transaction.accountId == id) balance -= transaction.amount;
@@ -135,6 +134,23 @@ class MoneyStore extends ChangeNotifier {
   }
 
   int get monthCount => _monthTransactions.length;
+
+  List<MoneyTransaction> searchTransactions(String query) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return const [];
+    final words = normalized.split(RegExp(r'\s+'));
+
+    return _allTransactions.where((transaction) {
+      final fields = [
+        transaction.note ?? '',
+        if (!transaction.isTransfer && transaction.kind != 'adjustment')
+          categoryName(transaction.categoryId),
+        accountName(transaction.accountId),
+        if (transaction.isTransfer) accountName(transaction.toAccountId),
+      ].map((field) => field.toLowerCase()).toList();
+      return words.every((word) => fields.any((field) => field.contains(word)));
+    }).toList();
+  }
 
   String categoryName(String? id) {
     if (id == null) return 'Tanpa kategori';

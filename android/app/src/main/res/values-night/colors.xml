@@ -8,4 +8,8 @@
     <color name="widget_negative">#E07A63</color>
     <color name="widget_positive">#5FAE7C</color>
     <color name="widget_soft">#1F1E19</color>
+    <color name="agenda_widget_canvas">#000000</color>
+    <color name="agenda_widget_ink">#EEEEEE</color>
+    <color name="agenda_widget_muted">#B0B0B0</color>
+    <color name="agenda_widget_line">#3A3A3A</color>
 </resources>

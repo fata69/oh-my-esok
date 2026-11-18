@@ -181,8 +181,12 @@ void main() {
       final sql = migration.map((call) => call.arguments['sql']);
       expect(sql.where((s) => s.toString().startsWith('ALTER TABLE')), [
         'ALTER TABLE accounts ADD COLUMN icon_key TEXT',
+        'ALTER TABLE tasks ADD COLUMN repeat_weekdays TEXT',
+        'ALTER TABLE tasks ADD COLUMN series_id TEXT',
+        'ALTER TABLE tasks ADD COLUMN repeat_until TEXT',
+        'ALTER TABLE tasks ADD COLUMN is_skipped INTEGER NOT NULL DEFAULT 0',
       ]);
-      expect(sql, contains('PRAGMA user_version = 6'));
+      expect(sql, contains('PRAGMA user_version = 7'));
       final category = writes.singleWhere((call) => call.method == 'insert');
       expect(category.arguments['sql'], contains('icon_id) VALUES'));
       expect(category.arguments['sql'], endsWith('NULL)'));
