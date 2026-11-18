@@ -14,14 +14,24 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var receiptInbox: ReceiptInboxBridge? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A completed import lives on disk across Activity and process recreation.
+        if (savedInstanceState == null) receiptInbox?.accept(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receiptInbox?.accept(intent)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         UpdateBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+        receiptInbox = ReceiptInboxBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -111,6 +121,12 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        receiptInbox?.dispose()
+        receiptInbox = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     private val backupFolder = "Oh My Esok"

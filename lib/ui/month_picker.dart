@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../util/format.dart';
 import 'tab_layout.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class EsokMonthHeader extends StatelessWidget {
@@ -32,6 +33,7 @@ class EsokMonthHeader extends StatelessWidget {
     onSelect: () async {
       final selected = await showModalBottomSheet<DateTime>(
         context: context,
+        sheetAnimationStyle: EsokMotion.presentation(context),
         isScrollControlled: true,
         useSafeArea: true,
         showDragHandle: true,

@@ -14,9 +14,94 @@ import 'notify/notifier.dart';
 import 'state/money_store.dart';
 import 'state/settings_store.dart';
 import 'state/task_store.dart';
+import 'ui/motion.dart';
 import 'ui/shell.dart';
 import 'ui/theme.dart';
 import 'widget/widget_sync.dart';
+
+class EsokStartup extends StatefulWidget {
+  const EsokStartup({
+    super.key,
+    required this.settings,
+    required this.initialize,
+  });
+
+  final SettingsStore settings;
+  final Future<EsokApp> Function() initialize;
+
+  @override
+  State<EsokStartup> createState() => _EsokStartupState();
+}
+
+class _EsokStartupState extends State<EsokStartup> {
+  static const _startupKey = ValueKey('startup');
+  late Future<EsokApp> _ready = widget.initialize();
+
+  void _retry() {
+    final next = widget.initialize();
+    setState(() {
+      _ready = next;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<EsokApp>(
+      future: _ready,
+      builder: (context, snapshot) {
+        final app = snapshot.data;
+        final failed =
+            snapshot.connectionState == ConnectionState.done &&
+            snapshot.hasError;
+        return AnimatedBuilder(
+          animation: widget.settings,
+          builder: (context, _) {
+            final mode = widget.settings.themeMode;
+            final dark =
+                mode == ThemeMode.dark ||
+                (mode == ThemeMode.system &&
+                    MediaQuery.platformBrightnessOf(context) ==
+                        Brightness.dark);
+            final theme = dark ? EsokTheme.dark() : EsokTheme.light();
+            return ColoredBox(
+              color: theme.scaffoldBackgroundColor,
+              child: AnimatedSwitcher(
+                duration: EsokMotion.reduced(context)
+                    ? Duration.zero
+                    : EsokMotion.enter,
+                switchInCurve: EsokMotion.settle,
+                // Keep the shared chrome opaque while Hari fades in over it.
+                transitionBuilder: (child, animation) =>
+                    child.key == _startupKey
+                    ? child
+                    : FadeTransition(opacity: animation, child: child),
+                layoutBuilder: (current, previous) => Stack(
+                  alignment: Alignment.center,
+                  fit: StackFit.expand,
+                  children: [
+                    for (final child in previous)
+                      IgnorePointer(child: ExcludeSemantics(child: child)),
+                    ?current,
+                  ],
+                ),
+                child:
+                    app ??
+                    MaterialApp(
+                      key: _startupKey,
+                      debugShowCheckedModeBanner: false,
+                      theme: theme,
+                      darkTheme: dark ? theme : null,
+                      themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+                      home: EsokLoadingShell(onRetry: failed ? _retry : null),
+                    ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
 
 class EsokApp extends StatelessWidget {
   const EsokApp({
@@ -138,6 +223,7 @@ class _RestoreGateState extends State<_RestoreGate> {
     var warnings = <RecoveryWarning>[];
     final restored = await showModalBottomSheet<bool>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       isDismissible: false,
@@ -223,7 +309,9 @@ class _RestoreSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tasks = candidate?.tasks.length ?? 0;
+    final notes = candidate?.notes.length ?? 0;
     final transactions = candidate?.transactions.length ?? 0;
+    final hasPayday = candidate?.paydayPlan.isEmpty == false;
 
     return Container(
       decoration: BoxDecoration(
@@ -263,11 +351,12 @@ class _RestoreSheet extends StatelessWidget {
               candidate == null
                   ? 'Simpan salinan berkas lama sebelum mulai baru. '
                         'Cadangan otomatis berikutnya dapat menggantinya.'
-                  : tasks == 0 && transactions == 0
+                  : tasks == 0 && notes == 0 && transactions == 0 && !hasPayday
                   ? 'Cadangan hanya berisi kategori atau sumber dana. '
                         'Pulihkan dan ganti kategori serta sumber dana yang ada?'
-                  : 'Ada $tasks catatan dan $transactions transaksi dari '
-                        'cadangan terakhir di Download/Oh My Esok. Pulihkan sekarang?',
+                  : '$tasks agenda, $notes catatan, dan $transactions transaksi.'
+                        '${hasPayday ? ' Rencana Sampai Gajian juga ikut dipulihkan.' : ''}'
+                        ' Pulihkan dari Download/Oh My Esok?',
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.6,

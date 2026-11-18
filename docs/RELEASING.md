@@ -85,8 +85,9 @@ shown as such; an offline check is not reported as up to date.
 
 Keep the Esok Git history and credit `notSeraphimXD/esok`. JSON backups without
 recurring agendas retain the upstream v5 format. Backups with recurring agendas
-use v6, which preserves the series and per-date changes. The fork imports both
-formats. Fork automatic backups use a different folder and file so they cannot
+use v6, which preserves the series and per-date changes. Backups with undated
+notes or a payday plan use v7. The fork imports all three formats. Fork
+automatic backups use a different folder and file so they cannot
 replace upstream backups. Do not add an app-wide
 license over inherited code without the rights holder's grant. Font licensing
 remains with the bundled font notices.

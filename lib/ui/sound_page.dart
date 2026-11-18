@@ -12,6 +12,7 @@ import '../state/settings_store.dart';
 import '../util/sound_fx.dart';
 import '../util/sound_library.dart';
 import '../widget/widget_sync.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class SoundPage extends StatelessWidget {
@@ -30,6 +31,7 @@ class SoundPage extends StatelessWidget {
         : <SoundOption>[SoundOption.silent, ...settings.allSounds];
     final result = await showModalBottomSheet<Object>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       isScrollControlled: true,
@@ -76,6 +78,7 @@ class SoundPage extends StatelessWidget {
   void _openLibrary(BuildContext context, SettingsStore settings) {
     showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       isScrollControlled: true,

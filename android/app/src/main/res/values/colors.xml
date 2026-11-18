@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="esok_canvas">#FAF9F7</color>
+    <color name="esok_canvas">#FCFCFC</color>
     <color name="widget_canvas">#FAF9F7</color>
     <color name="widget_ink">#1A1917</color>
     <color name="widget_muted">#6B6862</color>

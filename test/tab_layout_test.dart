@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -12,17 +13,22 @@ import 'package:jadwal/data/account.dart';
 import 'package:jadwal/data/account_dao.dart';
 import 'package:jadwal/data/category.dart';
 import 'package:jadwal/data/category_dao.dart';
+import 'package:jadwal/data/day_note.dart';
 import 'package:jadwal/data/money_transaction.dart';
 import 'package:jadwal/data/money_transaction_dao.dart';
+import 'package:jadwal/data/note_dao.dart';
 import 'package:jadwal/data/task.dart';
 import 'package:jadwal/state/money_store.dart';
 import 'package:jadwal/state/settings_store.dart';
 import 'package:jadwal/state/task_store.dart';
 import 'package:jadwal/ui/calendar_sheet.dart';
+import 'package:jadwal/ui/agenda_loading.dart';
 import 'package:jadwal/ui/home_page.dart';
 import 'package:jadwal/ui/money_page.dart';
+import 'package:jadwal/ui/note_editor_page.dart';
 import 'package:jadwal/ui/reports_page.dart';
 import 'package:jadwal/ui/settings_page.dart';
+import 'package:jadwal/ui/tab_layout.dart';
 import 'package:jadwal/ui/task_editor.dart';
 import 'package:jadwal/ui/tx_editor_page.dart';
 import 'package:jadwal/util/format.dart';
@@ -65,7 +71,9 @@ void main() {
     WidgetTester tester, {
     int notes = 0,
     int categoryCount = 0,
+    bool noteStorage = false,
     bool preview = false,
+    Future<EsokApp> Function(EsokApp)? initialize,
   }) async {
     // Only the native I/O boundaries use test data. The shell, pages, stores,
     // tab state and theme changes all use the production implementations.
@@ -90,19 +98,21 @@ void main() {
       buildSignature: '',
     );
     final settings = SettingsStore();
+    final taskDao = MemoryTaskDao([
+      for (var i = 0; i < notes; i++)
+        Task(
+          id: 'task-$i',
+          title: preview
+              ? ['Tinjau agenda', 'Kirim catatan rapat', 'Belanja rumah'][i]
+              : 'Catatan ke-$i',
+          scheduledDate: dateKey(today()),
+          isDone: false,
+          createdAt: i,
+        ),
+    ], []);
     final tasks = TaskStore(
-      MemoryTaskDao([
-        for (var i = 0; i < notes; i++)
-          Task(
-            id: 'task-$i',
-            title: preview
-                ? ['Tinjau agenda', 'Kirim catatan rapat', 'Belanja rumah'][i]
-                : 'Catatan ke-$i',
-            scheduledDate: dateKey(today()),
-            isDone: false,
-            createdAt: i,
-          ),
-      ], []),
+      taskDao,
+      noteDao: noteStorage ? _MemoryNoteDao(taskDao) : null,
     );
     final db = _LedgerDatabase(preview: preview, categoryCount: categoryCount);
     final money = MoneyStore(
@@ -115,10 +125,16 @@ void main() {
     addTearDown(money.dispose);
     await tasks.init();
     await money.init();
+    final app = EsokApp(store: tasks, moneyStore: money, settings: settings);
     await tester.pumpWidget(
       RepaintBoundary(
         key: const ValueKey('preview-boundary'),
-        child: EsokApp(store: tasks, moneyStore: money, settings: settings),
+        child: initialize == null
+            ? app
+            : EsokStartup(
+                settings: settings,
+                initialize: () => initialize(app),
+              ),
       ),
     );
     await tester.pumpAndSettle();
@@ -129,6 +145,118 @@ void main() {
     await tester.tap(find.bySemanticsLabel(label).hitTestable());
     await tester.pumpAndSettle();
   }
+
+  testWidgets('cold start matches Hari layout and can retry startup', (
+    tester,
+  ) async {
+    final first = Completer<EsokApp>();
+    var attempts = 0;
+    await launch(
+      tester,
+      notes: 3,
+      initialize: (app) async {
+        return ++attempts == 1 ? first.future : app;
+      },
+    );
+    expect(find.byType(AgendaLoading), findsOneWidget);
+    expect(find.byType(HomePage), findsNothing);
+    final dock = find.byKey(const ValueKey('floating-navigation'));
+    final create = find.byKey(const ValueKey('bottom-create'));
+    final period = find.byType(EsokPeriodHeader);
+    final agenda = find.text('Agenda');
+    final loadingDock = tester.getRect(dock);
+    final loadingCreate = tester.getRect(create);
+    final loadingPeriod = tester.getTopLeft(period);
+    final loadingAgenda = tester.getTopLeft(agenda);
+    expect(dock.hitTestable(), findsNothing);
+    expect(create.hitTestable(), findsNothing);
+
+    first.completeError(StateError('Database busy'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aplikasi belum bisa dibuka.'), findsOneWidget);
+    await tester.tap(find.text('Coba lagi'));
+    await tester.pumpAndSettle();
+
+    expect(attempts, 2);
+    expect(find.byType(HomePage), findsOneWidget);
+    expect(find.byType(AgendaLoading), findsNothing);
+    expect(tester.getRect(dock), loadingDock);
+    expect(tester.getRect(create), loadingCreate);
+    expect(tester.getTopLeft(period), loadingPeriod);
+    // Font layout rounds line heights to whole pixels.
+    expect(tester.getTopLeft(agenda).dy, closeTo(loadingAgenda.dy, 2));
+    expect(find.text('UANG HARI INI'), findsNothing);
+  });
+
+  testWidgets('Catatan uses its own layout and can move to Agenda', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    await launch(tester, noteStorage: true);
+    expect(find.text('Belum ada agenda').hitTestable(), findsOneWidget);
+    expect(find.text('UANG HARI INI'), findsNothing);
+    await tester.tap(find.text('Catatan').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('0 catatan'), findsOneWidget);
+    await tester.tap(find.byTooltip('Tambah catatan'));
+    await tester.pumpAndSettle();
+    final fields = find.descendant(
+      of: find.byType(NoteEditorPage),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(fields.first, 'Ide perjalanan');
+    await tester.enterText(fields.last, 'Bawa payung');
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GridView).hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Tampilan daftar'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GridView).hitTestable(), findsNothing);
+    expect(find.text('Bawa payung').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Urutkan catatan'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is CheckedPopupMenuItem<NoteSort> &&
+            widget.value == NoteSort.title,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      (await SharedPreferences.getInstance()).getString('note_sort'),
+      'title',
+    );
+    await tester.tap(find.text('Ide perjalanan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jadwalkan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pakai jadwal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NoteEditorPage), findsNothing);
+    expect(find.text('Ide perjalanan').hitTestable(), findsOneWidget);
+    expect(find.text('Bawa payung').hitTestable(), findsOneWidget);
+    expect(find.text('0 dari 1 selesai'), findsOneWidget);
+    await tester.tap(find.text('Catatan').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('0 catatan'), findsOneWidget);
+    expect(find.text('Ide perjalanan').hitTestable(), findsNothing);
+    await tester.tap(find.text('Agenda').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ide perjalanan').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Pindahkan ke Catatan'));
+    await tester.tap(find.text('Pindahkan ke Catatan').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pindahkan').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('1 catatan'), findsOneWidget);
+    expect(find.text('Ide perjalanan').hitTestable(), findsOneWidget);
+  });
 
   testWidgets('Uang follows Gelap, Terang and Sistem while offscreen', (
     tester,
@@ -220,25 +348,13 @@ void main() {
 
     verifyHeader(HomePage);
     verifyDock();
-    expect(find.byTooltip('Tambah catatan').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Tambah agenda').hitTestable(), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
     final date = find.text(dateTitle(today()));
     final dateSize = tester.widget<Text>(date).style?.fontSize;
-    final action = find.widgetWithText(InkWell, 'Catat pengeluaran');
-    await tester.scrollUntilVisible(
-      action,
-      190,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.drag(find.byType(ListView).first, const Offset(0, -320));
-    await tester.pumpAndSettle();
-    expect(action.hitTestable(), findsOneWidget);
-    expect(tester.getRect(action).bottom, lessThan(tester.getRect(create).top));
+    expect(find.text('Buku kas ›'), findsNothing);
+    expect(find.text('Catat pengeluaran'), findsNothing);
+    expect(find.text('Catat transaksi'), findsNothing);
 
     await select(tester, 'Uang');
     verifyHeader(MoneyPage);
@@ -292,14 +408,10 @@ void main() {
     expect(tester.getRect(license).bottom, lessThan(tester.getRect(nav).top));
 
     await select(tester, 'Hari');
-    await tester.drag(find.byType(ListView).first, const Offset(0, -220));
+    await tester.tap(find.byTooltip('Tambah agenda'));
     await tester.pumpAndSettle();
-    expect(action.hitTestable(), findsOneWidget);
-    await tester.tap(action);
-    await tester.pumpAndSettle();
-    final expense = tester.widget<TxEditorPage>(find.byType(TxEditorPage));
-    expect(expense.initialDate, today());
-    expect(expense.initialKind, 'expense');
+    expect(find.byType(TaskEditorSheet), findsOneWidget);
+    expect(find.byType(TxEditorPage), findsNothing);
   });
 
   testWidgets('bottom actions respect the selected day and yield to editors', (
@@ -765,6 +877,52 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   }, skip: !makePreviews);
+}
+
+class _MemoryNoteDao implements NoteDao {
+  _MemoryNoteDao(this.tasks);
+
+  final MemoryTaskDao tasks;
+  final Map<String, DayNote> notes = {};
+
+  @override
+  Future<List<DayNote>> all() async => notes.values.toList();
+
+  @override
+  Future<void> save(DayNote note, {required bool creating}) async {
+    notes[note.id] = note;
+  }
+
+  @override
+  Future<Task?> schedule(DayNote note, DateTime date, String? time) async {
+    if (notes.remove(note.id) == null) return null;
+    return tasks.rows[note.id] = Task(
+      id: note.id,
+      title: note.displayTitle,
+      notes: note.body,
+      scheduledDate: dateKey(date),
+      scheduledTime: time,
+      isDone: false,
+      createdAt: note.createdAt,
+    );
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    notes.remove(id);
+  }
+
+  @override
+  Future<DayNote?> unschedule(Task draft) async {
+    if (tasks.rows.remove(draft.id) == null) return null;
+    return notes[draft.id] = DayNote(
+      id: draft.id,
+      title: draft.title,
+      body: draft.notes ?? '',
+      createdAt: draft.createdAt,
+      updatedAt: draft.createdAt,
+    );
+  }
 }
 
 class _LedgerDatabase implements Database {

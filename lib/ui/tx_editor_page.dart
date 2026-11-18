@@ -11,7 +11,9 @@ import '../ai/receipt_scanner.dart';
 import '../data/account.dart';
 import '../data/category.dart';
 import '../data/money_transaction.dart';
+import '../data/payday_dao.dart';
 import '../data/task.dart';
+import '../receipt/receipt_inbox.dart';
 import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../util/format.dart';
@@ -22,6 +24,7 @@ import 'manage_accounts.dart';
 import 'money_icon_catalog.dart';
 import 'money_icon_picker.dart';
 import 'receipt_scan_review.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class TxEditorPage extends StatefulWidget {
@@ -30,11 +33,21 @@ class TxEditorPage extends StatefulWidget {
     this.transaction,
     this.initialDate,
     this.initialKind = 'expense',
-  });
+    this.initialBill,
+    this.saveBillPayment,
+    this.receiptImage,
+  }) : assert((initialBill == null) == (saveBillPayment == null)),
+       assert(initialBill == null || transaction == null),
+       assert(
+         receiptImage == null || (transaction == null && initialBill == null),
+       );
 
   final MoneyTransaction? transaction;
   final DateTime? initialDate;
   final String initialKind;
+  final PlannedBill? initialBill;
+  final Future<void> Function(MoneyTransaction)? saveBillPayment;
+  final File? receiptImage;
 
   @override
   State<TxEditorPage> createState() => _TxEditorPageState();
@@ -59,6 +72,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
   bool _scanning = false;
   bool _manualKindChosen = false;
   bool _hasScanDraft = false;
+  late final String _entryId = widget.transaction?.id ?? const Uuid().v4();
 
   bool get _isEditing => widget.transaction != null;
   bool get _isTransfer => _kind == 'transfer';
@@ -70,20 +84,27 @@ class _TxEditorPageState extends State<TxEditorPage> {
   void initState() {
     super.initState();
     final transaction = widget.transaction;
+    final bill = widget.initialBill;
     _kind = transaction?.kind ?? widget.initialKind;
-    _manualKindChosen = transaction != null || widget.initialKind != 'expense';
-    _amount = transaction?.amount.abs() ?? 0;
-    _categoryId = transaction?.categoryId;
-    _accountId = transaction?.accountId;
+    _manualKindChosen =
+        transaction != null || bill != null || widget.initialKind != 'expense';
+    _amount = transaction?.amount.abs() ?? bill?.amount ?? 0;
+    _categoryId =
+        transaction?.categoryId ?? (bill == null ? null : 'cat-exp-tagihan');
+    _accountId = transaction?.accountId ?? bill?.accountId;
     _toAccountId = transaction?.toAccountId;
     _detail = transaction?.detail;
     _date = transaction == null
         ? dateOnly(widget.initialDate ?? today())
         : DateTime.parse(transaction.date);
-    _noteController = TextEditingController(text: transaction?.note ?? '');
+    _noteController = TextEditingController(
+      text: transaction?.note ?? bill?.name ?? '',
+    );
     if (!_isEditing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _ensureSelections();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        _ensureSelections();
+        if (widget.receiptImage != null) await _scanReceipt();
       });
     }
   }
@@ -107,8 +128,11 @@ class _TxEditorPageState extends State<TxEditorPage> {
         !_isTransfer &&
         (_categoryId == null ||
             !categories.any((category) => category.id == _categoryId))) {
-      _categoryId = categories.isEmpty ? null : categories.first.id;
-      changed = true;
+      final preferredCategory = widget.initialBill != null || categories.isEmpty
+          ? null
+          : categories.first.id;
+      changed = _categoryId != preferredCategory;
+      _categoryId = preferredCategory;
     }
     if (_accountId == null ||
         (!_isEditing && !accounts.any((account) => account.id == _accountId))) {
@@ -154,8 +178,12 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
   void _changeKind(String kind) {
     if (_addingCategory) return;
+    final firstChoice = !_manualKindChosen;
     _manualKindChosen = true;
-    if (_kind == kind) return;
+    if (_kind == kind) {
+      if (firstChoice) setState(() {});
+      return;
+    }
     setState(() {
       _kind = kind;
       _creatingCategory = false;
@@ -196,6 +224,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
     final accounts = store.activeAccounts;
     final selected = await showModalBottomSheet<String>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (_) => _WalletSheet(
@@ -320,7 +349,10 @@ class _TxEditorPageState extends State<TxEditorPage> {
   bool get _canSave {
     final original = widget.transaction;
     final preservingZero = _sameKind && !_hasScanDraft && original?.amount == 0;
-    if ((_amount <= 0 && !preservingZero) || _date == null || _scanning) {
+    if ((_amount <= 0 && !preservingZero) ||
+        _date == null ||
+        _scanning ||
+        (widget.receiptImage != null && !_manualKindChosen)) {
       return false;
     }
     if (_isTransfer) {
@@ -330,7 +362,10 @@ class _TxEditorPageState extends State<TxEditorPage> {
     }
     final preservingNoCategory =
         _sameKind && !_hasScanDraft && original?.categoryId == null;
-    return (_categoryId != null || preservingNoCategory) && _accountId != null;
+    return (_categoryId != null ||
+            preservingNoCategory ||
+            widget.initialBill != null) &&
+        _accountId != null;
   }
 
   Future<void> _save() async {
@@ -341,7 +376,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       final settings = context.read<SettingsStore>();
       final note = _noteController.text.trim();
       final transaction = MoneyTransaction(
-        id: widget.transaction?.id ?? const Uuid().v4(),
+        id: _entryId,
         amount: _signedAmount,
         kind: _kind,
         categoryId: _isTransfer
@@ -361,15 +396,30 @@ class _TxEditorPageState extends State<TxEditorPage> {
       var delta = balanceDeltaOf(transaction);
       if (previous != null) delta -= balanceDeltaOf(previous);
 
-      if (_isEditing) {
+      if (widget.saveBillPayment case final save?) {
+        await save(transaction);
+      } else if (_isEditing) {
         await store.updateTransaction(transaction);
       } else {
         await store.addTransaction(transaction);
+      }
+      final receipt = widget.receiptImage;
+      if (receipt != null) {
+        try {
+          await ReceiptInbox.discard(receipt);
+        } catch (_) {
+          // Keep a successfully saved transaction even if cleanup needs retry.
+          debugPrint('Draf struk belum bisa dihapus.');
+        }
       }
       if (delta != 0 && settings.soundEnabled) {
         SoundFx.play(delta > 0 ? settings.soundUp : settings.soundDown);
       }
       if (mounted) Navigator.of(context).pop(transaction.date);
+    } on PaydayWriteException catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _toast(error.message);
     } catch (_) {
       debugPrint('Simpan transaksi gagal.');
       if (!mounted) return;
@@ -383,6 +433,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
     if (transaction == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: EsokMotion.presentation(context),
       builder: (context) => AlertDialog(
         backgroundColor: EsokColors.canvas,
         title: const Text('Hapus transaksi?'),
@@ -413,33 +464,23 @@ class _TxEditorPageState extends State<TxEditorPage> {
       return;
     }
 
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (_) => const _ScanSourceSheet(),
-    );
-    if (source == null || !mounted) return;
-
-    final picked = await ImagePicker().pickImage(
-      source: source,
-      maxWidth: 1600,
-      imageQuality: 80,
-    );
-    if (picked == null || !mounted) return;
-
-    final file = File(picked.path);
-    final proceed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      isScrollControlled: true,
-      builder: (_) => _ScanConfirmSheet(file: file),
-    );
-    if (proceed != true || !mounted) return;
-
-    setState(() => _scanning = true);
+    var scanning = false;
     try {
+      final file = widget.receiptImage ?? await _pickReceipt();
+      if (file == null || !mounted) return;
+      final proceed = await showModalBottomSheet<bool>(
+        context: context,
+        sheetAnimationStyle: EsokMotion.presentation(context),
+        backgroundColor: Colors.transparent,
+        barrierColor: const Color(0x5214120E),
+        isScrollControlled: true,
+        builder: (_) =>
+            _ScanConfirmSheet(file: file, shared: widget.receiptImage != null),
+      );
+      if (proceed != true || !mounted) return;
+
+      scanning = true;
+      setState(() => _scanning = true);
       final result = await ReceiptScanner.scan(
         image: file,
         apiKey: settings.aiKey,
@@ -459,6 +500,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       } else {
         chosen = await showModalBottomSheet<ScanTransaction>(
           context: context,
+          sheetAnimationStyle: EsokMotion.presentation(context),
           backgroundColor: Colors.transparent,
           barrierColor: const Color(0x5214120E),
           isScrollControlled: true,
@@ -468,6 +510,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       if (chosen == null || !mounted) return;
       final reviewed = await showModalBottomSheet<ScanReviewChoice>(
         context: context,
+        sheetAnimationStyle: EsokMotion.presentation(context),
         backgroundColor: Colors.transparent,
         barrierColor: const Color(0x5214120E),
         isScrollControlled: true,
@@ -483,8 +526,25 @@ class _TxEditorPageState extends State<TxEditorPage> {
     } catch (error) {
       _toast('Gagal memindai struk.');
     } finally {
-      if (mounted) setState(() => _scanning = false);
+      if (mounted && scanning) setState(() => _scanning = false);
     }
+  }
+
+  Future<File?> _pickReceipt() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
+      backgroundColor: Colors.transparent,
+      barrierColor: const Color(0x5214120E),
+      builder: (_) => const _ScanSourceSheet(),
+    );
+    if (source == null || !mounted) return null;
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 1600,
+      imageQuality: 80,
+    );
+    return picked == null ? null : File(picked.path);
   }
 
   void _applyScan(MoneyStore store, ScanReviewChoice reviewed) {
@@ -528,6 +588,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
     if (detail == null || detail.isEmpty) return;
     showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       isScrollControlled: true,
@@ -621,7 +682,12 @@ class _TxEditorPageState extends State<TxEditorPage> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _Segments(selected: _kind, onChanged: _changeKind),
+                child: _Segments(
+                  selected: widget.receiptImage != null && !_manualKindChosen
+                      ? null
+                      : _kind,
+                  onChanged: _changeKind,
+                ),
               ),
               if (_hasScanDraft)
                 const Padding(
@@ -633,7 +699,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
                   ),
                 ),
               const SizedBox(height: 8),
-              if (!_isTransfer) ...[
+              if (!_isTransfer &&
+                  (widget.receiptImage == null || _manualKindChosen)) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _creatingCategory
@@ -971,9 +1038,10 @@ class _ScanSourceRow extends StatelessWidget {
 }
 
 class _ScanConfirmSheet extends StatelessWidget {
-  const _ScanConfirmSheet({required this.file});
+  const _ScanConfirmSheet({required this.file, required this.shared});
 
   final File file;
+  final bool shared;
 
   @override
   Widget build(BuildContext context) {
@@ -1010,7 +1078,7 @@ class _ScanConfirmSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Pastikan nominal total terlihat jelas',
+              'Foto dikirim ke Gemini setelah kamu menekan Pindai.',
               style: TextStyle(fontSize: 11, color: EsokColors.muted),
             ),
             const SizedBox(height: 12),
@@ -1020,7 +1088,10 @@ class _ScanConfirmSheet extends StatelessWidget {
                 file,
                 height: 220,
                 width: double.infinity,
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
+                cacheWidth: 900,
+                errorBuilder: (_, _, _) =>
+                    const Center(child: Text('Foto ini sudah tidak tersedia.')),
               ),
             ),
             const SizedBox(height: 14),
@@ -1029,7 +1100,7 @@ class _ScanConfirmSheet extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: () => Navigator.of(context).pop(true),
                 icon: const Icon(Icons.auto_awesome, size: 17),
-                label: const Text('Scan dengan AI'),
+                label: const Text('Pindai dengan Gemini'),
                 style: FilledButton.styleFrom(
                   backgroundColor: EsokColors.accent,
                   foregroundColor: EsokColors.onAccent,
@@ -1052,7 +1123,7 @@ class _ScanConfirmSheet extends StatelessWidget {
                   foregroundColor: EsokColors.muted,
                   textStyle: const TextStyle(fontSize: 13),
                 ),
-                child: const Text('Ganti foto'),
+                child: Text(shared ? 'Nanti saja' : 'Ganti foto'),
               ),
             ),
           ],
@@ -1065,7 +1136,7 @@ class _ScanConfirmSheet extends StatelessWidget {
 class _Segments extends StatelessWidget {
   const _Segments({required this.selected, required this.onChanged});
 
-  final String selected;
+  final String? selected;
   final ValueChanged<String> onChanged;
 
   static const _values = ['expense', 'income', 'transfer'];

@@ -7,6 +7,7 @@ import 'category_icon.dart';
 import 'chevron.dart';
 import 'money_icon_catalog.dart';
 import 'money_icon_picker.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class ManageCategoriesPage extends StatefulWidget {
@@ -32,6 +33,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
     final kind = _kind;
     final draft = await showModalBottomSheet<_CategoryDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
@@ -55,6 +57,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
   Future<void> _edit(MoneyCategory category) async {
     final draft = await showModalBottomSheet<_CategoryDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
@@ -88,6 +91,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: EsokMotion.presentation(context),
       builder: (context) => AlertDialog(
         backgroundColor: EsokColors.canvas,
         title: const Text('Hapus kategori?'),
@@ -118,6 +122,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (context) => Container(
@@ -183,6 +188,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
     if (archived.isEmpty) return;
     await showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (context) => Container(

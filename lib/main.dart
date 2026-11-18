@@ -12,6 +12,8 @@ import 'data/account_dao.dart';
 import 'data/category_dao.dart';
 import 'data/database.dart';
 import 'data/money_transaction_dao.dart';
+import 'data/note_dao.dart';
+import 'data/payday_dao.dart';
 import 'data/task_dao.dart';
 import 'notify/notifier.dart';
 import 'state/money_store.dart';
@@ -20,12 +22,17 @@ import 'state/task_store.dart';
 import 'ui/theme.dart';
 import 'widget/widget_sync.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('id_ID');
-
   final settings = SettingsStore();
-  await settings.init();
+  unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+  runApp(
+    EsokStartup(settings: settings, initialize: () => _initialize(settings)),
+  );
+}
+
+Future<EsokApp> _initialize(SettingsStore settings) async {
+  await Future.wait([initializeDateFormatting('id_ID'), settings.init()]);
 
   final platformBrightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -36,16 +43,19 @@ Future<void> main() async {
   );
 
   final database = await AppDatabase.open();
-  final store = TaskStore(TaskDao(database));
+  final store = TaskStore(TaskDao(database), noteDao: NoteDao(database));
   final moneyStore = MoneyStore(
     CategoryDao(database),
     AccountDao(database),
     MoneyTransactionDao(database),
+    paydayDao: PaydayDao(database),
   );
-  await store.init();
-  await moneyStore.init();
+  await Future.wait([store.init(), moneyStore.init()]);
 
-  final empty = await _isDatabaseEmpty(database);
+  final empty =
+      store.notes.isEmpty &&
+      (moneyStore.paydayPlan?.isEmpty ?? true) &&
+      await _isDatabaseEmpty(database);
   BackupData? restoreCandidate;
   var unreadableBackup = false;
   if (empty) {
@@ -78,7 +88,6 @@ Future<void> main() async {
 
   _startReminderTopUps();
 
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -96,19 +105,16 @@ Future<void> main() async {
     ),
   );
 
-  runApp(
-    EsokApp(
-      store: store,
-      moneyStore: moneyStore,
-      settings: settings,
-      restoreCandidate: restoreCandidate,
-      unreadableBackup: unreadableBackup,
-    ),
-  );
-
   if (!empty) {
     unawaited(AutoBackup.runIfChanged());
   }
+  return EsokApp(
+    store: store,
+    moneyStore: moneyStore,
+    settings: settings,
+    restoreCandidate: restoreCandidate,
+    unreadableBackup: unreadableBackup,
+  );
 }
 
 void _startReminderTopUps() {

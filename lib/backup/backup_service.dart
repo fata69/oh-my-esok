@@ -12,8 +12,11 @@ import '../data/account_dao.dart';
 import '../data/category.dart';
 import '../data/category_dao.dart';
 import '../data/database.dart';
+import '../data/day_note.dart';
 import '../data/money_transaction.dart';
 import '../data/money_transaction_dao.dart';
+import '../data/note_dao.dart';
+import '../data/payday_dao.dart';
 import '../data/task.dart';
 import '../data/task_dao.dart';
 
@@ -23,59 +26,80 @@ class BackupData {
     required this.categories,
     required this.accounts,
     required this.transactions,
+    this.notes = const [],
+    this.paydayPlan = const PaydayPlan(),
   });
 
   final List<Task> tasks;
   final List<MoneyCategory> categories;
   final List<Account> accounts;
   final List<MoneyTransaction> transactions;
+  final List<DayNote> notes;
+  final PaydayPlan paydayPlan;
 
   bool get isEmpty =>
       tasks.isEmpty &&
       categories.isEmpty &&
       accounts.isEmpty &&
-      transactions.isEmpty;
+      transactions.isEmpty &&
+      notes.isEmpty &&
+      paydayPlan.isEmpty;
 }
 
 class BackupService {
   BackupService._();
 
-  static const schemaVersion = 6;
+  static const schemaVersion = 7;
 
   static Future<BackupData> collect() async {
     final db = await AppDatabase.open();
-    final results = await Future.wait([
-      TaskDao(db).all(),
-      CategoryDao(db).all(),
-      AccountDao(db).all(),
-      MoneyTransactionDao(db).all(),
-    ]);
-    return BackupData(
-      tasks: results[0] as List<Task>,
-      categories: results[1] as List<MoneyCategory>,
-      accounts: results[2] as List<Account>,
-      transactions: results[3] as List<MoneyTransaction>,
-    );
+    // A conversion or payment link can change two tables in the same write.
+    return db.transaction((txn) async {
+      return BackupData(
+        tasks: await TaskDao.readAll(txn),
+        categories: await CategoryDao(txn).all(),
+        accounts: await AccountDao(txn).all(),
+        transactions: await MoneyTransactionDao(txn).all(),
+        notes: await NoteDao.readAll(txn),
+        paydayPlan: await PaydayDao.readFrom(txn),
+      );
+    });
   }
 
-  static Map<String, Object?> toJsonMap(BackupData data) => {
-    'app': 'esok',
-    'schemaVersion': data.tasks.any((task) => task.isRecurring)
+  static Map<String, Object?> toJsonMap(BackupData data) {
+    final version = data.notes.isNotEmpty || !data.paydayPlan.isEmpty
         ? schemaVersion
-        : 5,
-    'exportedAt': DateTime.now().toIso8601String(),
-    'counts': {
-      'tasks': data.tasks.length,
-      'transactions': data.transactions.length,
-      'categories': data.categories.length,
-      'accounts': data.accounts.length,
-    },
-    'tasks': data.tasks.map(_taskJson).toList(),
-    'categories': data.categories.map(_categoryJson).toList(),
-    'accounts': data.accounts.map(_accountJson).toList(),
-    'transactions': data.transactions
-        .map((transaction) => transaction.toJson())
-        .toList(),
+        : data.tasks.any((task) => task.isRecurring)
+        ? 6
+        : 5;
+    return {
+      'app': 'esok',
+      'schemaVersion': version,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'counts': {
+        'tasks': data.tasks.length,
+        'transactions': data.transactions.length,
+        'categories': data.categories.length,
+        'accounts': data.accounts.length,
+        if (version >= 7) 'notes': data.notes.length,
+      },
+      'tasks': data.tasks.map(_taskJson).toList(),
+      'categories': data.categories.map(_categoryJson).toList(),
+      'accounts': data.accounts.map(_accountJson).toList(),
+      'transactions': data.transactions
+          .map((transaction) => transaction.toJson())
+          .toList(),
+      if (version >= 7) 'notes': data.notes.map(_noteJson).toList(),
+      if (!data.paydayPlan.isEmpty) 'paydayPlan': data.paydayPlan.toJson(),
+    };
+  }
+
+  static Map<String, Object?> _noteJson(DayNote note) => {
+    'id': note.id,
+    'title': note.title,
+    'body': note.body,
+    'createdAt': note.createdAt,
+    'updatedAt': note.updatedAt,
   };
 
   static Map<String, Object?> _taskJson(Task task) => {
@@ -193,6 +217,22 @@ class BackupService {
     }
 
     final data = BackupData(
+      notes: version >= 7
+          ? _parseRows(
+              decoded,
+              'notes',
+              (json) => DayNote(
+                id: json['id'] as String,
+                title: json['title'] as String,
+                body: json['body'] as String,
+                createdAt: json['createdAt'] as int,
+                updatedAt: json['updatedAt'] as int,
+              ),
+            )
+          : const [],
+      paydayPlan: version >= 7 && decoded.containsKey('paydayPlan')
+          ? _parsePaydayPlan(decoded['paydayPlan'])
+          : const PaydayPlan(),
       tasks: _parseRows(
         decoded,
         'tasks',
@@ -278,7 +318,13 @@ class BackupService {
       return ids;
     }
 
-    uniqueIds(data.tasks.map((task) => task.id));
+    uniqueIds([
+      ...data.tasks.map((task) => task.id),
+      ...data.notes.map((note) => note.id),
+    ]);
+    if (data.notes.any((note) => note.isEmpty)) {
+      throw const FormatException('Catatan cadangan masih kosong.');
+    }
     final seriesRoots = {
       for (final task in data.tasks)
         if (task.isRepeatRule && task.seriesId == null) task.id,
@@ -345,6 +391,21 @@ class BackupService {
           throw const FormatException('Kategori transaksi tidak valid.');
         }
       }
+    }
+    data.paydayPlan.validate(
+      accounts: data.accounts,
+      transactions: data.transactions,
+    );
+  }
+
+  static PaydayPlan _parsePaydayPlan(Object? raw) {
+    if (raw is! Map<String, Object?>) {
+      throw const FormatException('Rencana Sampai Gajian tidak valid.');
+    }
+    try {
+      return PaydayPlan.fromJson(raw);
+    } on TypeError {
+      throw const FormatException('Rencana Sampai Gajian tidak valid.');
     }
   }
 
@@ -421,6 +482,8 @@ class BackupService {
     }
     final db = await AppDatabase.open();
     await db.transaction((txn) async {
+      await PaydayDao.replaceIn(txn, const PaydayPlan());
+      await txn.delete(NoteDao.table);
       await txn.delete('tasks');
       await txn.delete('transactions');
       await txn.delete('categories');
@@ -432,6 +495,9 @@ class BackupService {
           task.toMap(),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
+      }
+      for (final note in data.notes) {
+        await txn.insert(NoteDao.table, note.toMap());
       }
       for (final category in data.categories) {
         await txn.insert(
@@ -461,12 +527,17 @@ class BackupService {
           accounts: data.accounts.isEmpty,
         );
       }
+      if (!data.paydayPlan.isEmpty) {
+        await PaydayDao.replaceIn(txn, data.paydayPlan);
+      }
     });
   }
 
   static Future<void> clearAll() async {
     final db = await AppDatabase.open();
     await db.transaction((txn) async {
+      await PaydayDao.replaceIn(txn, const PaydayPlan());
+      await txn.delete(NoteDao.table);
       await txn.delete('tasks');
       await txn.delete('transactions');
       await txn.delete('categories');

@@ -5,7 +5,7 @@ import 'account.dart';
 class AccountDao {
   AccountDao(this._db);
 
-  final Database _db;
+  final DatabaseExecutor _db;
 
   Future<List<Account>> all() async {
     final rows = await _db.query(

@@ -1,6 +1,9 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import 'note_dao.dart';
+import 'payday_dao.dart';
+
 class AppDatabase {
   AppDatabase._();
 
@@ -13,10 +16,12 @@ class AppDatabase {
     final directory = await getDatabasesPath();
     final db = await openDatabase(
       p.join(directory, 'esok.db'),
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await _createTasks(db);
         await _createMoney(db);
+        await NoteDao.createTable(db);
+        await PaydayDao.createTables(db);
         await seedDefaults(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -47,6 +52,10 @@ class AppDatabase {
           await db.execute(
             'ALTER TABLE tasks ADD COLUMN is_skipped INTEGER NOT NULL DEFAULT 0',
           );
+        }
+        if (oldVersion < 8) {
+          await NoteDao.createTable(db);
+          await PaydayDao.createTables(db);
         }
       },
     );

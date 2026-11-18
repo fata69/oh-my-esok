@@ -7,6 +7,7 @@ import '../data/category.dart';
 import '../data/category_dao.dart';
 import '../data/money_transaction.dart';
 import '../data/money_transaction_dao.dart';
+import '../data/payday_dao.dart';
 import '../data/task.dart';
 import '../widget/widget_sync.dart';
 import 'money_report.dart';
@@ -15,12 +16,20 @@ class NameConflictException implements Exception {}
 
 class ItemInUseException implements Exception {}
 
+class PaydayAccountInUseException implements Exception {}
+
 class MoneyStore extends ChangeNotifier {
-  MoneyStore(this._categoryDao, this._accountDao, this._transactionDao);
+  MoneyStore(
+    this._categoryDao,
+    this._accountDao,
+    this._transactionDao, {
+    this._paydayDao,
+  });
 
   final CategoryDao _categoryDao;
   final AccountDao _accountDao;
   final MoneyTransactionDao _transactionDao;
+  final PaydayDao? _paydayDao;
 
   DateTime _month = DateTime(today().year, today().month);
   List<MoneyCategory> _categories = const [];
@@ -28,12 +37,19 @@ class MoneyStore extends ChangeNotifier {
   List<MoneyTransaction> _allTransactions = const [];
   List<MoneyTransaction> _monthTransactions = const [];
   int _revision = 0;
+  PaydayPlan? _paydayPlan;
 
   DateTime get month => _month;
   List<MoneyCategory> get categories => _categories;
   List<Account> get accounts => _accounts;
   List<MoneyTransaction> get monthTransactions => _monthTransactions;
   int get revision => _revision;
+  PaydayPlan? get paydayPlan => _paydayPlan;
+  bool isBillPayment(String transactionId) =>
+      _paydayPlan?.payments.any(
+        (payment) => payment.transactionId == transactionId,
+      ) ??
+      false;
 
   MoneyReport get monthReport => MoneyReport.build(
     month: _month,
@@ -169,13 +185,72 @@ class MoneyStore extends ChangeNotifier {
   }
 
   Future<void> init() async {
-    await _loadMeta();
-    await _loadMonth();
+    await refresh();
   }
 
   Future<void> refresh() async {
     await _loadMeta();
+    await _loadPayday();
     await _loadMonth();
+  }
+
+  Future<void> _loadPayday() async {
+    if (_paydayDao case final dao?) _paydayPlan = await dao.read();
+  }
+
+  Future<void> _editPayday(Future<void> Function(PaydayDao) write) async {
+    await write(_paydayDao!);
+    await _loadPayday();
+    notifyListeners();
+  }
+
+  Future<void> savePayday(PaydaySchedule schedule) =>
+      _editPayday((dao) => dao.saveSchedule(schedule));
+
+  Future<void> addPlannedBill(PlannedBill bill) =>
+      _editPayday((dao) => dao.addBill(bill));
+
+  Future<void> deletePlannedBill(String id) =>
+      _editPayday((dao) => dao.deleteBill(id));
+
+  Future<void> unlinkBillPayment(BillPayment payment) =>
+      _editPayday((dao) => dao.unlinkPayment(payment));
+
+  Future<void> linkBillPayment(PlannedBill bill, String dueDate, String id) =>
+      _editPayday(
+        (dao) => dao.linkPayment(
+          billId: bill.id,
+          dueDate: dueDate,
+          transactionId: id,
+        ),
+      );
+
+  Future<void> recordBillPayment(
+    PlannedBill bill,
+    String dueDate,
+    MoneyTransaction transaction,
+  ) async {
+    await _paydayDao!.recordPayment(
+      billId: bill.id,
+      dueDate: dueDate,
+      transaction: transaction,
+    );
+    await _loadPayday();
+    await _loadMonth();
+    await WidgetSync.push();
+  }
+
+  List<MoneyTransaction> availableBillPayments(PlannedBill bill) {
+    final used =
+        _paydayPlan?.payments.map((p) => p.transactionId).toSet() ??
+        const <String>{};
+    return _allTransactions
+        .where(
+          (transaction) =>
+              bill.matchesPayment(transaction) &&
+              !used.contains(transaction.id),
+        )
+        .toList();
   }
 
   Future<void> _loadMeta() async {
@@ -231,12 +306,14 @@ class MoneyStore extends ChangeNotifier {
 
   Future<void> updateTransaction(MoneyTransaction transaction) async {
     await _transactionDao.update(transaction);
+    await _loadPayday();
     await _loadMonth();
     await WidgetSync.push();
   }
 
   Future<void> deleteTransaction(String id) async {
     await _transactionDao.delete(id);
+    await _loadPayday();
     await _loadMonth();
     await WidgetSync.push();
   }
@@ -384,9 +461,20 @@ class MoneyStore extends ChangeNotifier {
   }
 
   Future<void> deleteAccount(String id) async {
-    final count = await _accountDao.transactionCount(id);
-    if (count > 0) throw ItemInUseException();
-    await _accountDao.delete(id);
+    if (_paydayDao case final dao?) {
+      switch (await dao.deleteUnusedAccount(id)) {
+        case AccountDeleteBlock.transactions:
+          throw ItemInUseException();
+        case AccountDeleteBlock.payday:
+          throw PaydayAccountInUseException();
+        case null:
+          break;
+      }
+    } else {
+      final count = await _accountDao.transactionCount(id);
+      if (count > 0) throw ItemInUseException();
+      await _accountDao.delete(id);
+    }
     await _loadMeta();
     notifyListeners();
   }

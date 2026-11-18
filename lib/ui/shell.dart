@@ -8,10 +8,13 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../update/update_availability.dart';
+import 'agenda_loading.dart';
 import 'home_page.dart';
 import 'money_page.dart';
+import 'motion.dart';
 import 'reports_page.dart';
 import 'settings_page.dart';
+import 'tab_layout.dart';
 import 'theme.dart';
 
 class EsokShell extends StatefulWidget {
@@ -23,6 +26,7 @@ class EsokShell extends StatefulWidget {
 
 class _EsokShellState extends State<EsokShell> with WidgetsBindingObserver {
   final _home = GlobalKey<HomePageState>();
+  final _showNotes = ValueNotifier(false);
   int _index = 0;
 
   @override
@@ -43,6 +47,7 @@ class _EsokShellState extends State<EsokShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     if (Platform.isAndroid) WidgetsBinding.instance.removeObserver(this);
+    _showNotes.dispose();
     super.dispose();
   }
 
@@ -52,10 +57,134 @@ class _EsokShellState extends State<EsokShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    EsokColors.useDark(isDark);
+    EsokColors.useDark(Theme.of(context).brightness == Brightness.dark);
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     final routeIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
+    return _ShellFrame(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _TabPane(
+            active: _index == 0,
+            child: _AboveDock(
+              child: HomePage(
+                key: _home,
+                onOpenMoney: () => _selectTab(1),
+                onNotesChanged: (notes) => _showNotes.value = notes,
+              ),
+            ),
+          ),
+          _TabPane(
+            active: _index == 1,
+            child: const _AboveDock(child: MoneyPage()),
+          ),
+          _TabPane(
+            active: _index == 2,
+            child: const _AboveDock(child: ReportsPage()),
+          ),
+          _TabPane(active: _index == 3, child: const SettingsPage()),
+        ],
+      ),
+      dock: keyboardVisible
+          ? null
+          : Visibility(
+              visible: routeIsCurrent,
+              // Preserve the measured space while a modal owns the controls.
+              maintainState: true,
+              maintainAnimation: true,
+              maintainSize: true,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _showNotes,
+                builder: (context, notes, _) => _FloatingTabBar(
+                  index: _index,
+                  onChanged: _selectTab,
+                  action: switch (_index) {
+                    0 => (
+                      notes ? 'Tambah catatan' : 'Tambah agenda',
+                      () => _home.currentState?.createEntry(),
+                    ),
+                    1 => (
+                      'Catat transaksi',
+                      () => MoneyPage.createTransaction(context),
+                    ),
+                    _ => null,
+                  },
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class EsokLoadingShell extends StatelessWidget {
+  const EsokLoadingShell({super.key, this.onRetry});
+
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = onRetry == null;
+    return _ShellFrame(
+      body: _AboveDock(
+        child: EsokTabLayout(
+          headerAction: loading
+              ? ExcludeSemantics(
+                  child: IconButton(
+                    onPressed: null,
+                    icon: const Icon(Icons.more_horiz, size: 20),
+                  ),
+                )
+              : null,
+          period: loading
+              ? const ExcludeSemantics(
+                  child: Column(
+                    children: [EsokPeriodHeader.loading(), DaySectionSwitch()],
+                  ),
+                )
+              : null,
+          child: loading
+              ? const AgendaLoading(label: 'Membuka Oh My Esok')
+              : ListView(
+                  padding: const EdgeInsets.all(EsokTabLayout.gutter),
+                  children: [
+                    const Text('Aplikasi belum bisa dibuka.'),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton(
+                        onPressed: onRetry,
+                        child: const Text('Coba lagi'),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+      dock: loading
+          ? IgnorePointer(
+              child: ExcludeFocus(
+                child: ExcludeSemantics(
+                  child: _FloatingTabBar(
+                    index: 0,
+                    onChanged: (_) {},
+                    action: ('Tambah agenda', () {}),
+                  ),
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+class _ShellFrame extends StatelessWidget {
+  const _ShellFrame({required this.body, required this.dock});
+
+  final Widget body;
+  final Widget? dock;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final overlay = SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
@@ -75,51 +204,8 @@ class _EsokShellState extends State<EsokShell> with WidgetsBindingObserver {
         // The extended body exposes the measured height of the chrome and
         // the system inset. Bound the tabs with a persistent creation action.
         extendBody: true,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            _TabPane(
-              active: _index == 0,
-              child: _AboveDock(
-                child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
-              ),
-            ),
-            _TabPane(
-              active: _index == 1,
-              child: const _AboveDock(child: MoneyPage()),
-            ),
-            _TabPane(
-              active: _index == 2,
-              child: const _AboveDock(child: ReportsPage()),
-            ),
-            _TabPane(active: _index == 3, child: const SettingsPage()),
-          ],
-        ),
-        bottomNavigationBar: keyboardVisible
-            ? null
-            : Visibility(
-                visible: routeIsCurrent,
-                // A modal route owns the controls while it is open. Keep
-                // the measured spacer so the underlying list doesn't jump.
-                maintainState: true,
-                maintainAnimation: true,
-                maintainSize: true,
-                child: _FloatingTabBar(
-                  index: _index,
-                  onChanged: _selectTab,
-                  action: switch (_index) {
-                    0 => (
-                      'Tambah catatan',
-                      () => _home.currentState?.createNote(),
-                    ),
-                    1 => (
-                      'Catat transaksi',
-                      () => MoneyPage.createTransaction(context),
-                    ),
-                    _ => null,
-                  },
-                ),
-              ),
+        body: body,
+        bottomNavigationBar: dock,
       ),
     );
   }
@@ -144,10 +230,7 @@ class _TabPaneState extends State<_TabPane> {
 
   @override
   Widget build(BuildContext context) {
-    final reduced =
-        MediaQuery.disableAnimationsOf(context) ||
-        MediaQuery.reduceMotionOf(context) ||
-        MediaQuery.accessibleNavigationOf(context);
+    final reduced = EsokMotion.reduced(context);
     return Offstage(
       offstage: !widget.active && (reduced || !_visible),
       child: TickerMode(
@@ -160,8 +243,10 @@ class _TabPaneState extends State<_TabPane> {
               opacity: widget.active ? 1 : 0,
               duration: reduced
                   ? Duration.zero
-                  : Duration(milliseconds: widget.active ? 240 : 160),
-              curve: Curves.easeOutCubic,
+                  : widget.active
+                  ? EsokMotion.enter
+                  : EsokMotion.exit,
+              curve: EsokMotion.settle,
               onEnd: () {
                 if (widget.active || !_visible) return;
                 // A zero-duration change can finish while the child builds.
@@ -171,14 +256,7 @@ class _TabPaneState extends State<_TabPane> {
                   }
                 });
               },
-              child: AnimatedSlide(
-                offset: widget.active ? Offset.zero : const Offset(.018, 0),
-                duration: reduced
-                    ? Duration.zero
-                    : const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                child: widget.child,
-              ),
+              child: widget.child,
             ),
           ),
         ),
@@ -275,9 +353,7 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
     final solid =
         _forceSolid ||
         MediaQuery.highContrastOf(context) ||
-        MediaQuery.accessibleNavigationOf(context) ||
-        MediaQuery.reduceMotionOf(context) ||
-        MediaQuery.disableAnimationsOf(context);
+        EsokMotion.reduced(context);
     if (solid && !_solid) {
       _reveal.value = _target;
       _indicator.value = widget.index.toDouble();
@@ -410,6 +486,13 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
       ),
     );
 
+    final dark = colors.brightness == Brightness.dark;
+    final actionFill = dark ? const Color(0xFF3B3B3B) : const Color(0xFF242424);
+    final actionEdge = dark && highContrast
+        ? colors.onSurface
+        : dark
+        ? const Color(0xFF818181)
+        : actionFill;
     final button = ClipOval(
       child: BackdropFilter(
         filter: solid ? ui.ImageFilter.blur() : _blur,
@@ -419,17 +502,17 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
           height: _addSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: solid ? tint : tint.withValues(alpha: tintOpacity),
-            border: Border.all(color: edge),
+            color: solid ? actionFill : actionFill.withValues(alpha: 0.97),
+            border: Border.all(color: actionEdge),
           ),
           child: Material(
             type: MaterialType.transparency,
             child: IconButton(
               tooltip: primary?.$1 ?? 'Tambah',
               onPressed: primary?.$2,
-              icon: const Icon(Icons.add_rounded, size: 25),
+              icon: const Icon(Icons.add_rounded, size: 30),
               style: IconButton.styleFrom(
-                foregroundColor: colors.onSurface,
+                foregroundColor: Colors.white,
                 shape: const CircleBorder(),
               ),
             ),

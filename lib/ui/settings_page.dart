@@ -19,6 +19,7 @@ import 'manage_accounts.dart';
 import 'manage_categories.dart';
 import 'sound_page.dart';
 import 'tab_layout.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -86,6 +87,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = context.read<SettingsStore>();
     final value = await showModalBottomSheet<int>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
       builder: (_) => _Sheet(
@@ -200,6 +202,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final controller = TextEditingController(text: initial);
     return showModalBottomSheet<String>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
       isScrollControlled: true,
@@ -306,6 +309,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _showFontLicense() async {
     await showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
       builder: (context) => _Sheet(
@@ -695,12 +699,14 @@ class _Toggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final disabled = MediaQuery.of(context).disableAnimations;
+    final duration = EsokMotion.reduced(context)
+        ? Duration.zero
+        : EsokMotion.feedback;
     return GestureDetector(
       onTap: () => onChanged(!value),
       child: AnimatedContainer(
-        duration: disabled ? Duration.zero : const Duration(milliseconds: 180),
-        curve: Curves.easeOutQuint,
+        duration: duration,
+        curve: EsokMotion.settle,
         width: 40,
         height: 23,
         decoration: BoxDecoration(
@@ -708,10 +714,8 @@ class _Toggle extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: AnimatedAlign(
-          duration: disabled
-              ? Duration.zero
-              : const Duration(milliseconds: 180),
-          curve: Curves.easeOutQuint,
+          duration: duration,
+          curve: EsokMotion.settle,
           alignment: value ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
             width: 18,

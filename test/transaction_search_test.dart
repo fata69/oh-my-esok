@@ -153,6 +153,178 @@ void main() {
     ),
   };
 
+  testWidgets('ledger filters include archived wallets and categories', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final db = _SearchDatabase(
+      imported: [
+        for (final transaction in importedTransactions.values)
+          transaction.copyWith(note: transaction.id),
+      ],
+    );
+    final store = MoneyStore(
+      CategoryDao(db),
+      AccountDao(db),
+      MoneyTransactionDao(db),
+    );
+    addTearDown(store.dispose);
+    await store.init();
+    await store.setMonth(DateTime(2025, 12));
+    final total = store.totalBalance;
+    final archived = store.balanceForAccount('archived-wallet');
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: store,
+        child: MaterialApp(
+          theme: EsokTheme.dark(),
+          home: const Scaffold(body: MoneyPage()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> tap(Finder finder) async {
+      await tester.ensureVisible(finder);
+      await tester.tap(finder.hitTestable());
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> choose(String picker, String value) async {
+      await tap(find.byKey(ValueKey(picker)));
+      await tap(find.text(value).hitTestable().last);
+    }
+
+    final filter = find.widgetWithText(TextButton, 'Filter');
+    final apply = find.text('Terapkan');
+    final transfer = find.text('imported-transfer');
+    final expense = find.text('imported-expense');
+    final uncategorized = find.text('imported-uncategorized');
+    await tap(filter);
+    await choose('Dompet', 'Dompet lama (arsip)');
+    await tap(apply);
+    expect(transfer, findsOneWidget);
+    expect(expense, findsOneWidget);
+    expect(uncategorized, findsNothing);
+
+    await tap(filter);
+    await choose('Kategori', 'Belanja lama (arsip)');
+    await tap(apply);
+    expect(expense, findsOneWidget);
+    expect(transfer, findsNothing);
+    expect(uncategorized, findsNothing);
+    expect(find.textContaining('1 dari 4 transaksi'), findsOneWidget);
+
+    await tap(filter);
+    await tap(find.widgetWithText(ChoiceChip, 'Transfer'));
+    expect(find.byKey(const ValueKey('Kategori')), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(expense, findsOneWidget);
+    expect(transfer, findsNothing);
+
+    await tap(filter);
+    await choose('Dompet', 'Semua dompet');
+    await choose('Kategori', 'Tanpa kategori');
+    await tap(apply);
+    expect(uncategorized, findsOneWidget);
+    expect(transfer, findsNothing);
+    expect(expense, findsNothing);
+
+    await tap(find.widgetWithText(TextButton, 'Reset filter'));
+    expect(transfer, findsOneWidget);
+    final list = find.descendant(
+      of: find.byType(MoneyPage),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(expense, 200, scrollable: list);
+    expect(expense, findsOneWidget);
+    expect(uncategorized, findsOneWidget);
+    expect(store.totalBalance, total);
+    expect(store.balanceForAccount('archived-wallet'), archived);
+  });
+
+  testWidgets('date filter uses the ledger month and keeps monthly totals', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final db = _SearchDatabase(
+      imported: [
+        importedTransactions.values.first.copyWith(note: 'Pengeluaran lama'),
+      ],
+    );
+    final store = MoneyStore(
+      CategoryDao(db),
+      AccountDao(db),
+      MoneyTransactionDao(db),
+    );
+    addTearDown(store.dispose);
+    await store.init();
+    await store.setMonth(DateTime(2025, 12));
+    final total = store.totalBalance;
+    final expense = store.monthExpense;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: store,
+        child: MaterialApp(
+          theme: EsokTheme.light(),
+          home: const Scaffold(body: MoneyPage()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> tap(Finder finder) async {
+      await tester.ensureVisible(finder);
+      await tester.tap(finder.hitTestable());
+      await tester.pumpAndSettle();
+    }
+
+    final filter = find.widgetWithText(TextButton, 'Filter');
+    final apply = find.text('Terapkan');
+    final transfer = find.text('Pemindahan Desember');
+    final oldExpense = find.text('Pengeluaran lama');
+
+    Future<void> selectDay() async {
+      await tap(filter);
+      await tap(find.text('Sepanjang bulan'));
+      final dialog = find.byType(DatePickerDialog);
+      final picker = tester.widget<DatePickerDialog>(dialog);
+      expect(picker.firstDate, DateTime(2025, 12));
+      expect(picker.lastDate, DateTime(2025, 12, 31));
+      await tap(find.descendant(of: dialog, matching: find.text('20')));
+      await tap(find.text('Pilih'));
+      expect(find.text('20 Desember'), findsOneWidget);
+      await tap(apply);
+    }
+
+    await selectDay();
+    expect(transfer, findsOneWidget);
+    expect(oldExpense, findsNothing);
+    expect(find.textContaining('1 dari 2 transaksi'), findsOneWidget);
+    expect(store.totalBalance, total);
+    expect(store.monthExpense, expense);
+
+    await tap(filter);
+    await tap(find.byTooltip('Hapus filter tanggal'));
+    await tap(apply);
+    expect(oldExpense, findsOneWidget);
+    expect(find.textContaining('1 dari 2 transaksi'), findsNothing);
+
+    await selectDay();
+    await store.setMonth(DateTime(2026, 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Belanja Januari'), findsOneWidget);
+    await store.setMonth(DateTime(2025, 12));
+    await tester.pumpAndSettle();
+    expect(oldExpense, findsOneWidget);
+    expect(find.textContaining('1 dari 2 transaksi'), findsNothing);
+  });
+
   for (final MapEntry(key: description, value: original)
       in importedTransactions.entries) {
     testWidgets('search edit changes only the note: $description', (

@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'motion.dart';
+
 class EsokPalette {
   const EsokPalette._({
     required this.canvas,
@@ -146,6 +148,9 @@ class EsokTheme {
   static ThemeData _build(EsokPalette p, Brightness brightness) {
     final base = ThemeData(
       useMaterial3: true,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {TargetPlatform.android: EsokPageTransitions()},
+      ),
       colorScheme: ColorScheme(
         brightness: brightness,
         primary: p.ink,

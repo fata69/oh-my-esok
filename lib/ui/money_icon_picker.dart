@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'money_icon_catalog.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 typedef MoneyIconChoice = ({String? id});
@@ -12,18 +13,15 @@ Future<MoneyIconChoice?> showMoneyIconPicker(
   required MoneyIconSpec automatic,
   String? categoryKind,
 }) {
-  final media = MediaQuery.of(context);
   FocusScope.of(context).unfocus();
   return showModalBottomSheet<MoneyIconChoice>(
     context: context,
+    sheetAnimationStyle: EsokMotion.presentation(context),
     useSafeArea: true,
     isScrollControlled: true,
     showDragHandle: true,
     backgroundColor: EsokColors.of(context).canvas,
     barrierColor: EsokColors.scrim,
-    sheetAnimationStyle: media.disableAnimations || media.reduceMotion
-        ? AnimationStyle.noAnimation
-        : null,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),

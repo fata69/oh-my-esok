@@ -11,7 +11,9 @@ import 'items_sheet.dart';
 import 'manage_accounts.dart';
 import 'money_icon_catalog.dart';
 import 'month_picker.dart';
+import 'payday_page.dart';
 import 'tab_layout.dart';
+import 'motion.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
 
@@ -56,6 +58,7 @@ class MoneyPage extends StatefulWidget {
     if (transaction.kind == 'adjustment') return;
     final action = await showModalBottomSheet<String>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
       builder: (sheetContext) => Container(
@@ -112,6 +115,7 @@ class MoneyPage extends StatefulWidget {
     if (action == 'items') {
       await showModalBottomSheet<void>(
         context: context,
+        sheetAnimationStyle: EsokMotion.presentation(context),
         backgroundColor: Colors.transparent,
         barrierColor: EsokColors.scrim,
         isScrollControlled: true,
@@ -123,6 +127,7 @@ class MoneyPage extends StatefulWidget {
     if (action == 'delete') {
       final confirmed = await showDialog<bool>(
         context: context,
+        animationStyle: EsokMotion.presentation(context),
         builder: (dialogContext) => AlertDialog(
           backgroundColor: EsokColors.of(dialogContext).canvas,
           title: const Text('Hapus transaksi?'),
@@ -154,28 +159,75 @@ enum _LedgerKind {
   final String label;
 }
 
-typedef _LedgerFilter = ({_LedgerKind kind, bool newestFirst});
+typedef _LedgerFilter = ({
+  _LedgerKind kind,
+  bool newestFirst,
+  String? accountId,
+  String? categoryId,
+  DateTime? date,
+});
 
 class _MoneyPageState extends State<MoneyPage> {
-  static const _defaultFilter = (kind: _LedgerKind.all, newestFirst: true);
+  static const _LedgerFilter _defaultFilter = (
+    kind: _LedgerKind.all,
+    newestFirst: true,
+    accountId: null,
+    categoryId: null,
+    date: null,
+  );
+  static const _uncategorized = '';
   _LedgerFilter _filter = _defaultFilter;
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final month = Provider.of<MoneyStore>(context).month;
+    if (_filter.date case final date?
+        when date.year != month.year || date.month != month.month) {
+      _filter = (
+        kind: _filter.kind,
+        newestFirst: _filter.newestFirst,
+        accountId: _filter.accountId,
+        categoryId: _filter.categoryId,
+        date: null,
+      );
+    }
+  }
+
   Future<void> _editFilter() async {
+    final month = context.read<MoneyStore>().month;
     final filter = await showModalBottomSheet<_LedgerFilter>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _LedgerFilterSheet(initial: _filter),
+      builder: (_) => _LedgerFilterSheet(initial: _filter, month: month),
     );
     if (mounted && filter != null) setState(() => _filter = filter);
   }
 
-  bool _matches(MoneyTransaction transaction) => switch (_filter.kind) {
-    _LedgerKind.all => true,
-    _LedgerKind.income => transaction.isIncome,
-    _LedgerKind.expense => transaction.isExpense,
-    _LedgerKind.transfer => transaction.isTransfer,
-  };
+  bool get _hasCriteria =>
+      _filter.kind != _LedgerKind.all ||
+      _filter.accountId != null ||
+      _filter.categoryId != null;
+
+  bool _matches(MoneyTransaction transaction) {
+    final kindMatches = switch (_filter.kind) {
+      _LedgerKind.all => true,
+      _LedgerKind.income => transaction.isIncome,
+      _LedgerKind.expense => transaction.isExpense,
+      _LedgerKind.transfer => transaction.isTransfer,
+    };
+    final accountId = _filter.accountId;
+    final categoryId = _filter.categoryId;
+    return kindMatches &&
+        (accountId == null ||
+            transaction.accountId == accountId ||
+            (transaction.isTransfer && transaction.toAccountId == accountId)) &&
+        (categoryId == null ||
+            ((transaction.isExpense || transaction.isIncome) &&
+                (transaction.categoryId ?? _uncategorized) == categoryId));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,13 +236,28 @@ class _MoneyPageState extends State<MoneyPage> {
     final dates = grouped.keys.toList()
       ..sort((a, b) => _filter.newestFirst ? b.compareTo(a) : a.compareTo(b));
     final visible = <String, List<MoneyTransaction>>{};
+    final selectedDate = _filter.date;
+    final selectedDay = selectedDate == null ? null : dateKey(selectedDate);
     for (final date in dates) {
+      if (selectedDay != null && date != selectedDay) continue;
       final rows = grouped[date]!.where(_matches).toList();
       if (rows.isNotEmpty) {
         visible[date] = _filter.newestFirst ? rows : rows.reversed.toList();
       }
     }
     final filterActive = _filter != _defaultFilter;
+    final filterSummary = [
+      if (_filter.kind != _LedgerKind.all) _filter.kind.label,
+      if (_filter.accountId case final accountId?) store.accountName(accountId),
+      if (_filter.categoryId case final categoryId?)
+        store.categoryName(categoryId == _uncategorized ? null : categoryId),
+      if (selectedDate != null) shortDateTitle(selectedDate),
+      if (!_filter.newestFirst) 'Terlama dulu',
+    ].join(' · ');
+    final resultCount = visible.values.fold<int>(
+      0,
+      (count, rows) => count + rows.length,
+    );
 
     return EsokTabLayout(
       period: EsokMonthHeader(
@@ -208,6 +275,7 @@ class _MoneyPageState extends State<MoneyPage> {
         ),
         children: [
           _BalanceBlock(store: store),
+          PaydayOverview(store: store),
           const SizedBox(height: 24),
           Wrap(
             alignment: WrapAlignment.spaceBetween,
@@ -256,9 +324,22 @@ class _MoneyPageState extends State<MoneyPage> {
             ),
           ),
           if (filterActive)
-            Text(
-              '${_filter.kind.label} · ${_filter.newestFirst ? 'Terbaru dulu' : 'Terlama dulu'}',
-              style: Theme.of(context).textTheme.bodyMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      '$filterSummary\n$resultCount dari ${store.monthCount} transaksi',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _filter = _defaultFilter),
+                  child: const Text('Reset filter'),
+                ),
+              ],
             ),
           if (visible.isEmpty)
             Padding(
@@ -274,9 +355,7 @@ class _MoneyPageState extends State<MoneyPage> {
             for (final entry in visible.entries) ...[
               _DayHeader(
                 date: DateTime.parse(entry.key),
-                net: _filter.kind == _LedgerKind.all
-                    ? store.netForDay(entry.value)
-                    : null,
+                net: _hasCriteria ? null : store.netForDay(entry.value),
               ),
               for (final (index, transaction) in entry.value.indexed)
                 _TransactionRow(
@@ -441,20 +520,88 @@ class _TransactionSearchPageState extends State<_TransactionSearchPage> {
 }
 
 class _LedgerFilterSheet extends StatefulWidget {
-  const _LedgerFilterSheet({required this.initial});
+  const _LedgerFilterSheet({required this.initial, required this.month});
 
   final _LedgerFilter initial;
+  final DateTime month;
 
   @override
   State<_LedgerFilterSheet> createState() => _LedgerFilterSheetState();
 }
 
 class _LedgerFilterSheetState extends State<_LedgerFilterSheet> {
-  late _LedgerFilter _draft = widget.initial;
+  late _LedgerKind _kind = widget.initial.kind;
+  late bool _newestFirst = widget.initial.newestFirst;
+  late String? _accountId = widget.initial.accountId;
+  late String? _categoryId = widget.initial.categoryId;
+  late DateTime? _date = widget.initial.date;
+
+  _LedgerFilter get _draft => (
+    kind: _kind,
+    newestFirst: _newestFirst,
+    accountId: _accountId,
+    categoryId: _categoryId,
+    date: _date,
+  );
+
+  void _reset() => setState(() {
+    _kind = _LedgerKind.all;
+    _newestFirst = true;
+    _accountId = null;
+    _categoryId = null;
+    _date = null;
+  });
+
+  Future<void> _pickDate() async {
+    final now = today();
+    final month = widget.month;
+    final first = DateTime(month.year, month.month);
+    final last = DateTime(month.year, month.month + 1, 0);
+    final initialDate =
+        _date ?? (!now.isBefore(first) && !now.isAfter(last) ? now : first);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: first,
+      lastDate: last,
+      helpText: 'Pilih tanggal transaksi',
+      cancelText: 'Batal',
+      confirmText: 'Pilih',
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _date = dateOnly(picked));
+  }
+
+  void _selectKind(_LedgerKind kind, MoneyStore store) => setState(() {
+    _kind = kind;
+    if (kind == _LedgerKind.transfer ||
+        (_categoryId != _MoneyPageState._uncategorized &&
+            kind != _LedgerKind.all &&
+            !store.categories.any(
+              (category) =>
+                  category.id == _categoryId && category.kind == kind.name,
+            ))) {
+      _categoryId = null;
+    }
+  });
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final store = context.watch<MoneyStore>();
+    final selectedDate = _date;
+    final accounts = {
+      for (final account in store.accounts)
+        account.id: account.archived ? '${account.name} (arsip)' : account.name,
+    };
+    final categories = {
+      _MoneyPageState._uncategorized: 'Tanpa kategori',
+      for (final category in store.categories)
+        if (_kind == _LedgerKind.all || category.kind == _kind.name)
+          category.id: category.archived
+              ? '${category.name} (arsip)'
+              : category.name,
+    };
 
     Widget choices<T>(
       List<(T, String)> options,
@@ -473,52 +620,150 @@ class _LedgerFilterSheetState extends State<_LedgerFilterSheet> {
       ],
     );
 
+    Widget picker(
+      String label,
+      String allLabel,
+      Map<String, String> options,
+      String? value,
+      ValueChanged<String?> onChanged,
+    ) {
+      return InputDecorator(
+        decoration: InputDecoration(labelText: label, isDense: true),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            key: ValueKey(label),
+            value: value,
+            hint: Text(allLabel),
+            style: text.bodyLarge,
+            isExpanded: true,
+            menuMaxHeight: 320,
+            items: [
+              DropdownMenuItem<String>(child: Text(allLabel)),
+              if (value != null && !options.containsKey(value))
+                DropdownMenuItem(value: value, child: Text('$label lama')),
+              for (final entry in options.entries)
+                DropdownMenuItem(
+                  value: entry.key,
+                  child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: onChanged,
+          ),
+        ),
+      );
+    }
+
     return SafeArea(
       top: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Filter transaksi', style: text.titleLarge),
-            const SizedBox(height: 5),
-            Text(
-              'Hanya mengubah riwayat bulan ini. Saldo tetap sama.',
-              style: text.bodyMedium,
-            ),
-            const SizedBox(height: 18),
-            Text('Jenis transaksi', style: text.bodyMedium),
-            choices(
-              [for (final kind in _LedgerKind.values) (kind, kind.label)],
-              _draft.kind,
-              (kind) => setState(
-                () => _draft = (kind: kind, newestFirst: _draft.newestFirst),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Filter transaksi', style: text.titleLarge),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Riwayat ${monthTitle(widget.month)}. Saldo tetap sama.',
+                    style: text.bodyMedium,
+                  ),
+                  const SizedBox(height: 18),
+                  Text('Tanggal transaksi', style: text.bodyMedium),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickDate,
+                          icon: const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 17,
+                          ),
+                          label: Text(
+                            selectedDate == null
+                                ? 'Sepanjang bulan'
+                                : dateTitle(selectedDate),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            alignment: AlignmentDirectional.centerStart,
+                            minimumSize: const Size(48, 48),
+                          ),
+                        ),
+                      ),
+                      if (_date != null)
+                        IconButton(
+                          tooltip: 'Hapus filter tanggal',
+                          onPressed: () => setState(() => _date = null),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text('Jenis transaksi', style: text.bodyMedium),
+                  choices(
+                    [for (final kind in _LedgerKind.values) (kind, kind.label)],
+                    _kind,
+                    (kind) => _selectKind(kind, store),
+                  ),
+                  const SizedBox(height: 14),
+                  picker(
+                    'Dompet',
+                    'Semua dompet',
+                    accounts,
+                    _accountId,
+                    (id) => setState(() => _accountId = id),
+                  ),
+                  if (_kind != _LedgerKind.transfer) ...[
+                    const SizedBox(height: 12),
+                    picker(
+                      'Kategori',
+                      'Semua kategori',
+                      categories,
+                      _categoryId,
+                      (id) => setState(() => _categoryId = id),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Text('Urutkan', style: text.bodyMedium),
+                  choices(
+                    const [(true, 'Terbaru dulu'), (false, 'Terlama dulu')],
+                    _newestFirst,
+                    (newestFirst) => setState(() => _newestFirst = newestFirst),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 14),
-            Text('Urutkan', style: text.bodyMedium),
-            choices(
-              const [(true, 'Terbaru dulu'), (false, 'Terlama dulu')],
-              _draft.newestFirst,
-              (newestFirst) => setState(
-                () => _draft = (kind: _draft.kind, newestFirst: newestFirst),
-              ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+            child: Row(
+              children: [
+                if (_draft != _MoneyPageState._defaultFilter) ...[
+                  Flexible(
+                    child: TextButton(
+                      onPressed: _reset,
+                      child: const Text('Reset filter'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context, _draft),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                    child: const Text('Terapkan'),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 18),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, _draft),
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-              child: const Text('Terapkan'),
-            ),
-            if (_draft != _MoneyPageState._defaultFilter)
-              TextButton(
-                onPressed: () =>
-                    setState(() => _draft = _MoneyPageState._defaultFilter),
-                child: const Text('Reset filter'),
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -650,10 +895,8 @@ class _BalanceBlock extends StatelessWidget {
                   foregroundColor: colors.ink,
                   minimumSize: const Size(48, 48),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  textStyle: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 child: const Text('Kelola dompet', textAlign: TextAlign.end),
               ),
@@ -897,7 +1140,8 @@ class _TransactionRow extends StatelessWidget {
       return '${store.accountName(transaction.accountId)} · Penyesuaian';
     }
     return '${store.categoryName(transaction.categoryId)} · '
-        '${store.accountName(transaction.accountId)}';
+        '${store.accountName(transaction.accountId)}'
+        '${store.isBillPayment(transaction.id) ? ' · Tagihan terhubung' : ''}';
   }
 
   String get _amount {

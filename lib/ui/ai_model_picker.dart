@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import '../ai/gemini_model_catalog.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 /// Returns a canonical catalog ID only after the user confirms a selection.
@@ -15,6 +16,7 @@ Future<String?> showAiModelPicker(
 }) async {
   final result = await showModalBottomSheet<Object>(
     context: context,
+    sheetAnimationStyle: EsokMotion.presentation(context),
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: EsokColors.of(context).canvas,

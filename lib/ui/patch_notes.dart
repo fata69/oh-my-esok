@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'motion.dart';
 import 'theme.dart';
 
 Future<void> showPatchNotes(
@@ -9,6 +10,7 @@ Future<void> showPatchNotes(
 }) {
   return showModalBottomSheet<void>(
     context: context,
+    sheetAnimationStyle: EsokMotion.presentation(context),
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: const Color(0x5214120E),
@@ -28,6 +30,17 @@ class PatchNotesSheet extends StatelessWidget {
   final String buildNumber;
 
   static const _releases = [
+    (
+      version: '0.1.0-preview.11',
+      date: '18 Nov 2026',
+      notes: [
+        'Hari dibuka ke Agenda. Catatan punya tampilan kotak atau daftar dan pilihan urutan.',
+        'Jadwalkan catatan untuk memindahkannya ke Agenda dengan pengingat opsional.',
+        'Sampai Gajian di Uang memperkirakan sisa saldo setelah tagihan dari jadwal yang kamu atur.',
+        'Riwayat transaksi bisa difilter berdasarkan tanggal melalui kalender.',
+        'Foto struk yang dibagikan ke Oh My Esok masuk sebagai draf dan bisa dibuka dari Tutup hari.',
+      ],
+    ),
     (
       version: '0.1.0-preview.9',
       date: '18 Nov 2026',
@@ -343,9 +356,10 @@ class _ReleaseBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               version,
@@ -355,8 +369,7 @@ class _ReleaseBlock extends StatelessWidget {
                 color: EsokColors.ink,
               ),
             ),
-            if (isLatest) ...[
-              const SizedBox(width: 8),
+            if (isLatest)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
@@ -372,16 +385,9 @@ class _ReleaseBlock extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                date,
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
-              ),
+            Text(
+              date,
+              style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
             ),
           ],
         ),

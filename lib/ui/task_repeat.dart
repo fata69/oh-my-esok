@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../util/format.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 enum TaskRepeatMode {
@@ -68,14 +69,6 @@ class TaskRepeatRule {
   };
 }
 
-AnimationStyle? agendaSheetAnimation(BuildContext context) {
-  return MediaQuery.disableAnimationsOf(context) ||
-          MediaQuery.reduceMotionOf(context) ||
-          MediaQuery.accessibleNavigationOf(context)
-      ? AnimationStyle.noAnimation
-      : null;
-}
-
 Future<TaskRepeatRule?> showTaskRepeatPicker(
   BuildContext context, {
   required TaskRepeatRule current,
@@ -84,12 +77,12 @@ Future<TaskRepeatRule?> showTaskRepeatPicker(
 }) {
   return showModalBottomSheet<TaskRepeatRule>(
     context: context,
+    sheetAnimationStyle: EsokMotion.presentation(context),
     useSafeArea: true,
     isScrollControlled: true,
     showDragHandle: true,
     backgroundColor: EsokColors.of(context).canvas,
     barrierColor: EsokColors.scrim,
-    sheetAnimationStyle: agendaSheetAnimation(context),
     builder: (_) => _RepeatPicker(current: current, date: date, time: time),
   );
 }

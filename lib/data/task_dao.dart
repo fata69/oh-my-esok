@@ -392,8 +392,10 @@ class TaskDao {
     }
   });
 
-  Future<List<Task>> all() async {
-    final rows = await _db.query('tasks', orderBy: 'scheduled_date DESC');
+  Future<List<Task>> all() => readAll(_db);
+
+  static Future<List<Task>> readAll(DatabaseExecutor db) async {
+    final rows = await db.query('tasks', orderBy: 'scheduled_date DESC');
     return rows.map(Task.fromMap).toList();
   }
 

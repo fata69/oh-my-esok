@@ -7,6 +7,7 @@ import '../util/format.dart';
 import 'chevron.dart';
 import 'money_icon_catalog.dart';
 import 'money_icon_picker.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class ManageAccountsPage extends StatefulWidget {
@@ -20,6 +21,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
   Future<void> _add() async {
     final draft = await showModalBottomSheet<_AccountDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
@@ -40,6 +42,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
   Future<void> _editOpening(Account account) async {
     final value = await showModalBottomSheet<int>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
@@ -58,6 +61,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     final current = store.balanceForAccount(account.id);
     final value = await showModalBottomSheet<int>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
@@ -74,6 +78,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
   Future<void> _rename(Account account) async {
     final draft = await showModalBottomSheet<_AccountDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
@@ -109,6 +114,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: EsokMotion.presentation(context),
       builder: (context) => AlertDialog(
         backgroundColor: EsokColors.canvas,
         title: const Text('Hapus dompet?'),
@@ -128,6 +134,8 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     if (confirmed != true || !mounted) return;
     try {
       await context.read<MoneyStore>().deleteAccount(account.id);
+    } on PaydayAccountInUseException {
+      _message('Dompet ini masih dipakai di Sampai Gajian.');
     } on ItemInUseException {
       _message('Dompet ini masih dipakai transaksi.');
     }
@@ -139,6 +147,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (context) => Container(
@@ -216,6 +225,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     if (archived.isEmpty) return;
     await showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0x5214120E),
       builder: (context) => Container(

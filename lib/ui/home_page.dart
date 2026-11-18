@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -6,8 +7,10 @@ import 'package:home_widget/home_widget.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../data/day_note.dart';
 import '../data/task.dart';
 import '../notify/notifier.dart';
+import '../receipt/receipt_inbox.dart';
 import '../state/day_review.dart';
 import '../state/money_store.dart';
 import '../state/settings_store.dart';
@@ -15,9 +18,13 @@ import '../state/task_store.dart';
 import '../util/format.dart';
 import '../util/sound_fx.dart';
 import '../widget/widget_sync.dart';
+import 'agenda_loading.dart';
 import 'calendar_sheet.dart';
-import 'day_money_section.dart';
 import 'day_review_sheet.dart';
+import 'motion.dart';
+import 'note_editor_page.dart';
+import 'notes_library.dart';
+import 'payday_page.dart';
 import 'patch_notes.dart';
 import 'tab_layout.dart';
 import 'task_editor.dart';
@@ -26,9 +33,10 @@ import 'theme.dart';
 import 'tx_editor_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, this.onOpenMoney});
+  const HomePage({super.key, this.onOpenMoney, this.onNotesChanged});
 
   final VoidCallback? onOpenMoney;
+  final ValueChanged<bool>? onNotesChanged;
 
   @override
   HomePageState createState() => HomePageState();
@@ -40,10 +48,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   late final PageController _controller;
   StreamSubscription<Uri?>? _widgetClicks;
+  StreamSubscription<void>? _sharedReceipts;
   Set<Uri>? _startupWidgetLinks = <Uri>{};
   bool _widgetAddPending = false;
   bool _taskEditorOpen = false;
   bool _dayReviewOpen = false;
+  bool _showNotes = false;
+  bool _receiptPromptOpen = false;
 
   @override
   void initState() {
@@ -66,6 +77,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         debugPrint('Notification permission request failed: $error');
       });
       unawaited(_readStartupWidgetLinks());
+      if (Platform.isAndroid) {
+        _sharedReceipts = ReceiptInbox.changes.listen((_) {
+          unawaited(_offerSharedReceipt());
+        }, onError: (Object error) => debugPrint('Receipt listener: $error'));
+        unawaited(_offerSharedReceipt());
+      }
     });
   }
 
@@ -89,6 +106,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _widgetClicks?.cancel();
+    _sharedReceipts?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -108,23 +126,23 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   int _pageForDate(DateTime date) => _basePage + daysBetween(today(), date);
 
-  Future<void> _jumpTo(DateTime date) async {
+  Future<void> _jumpTo(DateTime date, {bool animate = true}) async {
     if (!mounted) return;
     final page = _pageForDate(date).clamp(0, _basePage * 2);
     if (!_controller.hasClients) {
       await context.read<TaskStore>().selectDate(date);
       return;
     }
-    if (MediaQuery.reduceMotionOf(context) ||
-        MediaQuery.disableAnimationsOf(context) ||
-        MediaQuery.accessibleNavigationOf(context)) {
+    if (!animate ||
+        EsokMotion.reduced(context) ||
+        (page - (_controller.page ?? page)).abs() > 1) {
       _controller.jumpToPage(page);
       return;
     }
     await _controller.animateToPage(
       page,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
+      duration: EsokMotion.enter,
+      curve: EsokMotion.settle,
     );
   }
 
@@ -132,6 +150,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final store = context.read<TaskStore>();
     final picked = await showModalBottomSheet<DateTime>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
@@ -158,13 +177,138 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     _dayReviewOpen = true;
     try {
-      await showDayReviewSheet(context, date: date, service: service);
+      await showDayReviewSheet(
+        context,
+        date: date,
+        service: service,
+        reviewReceipts: Platform.isAndroid ? _openSharedReceipt : null,
+        onOpenPayday: () => openPaydayPage(context),
+      );
     } finally {
       _dayReviewOpen = false;
     }
   }
 
-  Future<void> createNote() => _openEditor();
+  Future<void> _offerSharedReceipt() async {
+    if (!mounted || _receiptPromptOpen || _taskEditorOpen) return;
+    _receiptPromptOpen = true;
+    try {
+      final files = await ReceiptInbox.pendingImages();
+      if (!mounted ||
+          files.isEmpty ||
+          ModalRoute.isCurrentOf(context) == false) {
+        return;
+      }
+      final file = files.first;
+      final scan = await showDialog<bool>(
+        context: context,
+        animationStyle: EsokMotion.presentation(context),
+        builder: (context) => AlertDialog(
+          title: const Text('Struk diterima'),
+          content: const Text(
+            'Gambar disimpan sebagai draf. Kamu bisa memindainya sekarang '
+            'atau membukanya lagi dari Tutup hari.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Nanti saja'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Pindai struk'),
+            ),
+          ],
+        ),
+      );
+      if (scan == true && mounted) await _openSharedReceipt(file);
+    } catch (error) {
+      debugPrint('Opening shared receipt failed: $error');
+    } finally {
+      _receiptPromptOpen = false;
+    }
+  }
+
+  Future<void> _openSharedReceipt(File file) async {
+    if (!mounted) return;
+    await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => TxEditorPage(receiptImage: file)),
+    );
+  }
+
+  void _selectNotes(bool value) {
+    if (_showNotes == value) return;
+    setState(() => _showNotes = value);
+    widget.onNotesChanged?.call(value);
+  }
+
+  Future<void> createEntry() => _showNotes ? _openNote() : _openEditor();
+
+  Future<void> _openNote([DayNote? note]) async {
+    if (_taskEditorOpen || !mounted) return;
+    _taskEditorOpen = true;
+    final store = context.read<TaskStore>();
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => NoteEditorPage(
+            note: note,
+            onDelete: note == null ? null : () => store.deleteNote(note.id),
+            onSave: (draft, date, time) async {
+              if (date == null) {
+                await store.saveNote(draft, creating: note == null);
+                return;
+              }
+              final Task task;
+              if (note != null) {
+                final scheduled = await store.scheduleNote(
+                  draft,
+                  date: date,
+                  time: time,
+                );
+                if (scheduled == null) {
+                  throw StateError('Catatan sudah dipindahkan.');
+                }
+                task = scheduled;
+              } else {
+                task = Task(
+                  id: draft.id,
+                  title: draft.displayTitle,
+                  notes: draft.body.isEmpty ? null : draft.body,
+                  scheduledDate: dateKey(date),
+                  scheduledTime: time,
+                  isDone: false,
+                  createdAt: draft.createdAt,
+                );
+                await store.add(task);
+              }
+              if (mounted) {
+                _selectNotes(false);
+                await _jumpTo(task.date, animate: false);
+              }
+              await _syncNoteSchedule(task);
+            },
+          ),
+        ),
+      );
+    } finally {
+      _taskEditorOpen = false;
+    }
+  }
+
+  Future<void> _syncNoteSchedule(Task task, {bool cancel = false}) async {
+    try {
+      if (cancel) {
+        await TaskNotifier.instance.cancel(task.id);
+      } else {
+        await TaskNotifier.instance.schedule(task);
+      }
+      await WidgetSync.push(reportErrors: true);
+    } catch (error, stack) {
+      debugPrint('Note schedule sync failed: $error\n$stack');
+      _showMessage('Tersimpan. Pengingat atau widget belum diperbarui.');
+    }
+  }
 
   Future<void> _openEditor({
     Task? task,
@@ -188,10 +332,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final store = context.read<TaskStore>();
     final result = await showModalBottomSheet<TaskEditorResult>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
-      sheetAnimationStyle: agendaSheetAnimation(context),
       builder: (_) => TaskEditorSheet(
         task: task,
         initialDate: initialDate ?? store.selectedDate,
@@ -225,6 +369,22 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final saved = result.task;
     if (saved == null) return;
+
+    if (result.removeSchedule) {
+      try {
+        final note = await store.unscheduleTask(saved);
+        if (note == null) {
+          _showMessage('Agenda ini sudah berubah. Coba buka lagi.');
+          return;
+        }
+        if (mounted) _selectNotes(true);
+        await _syncNoteSchedule(saved, cancel: true);
+      } catch (error, stack) {
+        debugPrint('Removing schedule failed: $error\n$stack');
+        _showMessage('Agenda belum bisa dipindahkan ke Catatan.');
+      }
+      return;
+    }
 
     final recurring = saved.isRecurring || (task?.isRecurring ?? false);
     if (task == null) {
@@ -327,12 +487,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }) {
     return showModalBottomSheet<T>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       useSafeArea: true,
       isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: EsokColors.of(context).canvas,
       barrierColor: EsokColors.scrim,
-      sheetAnimationStyle: agendaSheetAnimation(context),
       builder: (sheet) {
         final colors = EsokColors.of(sheet);
         final text = Theme.of(sheet).textTheme;
@@ -463,6 +623,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final date = DateTime.tryParse(uri.pathSegments.first);
       if (date == null) return;
       final day = dateOnly(date);
+      _selectNotes(false);
       if (uri.queryParameters['add'] != '1') {
         await _jumpTo(day);
         return;
@@ -485,6 +646,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final store = context.read<TaskStore>();
     final task = await store.taskById(uri.pathSegments.first);
     if (task == null || !mounted) return;
+    _selectNotes(false);
     await _jumpTo(task.date);
     if (!mounted) return;
     await _openTask(task);
@@ -566,41 +728,60 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           PopupMenuItem(value: 'release_notes', child: Text('Catatan rilis')),
         ],
       ),
-      period: EsokPeriodHeader(
-        title: dateTitle(selected),
-        detail:
-            '${weekdayName(selected)} · ${positionLabel(selected)}'
-            '${selected.year == today().year ? '' : ' · ${selected.year}'}',
-        selectLabel: 'Pilih tanggal',
-        previousLabel: 'Hari sebelumnya',
-        nextLabel: 'Hari berikutnya',
-        onPrevious: store.canGoPrevious
-            ? () => _jumpTo(selected.subtract(const Duration(days: 1)))
-            : null,
-        onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
-        onSelect: _openCalendar,
+      period: Column(
+        children: [
+          if (_showNotes)
+            NotesToolbar(count: store.notes.length)
+          else
+            EsokPeriodHeader(
+              title: dateTitle(selected),
+              detail:
+                  '${weekdayName(selected)} · ${positionLabel(selected)}'
+                  '${selected.year == today().year ? '' : ' · ${selected.year}'}',
+              selectLabel: 'Pilih tanggal',
+              previousLabel: 'Hari sebelumnya',
+              nextLabel: 'Hari berikutnya',
+              onPrevious: store.canGoPrevious
+                  ? () => _jumpTo(selected.subtract(const Duration(days: 1)))
+                  : null,
+              onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
+              onSelect: _openCalendar,
+            ),
+          DaySectionSwitch(notes: _showNotes, onChanged: _selectNotes),
+        ],
       ),
-      child: PageView.builder(
-        controller: _controller,
-        itemCount: _basePage * 2 + 1,
-        onPageChanged: (index) {
-          context.read<TaskStore>().selectDate(_dateForPage(index));
-        },
-        itemBuilder: (context, index) {
-          final date = _dateForPage(index);
-          return _DayPane(
-            key: ValueKey(index),
-            date: date,
-            revision: store.revision,
-            atEarliest: date == store.earliestAllowedDate,
-            onToggle: _toggle,
-            onOpen: _openTask,
-            onCloseDay: () => _openDayReview(date),
-            onJumpToday: () => _jumpTo(today()),
-            onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
-            onOpenMoney: widget.onOpenMoney,
-          );
-        },
+      child: IndexedStack(
+        index: _showNotes ? 1 : 0,
+        sizing: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: _basePage * 2 + 1,
+            onPageChanged: (index) {
+              context.read<TaskStore>().selectDate(_dateForPage(index));
+            },
+            itemBuilder: (context, index) {
+              final date = _dateForPage(index);
+              return _DayPane(
+                key: ValueKey(index),
+                date: date,
+                revision: store.revision,
+                atEarliest: date == store.earliestAllowedDate,
+                onToggle: _toggle,
+                onOpen: _openTask,
+                onCreate: _openEditor,
+                onCloseDay: () => _openDayReview(date),
+                onJumpToday: () => _jumpTo(today()),
+                onJumpNext: () => _jumpTo(date.add(const Duration(days: 1))),
+              );
+            },
+          ),
+          NotesLibrary(
+            notes: store.notes,
+            onOpen: _openNote,
+            onCreate: _openNote,
+          ),
+        ],
       ),
     );
   }
@@ -621,10 +802,10 @@ class _DayPane extends StatefulWidget {
     required this.atEarliest,
     required this.onToggle,
     required this.onOpen,
+    required this.onCreate,
     required this.onCloseDay,
     required this.onJumpToday,
     required this.onJumpNext,
-    this.onOpenMoney,
   });
 
   final DateTime date;
@@ -632,10 +813,10 @@ class _DayPane extends StatefulWidget {
   final bool atEarliest;
   final Future<void> Function(Task) onToggle;
   final ValueChanged<Task> onOpen;
+  final VoidCallback onCreate;
   final VoidCallback onCloseDay;
   final VoidCallback onJumpToday;
   final VoidCallback onJumpNext;
-  final VoidCallback? onOpenMoney;
 
   @override
   State<_DayPane> createState() => _DayPaneState();
@@ -671,15 +852,37 @@ class _DayPaneState extends State<_DayPane> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
     return FutureBuilder<_DayData>(
       future: _future,
       builder: (context, snapshot) {
         final data = snapshot.data;
         if (data == null) {
-          return const SizedBox.shrink();
+          if (!snapshot.hasError) {
+            return const AgendaLoading();
+          }
+          return ListView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: EsokTabLayout.gutter,
+            ),
+            children: [
+              const Text('Agenda belum bisa dimuat.'),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => setState(_load),
+                  child: const Text('Coba lagi'),
+                ),
+              ),
+            ],
+          );
         }
-        final tasks = data.tasks;
+        final tasks = [...data.tasks]
+          ..sort((a, b) {
+            final time = (a.scheduledTime ?? '24:00').compareTo(
+              b.scheduledTime ?? '24:00',
+            );
+            return time == 0 ? a.createdAt.compareTo(b.createdAt) : time;
+          });
         final undone = tasks.where((task) => !task.isDone).length;
         final isPast = widget.date.isBefore(today());
 
@@ -691,57 +894,28 @@ class _DayPaneState extends State<_DayPane> {
             EsokTabLayout.scrollBottomOf(context),
           ),
           children: [
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'Agenda',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: widget.onCloseDay,
-                  style: TextButton.styleFrom(
-                    foregroundColor: colors.ink,
-                    minimumSize: const Size(48, 48),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  icon: const Icon(Icons.fact_check_outlined, size: 16),
-                  label: const Text('Tutup hari'),
-                ),
-              ],
+            AgendaHeading(
+              progress: tasks.isEmpty
+                  ? 'Belum ada agenda'
+                  : '${tasks.length - undone} dari ${tasks.length} selesai',
+              onCloseDay: widget.onCloseDay,
             ),
             if (tasks.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  'Belum ada catatan.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  onPressed: widget.onCreate,
+                  child: const Text('Tambah agenda'),
                 ),
               )
             else ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 9),
-                child: Text(
-                  '${tasks.length - undone} dari ${tasks.length} selesai',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ),
               for (final (index, task) in tasks.indexed)
-                EsokGroupedRow(
+                _TaskRow(
                   key: ValueKey(task.id),
-                  first: index == 0,
-                  last: index == tasks.length - 1,
-                  child: _TaskRow(
-                    task: task,
-                    showDivider: index != tasks.length - 1,
-                    onToggle: () => widget.onToggle(task),
-                    onOpen: () => widget.onOpen(task),
-                  ),
+                  task: task,
+                  showDivider: index != tasks.length - 1,
+                  onToggle: () => widget.onToggle(task),
+                  onOpen: () => widget.onOpen(task),
                 ),
             ],
             if (isPast && undone > 0) ...[
@@ -756,8 +930,6 @@ class _DayPaneState extends State<_DayPane> {
               onJumpToday: widget.onJumpToday,
               onJumpNext: widget.onJumpNext,
             ),
-            const SizedBox(height: 24),
-            DayMoneySection(date: widget.date, onOpenMoney: widget.onOpenMoney),
           ],
         );
       },
@@ -817,6 +989,7 @@ class _TaskAction extends StatelessWidget {
 
 class _TaskRow extends StatelessWidget {
   const _TaskRow({
+    super.key,
     required this.task,
     required this.showDivider,
     required this.onToggle,
@@ -831,12 +1004,9 @@ class _TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final duration =
-        MediaQuery.disableAnimationsOf(context) ||
-            MediaQuery.reduceMotionOf(context) ||
-            MediaQuery.accessibleNavigationOf(context)
+    final duration = EsokMotion.reduced(context)
         ? Duration.zero
-        : const Duration(milliseconds: 100);
+        : EsokMotion.feedback;
     final checkedColor = Theme.of(context).brightness == Brightness.dark
         ? const Color(0xFF63D99A)
         : const Color(0xFF08754A);
@@ -869,7 +1039,7 @@ class _TaskRow extends StatelessWidget {
                     child: Center(
                       child: AnimatedContainer(
                         duration: duration,
-                        curve: Curves.easeOutQuart,
+                        curve: EsokMotion.settle,
                         width: 22,
                         height: 22,
                         decoration: BoxDecoration(
@@ -908,28 +1078,53 @@ class _TaskRow extends StatelessWidget {
                               titleStyle: titleStyle,
                               duration: duration,
                             )
-                          : Row(
-                              children: [
-                                Expanded(
-                                  child: AnimatedDefaultTextStyle(
-                                    duration: duration,
-                                    curve: Curves.easeOutQuart,
-                                    style: titleStyle,
-                                    child: Text(task.title),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  timeText(task.scheduledTime),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: colors.muted,
-                                    fontFeatures: [
-                                      FontFeature.tabularFigures(),
+                          : Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: AnimatedDefaultTextStyle(
+                                          duration: duration,
+                                          curve: EsokMotion.settle,
+                                          style: titleStyle,
+                                          child: Text(
+                                            task.title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                      if (task.scheduledTime != null) ...[
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          timeText(task.scheduledTime),
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: colors.muted,
+                                            fontFeatures: [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
-                                ),
-                              ],
+                                  if (task.notes case final note?
+                                      when note.isNotEmpty)
+                                    Text(
+                                      note,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium,
+                                    ),
+                                ],
+                              ),
                             ),
                     ),
                   ),
@@ -1128,8 +1323,8 @@ class _BottomCard extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: RichText(
-                  text: TextSpan(
+                child: Text.rich(
+                  TextSpan(
                     style: TextStyle(fontSize: 12, color: colors.inkSoft),
                     children: [
                       if (prefix != null)

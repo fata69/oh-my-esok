@@ -10,12 +10,24 @@ import 'theme.dart';
 import 'time_picker_sheet.dart';
 
 class TaskEditorResult {
-  const TaskEditorResult.save(Task value) : task = value, deleted = false;
+  const TaskEditorResult.save(Task value)
+    : task = value,
+      deleted = false,
+      removeSchedule = false;
 
-  const TaskEditorResult.delete() : task = null, deleted = true;
+  const TaskEditorResult.delete()
+    : task = null,
+      deleted = true,
+      removeSchedule = false;
+
+  const TaskEditorResult.unschedule(Task value)
+    : task = value,
+      deleted = false,
+      removeSchedule = true;
 
   final Task? task;
   final bool deleted;
+  final bool removeSchedule;
 }
 
 enum TaskEditScope { occurrence, following }
@@ -180,6 +192,38 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
           );
 
     Navigator.of(context).pop(TaskEditorResult.save(task));
+  }
+
+  Future<void> _removeSchedule() async {
+    final task = widget.task;
+    final title = _titleController.text.trim();
+    final body = _notesController.text.trim();
+    if (task == null || task.isRecurring || (title.isEmpty && body.isEmpty)) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pindahkan ke Catatan?'),
+        content: const Text('Tanggal dan pengingat agenda akan dilepas.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Pindahkan'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    Navigator.of(context).pop(
+      TaskEditorResult.unschedule(
+        task.copyWith(title: title, notes: body, clearNotes: body.isEmpty),
+      ),
+    );
   }
 
   @override
@@ -350,15 +394,28 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
             if (isEditing && widget.scope == null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: TextButton(
-                  onPressed: () =>
-                      Navigator.of(context)
-                          .pop(const TaskEditorResult.delete()),
-                  style: TextButton.styleFrom(
-                    foregroundColor: EsokColors.muted,
-                    textStyle: const TextStyle(fontSize: 13),
-                  ),
-                  child: const Text('Hapus tugas'),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  children: [
+                    if (widget.task?.isRecurring == false)
+                      TextButton(
+                        onPressed:
+                            canSave || _notesController.text.trim().isNotEmpty
+                            ? _removeSchedule
+                            : null,
+                        child: const Text('Pindahkan ke Catatan'),
+                      ),
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.of(context)
+                              .pop(const TaskEditorResult.delete()),
+                      style: TextButton.styleFrom(
+                        foregroundColor: EsokColors.muted,
+                        textStyle: const TextStyle(fontSize: 13),
+                      ),
+                      child: const Text('Hapus tugas'),
+                    ),
+                  ],
                 ),
               ),
           ],
