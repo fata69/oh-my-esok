@@ -31,6 +31,14 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.13',
+      date: '19 Nov 2026',
+      notes: [
+        'Grafik Laporan menampilkan selisih arus kas per hari atau bulan. Ketuk atau geser untuk melihat nominal pemasukan dan pengeluaran.',
+        'Sampai Gajian punya satu tombol Tambah tagihan di bawah. Tagihan di luar perkiraan bisa dibuka dari halaman yang sama.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.12',
       date: '19 Nov 2026',
       notes: [

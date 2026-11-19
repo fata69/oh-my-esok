@@ -10,6 +10,7 @@ import '../data/task.dart';
 import '../state/money_store.dart';
 import '../state/payday_projection.dart';
 import '../util/format.dart';
+import 'glass_controls.dart';
 import 'motion.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
@@ -66,8 +67,35 @@ class _PaydayPage extends StatelessWidget {
     final short = projection.firstShort;
     final account = store.accountById(plan.schedule?.accountId ?? '');
     final text = Theme.of(context).textTheme;
+    final projectedDates = {
+      for (final item in projection.items) (item.bill.id, item.dueDate),
+    };
+    final now = today();
+    final day = dateKey(now);
+    final lookAhead = dateKey(DateTime(now.year, now.month + 2));
+    final scheduledBills = [
+      for (final bill in plan.bills)
+        (bill, bill.dueBefore(day, lookAhead).firstOrNull ?? bill.date),
+    ];
+    final otherRows = [
+      for (final (bill, due) in scheduledBills)
+        if (!projectedDates.contains((bill.id, due)))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _PlanRow(
+              icon: Icons.receipt_long_outlined,
+              title: bill.name,
+              subtitle:
+                  '${_shortDay(due)} · ${store.accountName(bill.accountId)}',
+              trailing: Text(rupiahText(bill.amount), textAlign: TextAlign.end),
+              onTap: () =>
+                  _push(context, _BillPage(billId: bill.id, dueDate: due)),
+            ),
+          ),
+    ];
     return _PlanPage(
       title: 'Sampai Gajian',
+      primaryAction: _AddBillAction(onPressed: () => _addBill(context, store)),
       children: [
         if (payday != null && account != null) ...[
           Text(
@@ -81,16 +109,25 @@ class _PaydayPage extends StatelessWidget {
             rupiahText(short?.balance.abs() ?? projection.remaining),
             style: text.headlineMedium?.copyWith(
               color: short == null ? null : _warningInk(context),
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
           const SizedBox(height: 4),
           Text(
             short == null
-                ? account.name
-                : '${_fullDay(short.date)} · ${account.name}',
+                ? 'Dari saldo tercatat · ${account.name}'
+                : 'Mulai ${_fullDay(short.date)} · ${account.name}',
             style: text.bodyMedium,
           ),
-          const SizedBox(height: 20),
+          if (short != null && short.balance != projection.remaining) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Menjelang gajian, kurang ${rupiahText(projection.remaining.abs())}',
+              style: text.bodyMedium,
+            ),
+          ],
+          const SizedBox(height: 12),
         ],
         _PlanRow(
           icon: Icons.calendar_today_outlined,
@@ -100,35 +137,26 @@ class _PaydayPage extends StatelessWidget {
           subtitle: plan.schedule == null
               ? null
               : _frequency(plan.schedule!.monthly),
+          tonal: false,
           onTap: () => _editSchedule(context, store),
         ),
-        if (account != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Estimasi memakai saldo tercatat ${account.name} dan tagihan sebelum tanggal gajian. Gaji menambah saldo setelah dicatat di Uang.',
-            style: text.bodyMedium,
-          ),
-        ],
+        const Divider(),
         const SizedBox(height: 20),
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              'Rincian tagihan',
-              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            TextButton(
-              onPressed: () => _addBill(context, store),
-              child: const Text('Tambah tagihan'),
-            ),
-          ],
+        Semantics(
+          header: true,
+          child: Text(
+            payday == null ? 'Tagihan' : 'Tagihan sebelum gajian',
+            style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
         ),
-        if (projection.items.isEmpty)
+        const SizedBox(height: 10),
+        if (projection.items.isEmpty && (payday != null || otherRows.isEmpty))
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.only(bottom: 12),
             child: Text(
-              'Belum ada tagihan dalam proyeksi ini.',
+              payday == null
+                  ? 'Belum ada tagihan.'
+                  : 'Belum ada tagihan sebelum gajian.',
               style: text.bodyMedium,
             ),
           ),
@@ -141,113 +169,57 @@ class _PaydayPage extends StatelessWidget {
                   : Icons.check_rounded,
               title: item.bill.name,
               subtitle: _billSubtitle(item),
-              trailing: _BillAmounts(item: item),
+              trailing: Text(
+                rupiahText(item.bill.amount),
+                textAlign: TextAlign.end,
+              ),
               onTap: () => _push(
                 context,
                 _BillPage(billId: item.bill.id, dueDate: item.dueDate),
               ),
             ),
           ),
-        if (payday != null) ...[
-          const SizedBox(height: 12),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 4,
-              alignment: WrapAlignment.spaceBetween,
-              children: [
-                const Text('Sisa menjelang gajian'),
-                Text(
-                  rupiahText(projection.remaining),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: projection.remaining < 0
-                        ? _warningInk(context)
-                        : null,
-                  ),
-                ),
-              ],
-            ),
+        if (payday == null)
+          ...otherRows
+        else if (otherRows.isNotEmpty)
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            title: const Text('Tagihan di luar perkiraan'),
+            subtitle: Text('${otherRows.length} tagihan'),
+            children: otherRows,
           ),
-        ],
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: TextButton(
-            onPressed: () => _push(context, const _BillsPage()),
-            child: const Text('Kelola semua tagihan'),
-          ),
-        ),
       ],
     );
   }
 }
 
-class _BillAmounts extends StatelessWidget {
-  const _BillAmounts({required this.item});
+class _AddBillAction extends StatelessWidget {
+  const _AddBillAction({required this.onPressed});
 
-  final ProjectedBill item;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Text(rupiahText(item.bill.amount), textAlign: TextAlign.end),
-      if (item.payment == null)
-        Text(
-          'Sisa ${rupiahText(item.balanceAfter)}',
-          textAlign: TextAlign.end,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: item.balanceAfter < 0
-                ? _warningInk(context)
-                : EsokColors.of(context).muted,
-          ),
-        ),
-    ],
-  );
-}
-
-class _BillsPage extends StatelessWidget {
-  const _BillsPage();
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final store = context.watch<MoneyStore>();
-    final bills = store.paydayPlan?.bills ?? const <PlannedBill>[];
-    final day = dateKey(today());
-    return _PlanPage(
-      title: 'Tagihan',
-      action: TextButton(
-        onPressed: () => _addBill(context, store),
-        child: const Text('Tambah'),
-      ),
-      children: [
-        if (bills.isEmpty) const Text('Belum ada tagihan.'),
-        for (final bill in bills)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: _PlanRow(
-              icon: Icons.receipt_long_outlined,
-              title: bill.name,
-              subtitle:
-                  '${store.accountName(bill.accountId)} · ${_frequency(bill.monthly)}',
-              trailing: Text(rupiahText(bill.amount)),
-              onTap: () {
-                final due =
-                    bill
-                        .dueBefore(
-                          day,
-                          dateKey(DateTime(today().year, today().month + 2, 1)),
-                        )
-                        .firstOrNull ??
-                    bill.date;
-                _push(context, _BillPage(billId: bill.id, dueDate: due));
-              },
-            ),
+    const radius = BorderRadius.all(Radius.circular(32));
+    return EsokGlass(
+      radius: radius,
+      emphasized: true,
+      child: Material(
+        color: Colors.transparent,
+        child: TextButton.icon(
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            minimumSize: const Size(48, 52),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            shape: const RoundedRectangleBorder(borderRadius: radius),
           ),
-      ],
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Tambah tagihan'),
+        ),
+      ),
     );
   }
 }
@@ -383,6 +355,14 @@ class _BillPageState extends State<_BillPage> {
         )
         .firstOrNull;
     final account = store.accountById(bill.accountId);
+    final projected = payment == null && plan != null
+        ? _project(store, plan).items
+              .where(
+                (item) =>
+                    item.bill.id == bill.id && item.dueDate == widget.dueDate,
+              )
+              .firstOrNull
+        : null;
     final text = Theme.of(context).textTheme;
     return _PlanPage(
       title: bill.name,
@@ -395,6 +375,13 @@ class _BillPageState extends State<_BillPage> {
         Text(rupiahText(bill.amount), style: text.headlineMedium),
         const SizedBox(height: 4),
         Text(store.accountName(bill.accountId), style: text.bodyMedium),
+        if (projected != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Perkiraan saldo setelah tagihan ${rupiahText(projected.balanceAfter)}',
+            style: text.bodyMedium,
+          ),
+        ],
         const SizedBox(height: 20),
         if (payment != null) ...[
           const Text(
@@ -677,20 +664,32 @@ class _PlanFormState extends State<_PlanForm> {
 }
 
 class _PlanPage extends StatelessWidget {
-  const _PlanPage({required this.title, required this.children, this.action});
+  const _PlanPage({
+    required this.title,
+    required this.children,
+    this.primaryAction,
+  });
 
   final String title;
   final List<Widget> children;
-  final Widget? action;
+  final Widget? primaryAction;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: EsokColors.of(context).canvas,
-    appBar: AppBar(centerTitle: true, title: Text(title), actions: [?action]),
+    appBar: AppBar(centerTitle: true, title: Text(title)),
+    floatingActionButton: primaryAction,
     body: SafeArea(
       top: false,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        padding: EdgeInsets.fromLTRB(
+          24,
+          8,
+          24,
+          primaryAction == null
+              ? 24
+              : 82 + MediaQuery.textScalerOf(context).scale(14),
+        ),
         children: children,
       ),
     ),
@@ -746,6 +745,7 @@ class _PlanRow extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.iconColor,
+    this.tonal = true,
     required this.onTap,
   });
 
@@ -754,6 +754,7 @@ class _PlanRow extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final Color? iconColor;
+  final bool tonal;
   final VoidCallback onTap;
 
   @override
@@ -761,7 +762,7 @@ class _PlanRow extends StatelessWidget {
     final colors = EsokColors.of(context);
     final text = Theme.of(context).textTheme;
     return Material(
-      color: colors.subtle,
+      color: tonal ? colors.subtle : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -769,35 +770,56 @@ class _PlanRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 56),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: iconColor ?? colors.muted),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: text.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+            padding: EdgeInsets.symmetric(
+              horizontal: tonal ? 14 : 0,
+              vertical: 9,
+            ),
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final value = trailing;
+                final stackValue =
+                    value != null &&
+                    (box.maxWidth < 270 ||
+                        MediaQuery.textScalerOf(context).scale(16) >= 19.5);
+                return Row(
+                  children: [
+                    Icon(icon, size: 18, color: iconColor ?? colors.muted),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: text.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (subtitle != null)
+                            Text(subtitle!, style: text.bodyMedium),
+                          if (stackValue) ...[const SizedBox(height: 4), value],
+                        ],
                       ),
-                      if (subtitle != null)
-                        Text(subtitle!, style: text.bodyMedium),
+                    ),
+                    const SizedBox(width: 8),
+                    if (value != null && !stackValue) ...[
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: box.maxWidth * .42,
+                        ),
+                        child: value,
+                      ),
+                      const SizedBox(width: 5),
                     ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (trailing case final value?) Flexible(child: value),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 17,
-                  color: colors.muted,
-                ),
-              ],
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 17,
+                      color: colors.muted,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),

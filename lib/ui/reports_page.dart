@@ -27,7 +27,6 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget build(BuildContext context) {
     final store = context.watch<MoneyStore>();
     final report = store.monthReport;
-    final theme = Theme.of(context);
     final hidden = context.watch<SettingsStore?>()?.hideAmounts ?? false;
     final daily = _period == _ReportPeriod.days;
     final colors = EsokColors.of(context);
@@ -47,69 +46,18 @@ class _ReportsPageState extends State<ReportsPage> {
           EsokTabLayout.scrollBottomOf(context),
         ),
         children: [
-          const Text('Selisih bulan'),
-          const SizedBox(height: 4),
-          Text(
-            hidden ? '••••' : reportAmount(report.net),
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          Semantics(
+            header: true,
+            child: Text(
+              'Arus kas',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            !hidden && report.transactionCount == 0
-                ? 'Belum ada arus kas bulan ini.'
-                : 'Pemasukan dikurangi pengeluaran',
-            style: theme.textTheme.bodyMedium,
-          ),
-          if (daily && !hidden) ...[
-            const SizedBox(height: 12),
-            ReportAmounts(
-              income: report.income,
-              expense: report.expense,
-              incomeColor: reportIncomeColor(theme.brightness),
-              expenseColor: reportExpenseColor(theme.brightness),
-            ),
-          ],
-          const _ReportSection('Arus kas'),
-          if (hidden)
-            const _HiddenChart()
-          else ...[
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: SegmentedButton<_ReportPeriod>(
-                segments: const [
-                  ButtonSegment(
-                    value: _ReportPeriod.months,
-                    label: Text('6 bulan'),
-                  ),
-                  ButtonSegment(
-                    value: _ReportPeriod.days,
-                    label: Text('Harian'),
-                  ),
-                ],
-                selected: {_period},
-                showSelectedIcon: false,
-                onSelectionChanged: (values) =>
-                    setState(() => _period = values.single),
-                style: ButtonStyle(
-                  minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
-                  foregroundColor: WidgetStateProperty.resolveWith(
-                    (states) => states.contains(WidgetState.selected)
-                        ? colors.ink
-                        : colors.muted,
-                  ),
-                  backgroundColor: WidgetStateProperty.resolveWith(
-                    (states) => states.contains(WidgetState.selected)
-                        ? colors.selected
-                        : colors.canvas,
-                  ),
-                  side: WidgetStatePropertyAll(BorderSide(color: colors.line)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
+          if (hidden) ...[
+            const SizedBox(height: 14),
+            const _HiddenChart(),
+          ] else ...[
             ReportFlowChart(
               monthly: !daily,
               key: ValueKey(daily ? 'report-daily' : 'report-trend'),
@@ -130,6 +78,36 @@ class _ReportsPageState extends State<ReportsPage> {
                           expense: point.expense,
                         ),
                     ],
+              rangeControls: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final (period, label) in const [
+                    (_ReportPeriod.months, '6 bulan'),
+                    (_ReportPeriod.days, 'Harian'),
+                  ])
+                    Semantics(
+                      selected: _period == period,
+                      inMutuallyExclusiveGroup: true,
+                      child: TextButton(
+                        onPressed: () => setState(() => _period = period),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(72, 48),
+                          foregroundColor: _period == period
+                              ? colors.ink
+                              : colors.muted,
+                          backgroundColor: _period == period
+                              ? colors.control
+                              : null,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(label),
+                      ),
+                    ),
+                ],
+              ),
             ),
             if (daily && report.transactionCount != 0) ...[
               const SizedBox(height: 8),
@@ -147,7 +125,10 @@ class _ReportsPageState extends State<ReportsPage> {
               ),
             ],
           ],
-          const _ReportSection('Pengeluaran per kategori'),
+          _ReportSection(
+            'Pengeluaran per kategori',
+            period: DateFormat('MMM yyyy', 'id_ID').format(report.month),
+          ),
           hidden
               ? const _HiddenChart()
               : _CategoryBreakdown(categories: report.expensesByCategory),
@@ -158,9 +139,10 @@ class _ReportsPageState extends State<ReportsPage> {
 }
 
 class _ReportSection extends StatelessWidget {
-  const _ReportSection(this.title);
+  const _ReportSection(this.title, {required this.period});
 
   final String title;
+  final String period;
 
   @override
   Widget build(BuildContext context) {
@@ -172,12 +154,23 @@ class _ReportSection extends StatelessWidget {
         children: [
           const Divider(),
           const SizedBox(height: 14),
-          Semantics(
-            header: true,
-            child: Text(
-              title,
-              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  style: text.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(period, style: text.bodyMedium),
+            ],
           ),
         ],
       ),

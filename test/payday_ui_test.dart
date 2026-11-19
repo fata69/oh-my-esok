@@ -12,7 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 class _Ledger extends ChangeNotifier implements MoneyStore {
-  _Ledger() {
+  _Ledger({this.balance = 900000, bool includeLater = false}) {
     final now = today();
     final next = DateTime(now.year, now.month, now.day + 2);
     paydayPlan = PaydayPlan(
@@ -30,6 +30,15 @@ class _Ledger extends ChangeNotifier implements MoneyStore {
           date: dateKey(now),
           monthly: true,
         ),
+        if (includeLater)
+          PlannedBill(
+            id: 'later',
+            name: 'Tagihan bulan depan',
+            amount: 100000,
+            accountId: wallet.id,
+            date: dateKey(DateTime(now.year, now.month + 1, now.day)),
+            monthly: false,
+          ),
       ],
     );
   }
@@ -45,6 +54,7 @@ class _Ledger extends ChangeNotifier implements MoneyStore {
 
   @override
   late PaydayPlan paydayPlan;
+  final int balance;
 
   MoneyTransaction get expense => MoneyTransaction(
     id: 'existing',
@@ -66,7 +76,7 @@ class _Ledger extends ChangeNotifier implements MoneyStore {
   String accountName(String? id) => id == wallet.id ? wallet.name : '';
 
   @override
-  int balanceForAccount(String id) => id == wallet.id ? 900000 : 0;
+  int balanceForAccount(String id) => id == wallet.id ? balance : 0;
 
   @override
   List<MoneyTransaction> availableBillPayments(PlannedBill bill) =>
@@ -96,6 +106,25 @@ class _Ledger extends ChangeNotifier implements MoneyStore {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+Future<void> _mount(WidgetTester tester, _Ledger store, {double scale = 1}) =>
+    tester.pumpWidget(
+      ChangeNotifierProvider<MoneyStore>.value(
+        value: store,
+        child: MaterialApp(
+          theme: EsokTheme.dark(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Consumer<MoneyStore>(
+            builder: (context, store, _) =>
+                Scaffold(body: PaydayOverview(store: store)),
+          ),
+        ),
+      ),
+    );
+
 void main() {
   setUpAll(() => initializeDateFormatting('id_ID'));
 
@@ -107,18 +136,7 @@ void main() {
     addTearDown(tester.view.reset);
     final store = _Ledger();
     addTearDown(store.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider<MoneyStore>.value(
-        value: store,
-        child: MaterialApp(
-          theme: EsokTheme.dark(),
-          home: Consumer<MoneyStore>(
-            builder: (context, store, _) =>
-                Scaffold(body: PaydayOverview(store: store)),
-          ),
-        ),
-      ),
-    );
+    await _mount(tester, store);
 
     Future<void> tapLabel(String label) async {
       await tester.tap(find.text(label).hitTestable());
@@ -141,4 +159,53 @@ void main() {
     expect(find.text('Rp 900.000'), findsWidgets);
     expect(find.byType(TxEditorPage), findsNothing);
   });
+
+  testWidgets(
+    'payday uses one bottom add action and reveals other bills inline',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 680);
+      tester.view.padding = const FakeViewPadding(bottom: 24);
+      tester.view.viewPadding = tester.view.padding;
+      addTearDown(tester.view.reset);
+      final store = _Ledger(balance: 100000, includeLater: true);
+      addTearDown(store.dispose);
+      await _mount(tester, store, scale: 1.4);
+
+      await tester.tap(find.text('Sampai Gajian'));
+      await tester.pumpAndSettle();
+      final add = find.text('Tambah tagihan').hitTestable();
+      expect(add, findsOneWidget);
+      expect(tester.getCenter(add).dy, greaterThan(580));
+      expect(tester.getRect(add).bottom, lessThan(656));
+      expect(find.text('Rp 100.000'), findsOneWidget);
+      expect(find.text('Sisa menjelang gajian'), findsNothing);
+      expect(find.text('Kelola semua tagihan'), findsNothing);
+      expect(find.text('Tagihan bulan depan'), findsNothing);
+
+      final others = find.text('Tagihan di luar perkiraan');
+      await tester.scrollUntilVisible(others, 90);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .widgetWithText(ExpansionTile, 'Tagihan di luar perkiraan')
+            .hitTestable(),
+      );
+      await tester.pumpAndSettle();
+      final bill = find.text('Tagihan bulan depan');
+      await tester.scrollUntilVisible(bill, 90);
+      await tester.pumpAndSettle();
+      await tester.tap(bill.hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text('Catat pembayaran'), findsOneWidget);
+      expect(find.text('Tagihan di luar perkiraan'), findsNothing);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('Simpan tagihan'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
