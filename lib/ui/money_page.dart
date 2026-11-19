@@ -6,6 +6,8 @@ import '../data/money_transaction.dart';
 import '../data/task.dart';
 import '../state/money_store.dart';
 import '../util/format.dart';
+import 'action_sheet.dart';
+import 'calendar_sheet.dart';
 import 'category_icon.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
@@ -56,52 +58,24 @@ class MoneyPage extends StatefulWidget {
     bool revealSavedMonth = true,
   }) async {
     if (transaction.kind == 'adjustment') return;
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      sheetAnimationStyle: EsokMotion.presentation(context),
-      backgroundColor: Colors.transparent,
-      barrierColor: EsokColors.scrim,
-      builder: (sheetContext) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.of(sheetContext).canvas,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Center(
-                child: Container(
-                  width: 34,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 14),
-                  decoration: BoxDecoration(
-                    color: EsokColors.of(sheetContext).handle,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              _TxActionRow(
-                label: 'Ubah',
-                onTap: () => Navigator.pop(sheetContext, 'edit'),
-              ),
-              if (transaction.detail != null &&
-                  transaction.detail!.trim().isNotEmpty)
-                _TxActionRow(
-                  label: 'Rincian barang',
-                  onTap: () => Navigator.pop(sheetContext, 'items'),
-                ),
-              _TxActionRow(
-                label: 'Hapus',
-                danger: true,
-                onTap: () => Navigator.pop(sheetContext, 'delete'),
-              ),
-            ],
+    final action = await showEsokActionSheet<String>(
+      context,
+      title: 'Transaksi',
+      actions: [
+        const EsokSheetAction('edit', 'Ubah', Icons.edit_outlined),
+        if (transaction.detail?.trim().isNotEmpty == true)
+          const EsokSheetAction(
+            'items',
+            'Rincian barang',
+            Icons.receipt_outlined,
           ),
+        const EsokSheetAction(
+          'delete',
+          'Hapus',
+          Icons.delete_outline_rounded,
+          destructive: true,
         ),
-      ),
+      ],
     );
     if (action == null || !context.mounted) return;
     if (action == 'edit') {
@@ -200,6 +174,7 @@ class _MoneyPageState extends State<MoneyPage> {
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (_) => _LedgerFilterSheet(initial: _filter, month: month),
     );
@@ -254,53 +229,24 @@ class _MoneyPageState extends State<MoneyPage> {
       if (selectedDate != null) shortDateTitle(selectedDate),
       if (!_filter.newestFirst) 'Terlama dulu',
     ].join(' · ');
-    final resultCount = visible.values.fold<int>(
-      0,
-      (count, rows) => count + rows.length,
-    );
-
-    return EsokTabLayout(
-      period: EsokMonthHeader(
-        month: store.month,
-        onPrevious: store.previousMonth,
-        onNext: store.nextMonth,
-        onSelected: store.setMonth,
-      ),
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
-          EsokTabLayout.gutter,
-          4,
-          EsokTabLayout.gutter,
-          EsokTabLayout.scrollBottomOf(context),
+    final transactions = visible.values.expand((rows) => rows).toList();
+    final text = Theme.of(context).textTheme;
+    final colors = EsokColors.of(context);
+    final header = <Widget>[
+      _BalanceBlock(store: store),
+      PaydayOverview(store: store),
+      const SizedBox(height: 24),
+      Semantics(
+        header: true,
+        child: Text(
+          'Transaksi',
+          style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
+      ),
+      const SizedBox(height: 8),
+      Row(
         children: [
-          _BalanceBlock(store: store),
-          PaydayOverview(store: store),
-          const SizedBox(height: 24),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  'Transaksi',
-                  style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _editFilter,
-                icon: Icon(
-                  filterActive ? Icons.filter_alt : Icons.filter_alt_outlined,
-                  size: 17,
-                ),
-                label: const Text('Filter'),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+          Expanded(
             child: EsokContentGroup(
               children: [
                 InkWell(
@@ -309,66 +255,122 @@ class _MoneyPageState extends State<MoneyPage> {
                       builder: (_) => const _TransactionSearchPage(),
                     ),
                   ),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    child: Row(
-                      children: [
-                        Icon(Icons.search, size: 22),
-                        SizedBox(width: 10),
-                        Expanded(child: Text('Cari transaksi')),
-                      ],
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.search, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(child: Text('Cari transaksi')),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          if (filterActive)
-            Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      '$filterSummary\n$resultCount dari ${store.monthCount} transaksi',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => setState(() => _filter = _defaultFilter),
-                  child: const Text('Reset filter'),
-                ),
-              ],
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: _editFilter,
+            style: TextButton.styleFrom(
+              foregroundColor: colors.ink,
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              backgroundColor: filterActive ? colors.selected : null,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: colors.line),
+              ),
             ),
-          if (visible.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                grouped.isEmpty
-                    ? 'Belum ada transaksi bulan ini.'
-                    : 'Tidak ada transaksi yang cocok dengan filter.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            )
-          else
-            for (final entry in visible.entries) ...[
-              _DayHeader(
-                date: DateTime.parse(entry.key),
-                net: _hasCriteria ? null : store.netForDay(entry.value),
-              ),
-              for (final (index, transaction) in entry.value.indexed)
-                _TransactionRow(
-                  key: ValueKey(transaction.id),
-                  first: index == 0,
-                  last: index == entry.value.length - 1,
-                  transaction: transaction,
-                  store: store,
-                  onTap: () =>
-                      MoneyPage._showActions(context, store, transaction),
-                ),
-            ],
+            icon: Icon(
+              filterActive ? Icons.filter_alt : Icons.filter_alt_outlined,
+              size: 17,
+            ),
+            label: const Text('Filter'),
+          ),
         ],
+      ),
+      const SizedBox(height: 6),
+      if (filterActive)
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  '$filterSummary\n${transactions.length} dari ${store.monthCount} transaksi',
+                  style: text.bodyMedium,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _filter = _defaultFilter),
+              child: const Text('Reset filter'),
+            ),
+          ],
+        ),
+      if (transactions.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            grouped.isEmpty
+                ? 'Belum ada transaksi bulan ini.'
+                : 'Tidak ada transaksi yang cocok dengan filter.',
+            style: text.bodyMedium,
+          ),
+        ),
+    ];
+
+    return EsokTabLayout(
+      period: EsokMonthHeader(
+        month: store.month,
+        onPrevious: store.previousMonth,
+        onNext: store.nextMonth,
+        onSelected: store.setMonth,
+      ),
+      child: ListView.builder(
+        padding: EdgeInsets.fromLTRB(
+          EsokTabLayout.gutter,
+          4,
+          EsokTabLayout.gutter,
+          EsokTabLayout.scrollBottomOf(context),
+        ),
+        itemCount: header.length + transactions.length,
+        itemBuilder: (_, index) {
+          if (index < header.length) return header[index];
+          final row = index - header.length;
+          final transaction = transactions[row];
+          final date = transaction.date;
+          final first = row == 0 || transactions[row - 1].date != date;
+          final last =
+              row == transactions.length - 1 ||
+              transactions[row + 1].date != date;
+          return Column(
+            key: ValueKey(transaction.id),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (first)
+                _DayHeader(
+                  date: DateTime.parse(date),
+                  net: _hasCriteria ? null : store.netForDay(visible[date]!),
+                ),
+              _TransactionRow(
+                first: first,
+                last: last,
+                transaction: transaction,
+                store: store,
+                onTap: () =>
+                    MoneyPage._showActions(context, store, transaction),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -559,14 +561,14 @@ class _LedgerFilterSheetState extends State<_LedgerFilterSheet> {
     final last = DateTime(month.year, month.month + 1, 0);
     final initialDate =
         _date ?? (!now.isBefore(first) && !now.isAfter(last) ? now : first);
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: first,
-      lastDate: last,
-      helpText: 'Pilih tanggal transaksi',
-      cancelText: 'Batal',
-      confirmText: 'Pilih',
+    final picked = await showEsokPickerSheet<DateTime>(
+      context,
+      builder: (_) => CalendarSheet(
+        initialDate: initialDate,
+        lockToInitialMonth: true,
+        showAgenda: false,
+        title: 'Pilih tanggal transaksi',
+      ),
     );
     if (!mounted || picked == null) return;
     setState(() => _date = dateOnly(picked));
@@ -769,38 +771,6 @@ class _LedgerFilterSheetState extends State<_LedgerFilterSheet> {
   }
 }
 
-class _TxActionRow extends StatelessWidget {
-  const _TxActionRow({
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        alignment: Alignment.centerLeft,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: danger ? colors.lateInk : colors.ink,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BalanceBlock extends StatelessWidget {
   const _BalanceBlock({required this.store});
 
@@ -828,13 +798,9 @@ class _BalanceBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'TOTAL DANA',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.09,
-            color: colors.muted,
-          ),
+          'Saldo dompet aktif',
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 5),
         Text(
@@ -848,7 +814,12 @@ class _BalanceBlock extends StatelessWidget {
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
+        Text(
+          'Arus kas · ${monthTitle(store.month)}',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 2),
         Wrap(
           spacing: 18,
           runSpacing: 4,
@@ -1107,7 +1078,6 @@ class _DayHeader extends StatelessWidget {
 
 class _TransactionRow extends StatelessWidget {
   const _TransactionRow({
-    super.key,
     required this.first,
     required this.last,
     required this.transaction,

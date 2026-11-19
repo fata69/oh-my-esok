@@ -12,7 +12,7 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="48dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -20,6 +20,7 @@
             android:id="@+id/widget_header"
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:gravity="center_vertical"
             android:orientation="vertical"
@@ -31,6 +32,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
+                android:importantForAccessibility="no"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:text="@string/widget_agenda"
@@ -45,18 +47,20 @@
                 android:ellipsize="end"
                 android:fontFamily="sans-serif"
                 android:fontFeatureSettings="tnum"
+                android:importantForAccessibility="no"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:textColor="@color/agenda_widget_muted"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
         <ImageView
             android:id="@+id/widget_add"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/widget_plus_bg"
             android:contentDescription="@string/widget_add_task"
-            android:padding="11dp"
+            android:padding="12dp"
             android:scaleType="centerInside"
             android:src="@drawable/agenda_widget_add" />
     </LinearLayout>
@@ -128,6 +132,14 @@
             android:src="@drawable/widget_check_off" />
     </LinearLayout>
 
+    <FrameLayout
+        android:id="@+id/widget_single_spacing"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
     <ListView
         android:id="@+id/widget_list"
         android:layout_width="match_parent"
@@ -151,10 +163,20 @@
         android:textColor="@color/agenda_widget_muted"
         android:textSize="13sp" />
 
+    <ImageView
+        android:id="@+id/widget_next_divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginEnd="4dp"
+        android:background="@color/agenda_widget_line"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/widget_next"
         android:layout_width="match_parent"
-        android:layout_height="50dp"
+        android:layout_height="52dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="4dp"
@@ -172,6 +194,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
+                android:importantForAccessibility="no"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:textColor="@color/agenda_widget_muted"
@@ -184,6 +207,7 @@
                 android:layout_marginTop="2dp"
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
+                android:importantForAccessibility="no"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:textColor="@color/agenda_widget_ink"
@@ -196,6 +220,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:fontFeatureSettings="tnum"
+            android:importantForAccessibility="no"
             android:textColor="@color/agenda_widget_muted"
             android:textSize="12sp" />
 

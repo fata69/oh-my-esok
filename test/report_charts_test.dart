@@ -102,6 +102,15 @@ Future<void> _reveal(WidgetTester tester, Finder target) async {
 String? _readDate(WidgetTester tester, Key chart) =>
     tester.widget<Text>(_inside(chart, _date)).data;
 
+Future<void> _showDaily(WidgetTester tester) async {
+  tester.state<ScrollableState>(_reportScroll).position.jumpTo(0);
+  await tester.pumpAndSettle();
+  final button = find.text('Harian');
+  await _reveal(tester, button);
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('id_ID');
@@ -127,39 +136,37 @@ void main() {
     }
   });
 
-  testWidgets('trend snaps by tap/drag and months expose exact amounts', (
+  testWidgets('trend uses horizontal bars and each month opens exact amounts', (
     tester,
   ) async {
     await _mount(tester);
-    final plot = _inside(_trend, _scrub);
-    await _reveal(tester, plot);
+    final first = _inside(_trend, const ValueKey('report-month-0'));
+    await _reveal(tester, first);
     expect(_readDate(tester, _trend), 'Nov 2026');
-    final rect = tester.getRect(plot);
-    await tester.tapAt(Offset(rect.left + 4, rect.center.dy));
+    final chart = tester.widget<BarChart>(find.byType(BarChart));
+    expect(chart.data.rotationQuarterTurns, 1);
+    expect(chart.data.extraLinesData.horizontalLines.single.y, 0);
+    expect(tester.getSemantics(first).label, 'Juni 2026');
+    expect(tester.getSemantics(first).value, contains('Rp 123.456'));
+    final rect = tester.getRect(first);
+    await tester.tapAt(Offset(rect.right - 12, rect.center.dy));
     await tester.pumpAndSettle();
     expect(_readDate(tester, _trend), 'Jun 2026');
     expect(find.text('Rp 123.456'), findsOneWidget);
-    await tester.dragFrom(
-      Offset(rect.left + 5, rect.center.dy),
-      Offset(rect.width * 0.8 - 5, 0),
-    );
+    await tester.tap(_inside(_trend, const ValueKey('report-month-4')));
     await tester.pumpAndSettle();
     expect(_readDate(tester, _trend), 'Okt 2026');
     expect(find.text('Rp 432.109'), findsOneWidget);
 
-    final button = _inside(_trend, const ValueKey('report-month-0'));
-    await tester.ensureVisible(button);
-    expect(tester.getSemantics(button).label, 'Juni 2026');
-    expect(tester.getSemantics(button).value, contains('Rp 123.456'));
-    await tester.tap(button);
-    await tester.pumpAndSettle();
-    expect(_readDate(tester, _trend), 'Jun 2026');
+    expect(find.byKey(_daily), findsNothing);
   });
 
   testWidgets(
     'daily chart preserves signs, snaps to exact amounts and exposes days',
     (tester) async {
       await _mount(tester, signed: true);
+      await _showDaily(tester);
+      expect(find.byKey(_trend), findsNothing);
       final plot = _inside(_daily, _scrub);
       await _reveal(tester, plot);
       expect(_readDate(tester, _daily), '30 November 2026');
@@ -190,7 +197,8 @@ void main() {
       await _reveal(tester, find.text('Rincian per hari'));
       await tester.tap(find.text('Rincian per hari'));
       await tester.pumpAndSettle();
-      expect(find.text('1 November'), findsWidgets);
+      expect(find.text('2 November'), findsOneWidget);
+      expect(find.text('1 November'), findsNothing);
     },
   );
 
@@ -200,8 +208,7 @@ void main() {
     await _mount(tester, masked: true, signed: true, scale: 1.55);
     for (final section in [
       'Selisih bulan',
-      'Tren 6 bulan',
-      'Arus kas harian',
+      'Arus kas',
       'Pengeluaran per kategori',
     ]) {
       await _reveal(tester, find.text(section));
@@ -223,7 +230,8 @@ void main() {
     '320 dp at large text preserves category controls and signed fallback',
     (tester) async {
       await _mount(tester, signed: true, scale: 1.55);
-      await _reveal(tester, _inside(_trend, _scrub));
+      await _reveal(tester, _inside(_trend, const ValueKey('report-month-0')));
+      await _showDaily(tester);
       await _reveal(tester, _inside(_daily, _scrub));
       await _reveal(tester, find.text('Pengeluaran per kategori'));
       await _reveal(tester, find.text('Tanpa kategori'));
@@ -242,7 +250,14 @@ void main() {
     ) async {
       await _mount(tester, mode: mode, width: 390, height: 1000);
       for (final (key, section) in [(_trend, 'tren'), (_daily, 'harian')]) {
-        await _reveal(tester, _inside(key, _scrub));
+        if (key == _daily) await _showDaily(tester);
+        await _reveal(
+          tester,
+          _inside(
+            key,
+            key == _trend ? const ValueKey('report-month-0') : _scrub,
+          ),
+        );
         await tester.ensureVisible(find.byKey(key));
         await tester.pumpAndSettle();
         final chartFinder = find.descendant(
@@ -250,7 +265,10 @@ void main() {
           matching: find.byType(BarChart),
         );
         final widget = tester.widget<BarChart>(chartFinder);
-        final plotHeight = tester.getSize(chartFinder).height;
+        final size = tester.getSize(chartFinder);
+        final plotHeight = widget.data.rotationQuarterTurns == 0
+            ? size.height
+            : size.width;
         final colors = Theme.of(tester.element(find.byKey(key))).colorScheme;
         final luminance = colors.surface.computeLuminance();
         for (final rod in widget.data.barGroups.expand(

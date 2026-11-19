@@ -92,6 +92,8 @@ class EsokColors {
       ? const Color(0xFFFF8836)
       : const Color(0xFFB64A0B);
 
+  static const sheetRadius = BorderRadius.vertical(top: Radius.circular(28));
+
   /// Use this in widgets so offscreen tabs subscribe to the inherited theme.
   static EsokPalette of(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
@@ -219,10 +221,17 @@ class EsokTheme {
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: p.canvas,
         surfaceTintColor: Colors.transparent,
+        modalBarrierColor: EsokColors.scrim,
+        shape: const RoundedRectangleBorder(
+          borderRadius: EsokColors.sheetRadius,
+        ),
+        dragHandleColor: p.outline,
+        dragHandleSize: const Size(32, 4),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: p.canvas,
         surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         titleTextStyle: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,

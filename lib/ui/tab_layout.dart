@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'chevron.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 /// A quiet surface for one related group of content, with room for row ink.
@@ -131,7 +132,7 @@ class EsokPeriodHeader extends StatelessWidget {
     this.detail,
     required this.selectLabel,
     required this.onSelect,
-  });
+  }) : _loading = false;
 
   const EsokPeriodHeader.loading({super.key})
     : title = '',
@@ -141,7 +142,8 @@ class EsokPeriodHeader extends StatelessWidget {
       onNext = null,
       detail = null,
       selectLabel = '',
-      onSelect = null;
+      onSelect = null,
+      _loading = true;
 
   final String title;
   final String previousLabel;
@@ -151,15 +153,21 @@ class EsokPeriodHeader extends StatelessWidget {
   final String? detail;
   final String selectLabel;
   final VoidCallback? onSelect;
+  final bool _loading;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = EsokColors.of(context);
     final compact = MediaQuery.sizeOf(context).height < 480;
-    final loading = onSelect == null;
     final detailStyle = theme.textTheme.bodyMedium!;
     final textScaler = MediaQuery.textScalerOf(context);
+    final titleStyle = theme.textTheme.titleMedium?.copyWith(
+      fontSize: 20,
+      height: 1.14,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -.35,
+    );
     return Padding(
       padding: EdgeInsets.fromLTRB(16, compact ? 0 : 6, 16, compact ? 0 : 8),
       child: Column(
@@ -176,7 +184,7 @@ class EsokPeriodHeader extends StatelessWidget {
                     onTap: onPrevious,
                   ),
                   Expanded(
-                    child: loading
+                    child: _loading
                         ? SizedBox(
                             height: (textScaler.scale(20) * 1.14 + 8).clamp(
                               48.0,
@@ -186,12 +194,22 @@ class EsokPeriodHeader extends StatelessWidget {
                               child: EsokSkeletonBlock(width: 124, height: 14),
                             ),
                           )
+                        : onSelect == null
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              style: titleStyle,
+                            ),
+                          )
                         : Tooltip(
                             message: selectLabel,
                             child: TextButton(
                               onPressed: onSelect,
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(48, 48),
+                                visualDensity: VisualDensity.standard,
                                 foregroundColor: colors.ink,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 4,
@@ -205,13 +223,7 @@ class EsokPeriodHeader extends StatelessWidget {
                                     child: Text(
                                       title,
                                       textAlign: TextAlign.center,
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w700,
-                                            height: 1.14,
-                                            letterSpacing: -.35,
-                                          ),
+                                      style: titleStyle,
                                     ),
                                   ),
                                   Icon(
@@ -229,7 +241,7 @@ class EsokPeriodHeader extends StatelessWidget {
               ),
             ),
           ),
-          if (!compact && loading)
+          if (!compact && _loading)
             SizedBox(
               height:
                   textScaler.scale(detailStyle.fontSize!) * detailStyle.height!,
@@ -240,6 +252,116 @@ class EsokPeriodHeader extends StatelessWidget {
           else if (!compact && detail != null)
             Text(detail!, textAlign: TextAlign.center, style: detailStyle),
         ],
+      ),
+    );
+  }
+}
+
+/// Presents a date picker with the app's shared route treatment.
+Future<T?> showEsokPickerSheet<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+}) => showModalBottomSheet<T>(
+  context: context,
+  sheetAnimationStyle: EsokMotion.presentation(context),
+  isScrollControlled: true,
+  useSafeArea: true,
+  showDragHandle: false,
+  backgroundColor: Colors.transparent,
+  barrierColor: EsokColors.scrim,
+  builder: builder,
+);
+
+/// A rounded, opaque panel for date controls, with a fixed dismiss action.
+class EsokPickerSheet extends StatelessWidget {
+  const EsokPickerSheet({
+    super.key,
+    required this.title,
+    required this.child,
+    this.footer,
+  });
+
+  final String title;
+  final Widget child;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final rim = MediaQuery.highContrastOf(context)
+        ? colors.outline
+        : colors.line;
+    return Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Material(
+          color: colors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            side: BorderSide(color: rim),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 9),
+                SizedBox(
+                  width: 32,
+                  height: 4,
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: colors.handle,
+                      shape: const StadiumBorder(),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(22, 5, 12, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            title,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Tutup',
+                        onPressed: () => Navigator.pop(context),
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size.square(48),
+                          visualDensity: VisualDensity.standard,
+                          foregroundColor: colors.ink,
+                          backgroundColor: colors.control,
+                        ),
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    primary: false,
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                    child: child,
+                  ),
+                ),
+                if (footer case final action?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                    child: action,
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -285,6 +407,10 @@ class _PeriodArrow extends StatelessWidget {
     return IconButton(
       tooltip: label.isEmpty ? null : label,
       onPressed: onTap,
+      style: IconButton.styleFrom(
+        minimumSize: const Size.square(48),
+        visualDensity: VisualDensity.standard,
+      ),
       icon: Opacity(
         opacity: onTap == null ? 0.32 : 1,
         child: EsokChevron(left: left, size: 16),

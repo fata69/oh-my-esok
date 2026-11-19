@@ -232,10 +232,22 @@ class TaskStore extends ChangeNotifier {
     await loadMonth(_selectedDate);
   }
 
-  Future<Task> toggle(Task task) async {
-    final updated = task.copyWith(isDone: !task.isDone);
-    await _dao.setDone(task.id, updated.isDone);
-    await refresh();
+  Future<Task?> setCompletion(Task task, bool done) async {
+    final current = await _dao.byId(task.id);
+    if (current == null ||
+        current.scheduledDate != task.scheduledDate ||
+        current.isDone == done) {
+      return null;
+    }
+    final updated = current.copyWith(isDone: done);
+    await _dao.setDone(updated.id, done);
+    try {
+      await refresh();
+    } catch (error, stack) {
+      debugPrint('Agenda completion committed, refresh failed: $error\n$stack');
+      _revision++;
+      notifyListeners();
+    }
     return updated;
   }
 

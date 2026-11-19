@@ -39,7 +39,7 @@ private class TaskWidgetFactory(
         )
         row.setContentDescription(
             R.id.task_item,
-            context.getString(if (done) R.string.widget_uncheck_task else R.string.widget_check_task, title),
+            TaskWidgetProvider.taskDescription(context, item),
         )
         row.setOnClickFillInIntent(R.id.task_item, TaskWidgetProvider.toggleExtras(item, snapshot.date))
         return row

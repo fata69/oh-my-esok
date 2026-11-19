@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/account.dart';
 import '../state/money_store.dart';
 import '../util/format.dart';
+import 'action_sheet.dart';
 import 'chevron.dart';
 import 'money_icon_catalog.dart';
 import 'money_icon_picker.dart';
@@ -24,7 +25,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => const _AccountSheet(title: 'Dompet baru'),
     );
     if (draft == null || !mounted) return;
@@ -45,7 +46,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _AmountSheet(
         title: 'Ubah dana awal',
         subtitle: 'Posisi dana sebelum transaksi paling awal.',
@@ -64,7 +65,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _AmountSheet(
         title: 'Koreksi saldo',
         subtitle: 'Saldo menurut catatan: ${numberText(current)}',
@@ -81,7 +82,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _AccountSheet(
         title: 'Ubah dompet',
         initialName: account.name,
@@ -145,129 +146,82 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     final store = context.read<MoneyStore>();
     final count = await store.accountTransactionCount(account.id);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      sheetAnimationStyle: EsokMotion.presentation(context),
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    final action = await showEsokActionSheet<Future<void> Function()>(
+      context,
+      title: account.name,
+      actions: [
+        EsokSheetAction(
+          () => _editOpening(account),
+          'Ubah dana awal',
+          Icons.payments_outlined,
         ),
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Center(child: _Handle()),
-              _ActionRow(
-                label: 'Ubah dana awal',
-                onTap: () {
-                  Navigator.pop(context);
-                  _editOpening(account);
-                },
-              ),
-              _ActionRow(
-                label: 'Koreksi saldo',
-                onTap: () {
-                  Navigator.pop(context);
-                  _adjust(account);
-                },
-              ),
-              _ActionRow(
-                label: 'Ubah nama atau ikon',
-                onTap: () {
-                  Navigator.pop(context);
-                  _rename(account);
-                },
-              ),
-              _ActionRow(
-                label: account.archived ? 'Aktifkan lagi' : 'Arsipkan',
-                onTap: () {
-                  Navigator.pop(context);
-                  store.setAccountArchived(account.id, !account.archived);
-                },
-              ),
-              _ActionRow(
-                label: 'Hapus',
-                danger: true,
-                onTap: count > 0
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        _delete(account);
-                      },
-              ),
-              if (count > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
-                  child: Text(
-                    'Punya $count transaksi — arsipkan saja agar riwayat tetap punya label.',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.5,
-                      color: EsokColors.muted,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        EsokSheetAction(
+          () => _adjust(account),
+          'Koreksi saldo',
+          Icons.tune_rounded,
         ),
-      ),
+        EsokSheetAction(
+          () => _rename(account),
+          'Ubah nama atau ikon',
+          Icons.edit_outlined,
+        ),
+        EsokSheetAction(
+          () => store.setAccountArchived(account.id, !account.archived),
+          account.archived ? 'Aktifkan lagi' : 'Arsipkan',
+          account.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
+        ),
+        EsokSheetAction(
+          () => _delete(account),
+          'Hapus',
+          Icons.delete_outline_rounded,
+          destructive: true,
+          enabled: count == 0,
+        ),
+      ],
+      footer: count > 0
+          ? 'Punya $count transaksi. Arsipkan agar nama dompet tetap terlihat di riwayat.'
+          : null,
     );
+    if (action != null && mounted) await action();
   }
 
   Future<void> _showArchived() async {
     final store = context.read<MoneyStore>();
     final archived = store.archivedAccounts;
     if (archived.isEmpty) return;
-    await showModalBottomSheet<void>(
+    final selected = await showModalBottomSheet<Account>(
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      barrierColor: EsokColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => EsokSheetPanel(
+        title: 'Dompet diarsipkan',
+        body: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 0, 16, 12),
+          shrinkWrap: true,
+          itemCount: archived.length,
+          separatorBuilder: (_, _) => const Divider(),
+          itemBuilder: (context, index) => Row(
             children: [
-              const Center(child: _Handle()),
-              const SizedBox(height: 8),
-              Text(
-                'Dompet diarsipkan',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: EsokColors.ink,
+              Expanded(child: Text(archived[index].name)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, archived[index]),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Aktifkan'),
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final account in archived)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(account.name),
-                  trailing: TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      store.setAccountArchived(account.id, false);
-                    },
-                    child: const Text('Aktifkan'),
-                  ),
-                ),
             ],
           ),
         ),
       ),
     );
+    if (selected != null && mounted) {
+      await store.setAccountArchived(selected.id, false);
+    }
   }
 
   void _message(String message) {
@@ -520,39 +474,6 @@ class _AccountRow extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        alignment: Alignment.centerLeft,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: onTap == null
-                ? EsokColors.chevron
-                : (danger ? EsokColors.lateInk : EsokColors.ink),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AccountDraft {
   const _AccountDraft(this.name, this.type, this.iconKey);
 
@@ -620,7 +541,7 @@ class _AccountSheetState extends State<_AccountSheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       child: SafeArea(
         top: false,
@@ -790,7 +711,7 @@ class _AmountSheetState extends State<_AmountSheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
       child: SafeArea(

@@ -21,6 +21,7 @@ import '../widget/widget_sync.dart';
 import 'agenda_loading.dart';
 import 'calendar_sheet.dart';
 import 'day_review_sheet.dart';
+import 'glass_controls.dart';
 import 'motion.dart';
 import 'note_editor_page.dart';
 import 'notes_library.dart';
@@ -55,6 +56,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _dayReviewOpen = false;
   bool _showNotes = false;
   bool _receiptPromptOpen = false;
+  Future<void> _completionUpdates = Future<void>.value();
 
   @override
   void initState() {
@@ -115,10 +117,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || _dayReviewOpen) return;
     final store = context.read<TaskStore>();
-    WidgetSync.drainPendingToggles(store).then((changed) async {
-      if (changed) await _syncRecurringEffects();
-      await store.refresh();
-    });
+    unawaited(
+      _queueCompletionUpdate(() async {
+        final changed = await WidgetSync.drainPendingToggles(store);
+        if (changed) await WidgetSync.push();
+        await store.refresh();
+      }),
+    );
   }
 
   DateTime _dateForPage(int page) =>
@@ -148,15 +153,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _openCalendar() async {
     final store = context.read<TaskStore>();
-    final picked = await showModalBottomSheet<DateTime>(
-      context: context,
-      sheetAnimationStyle: EsokMotion.presentation(context),
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: EsokColors.scrim,
+    final picked = await showEsokPickerSheet<DateTime>(
+      context,
       builder: (context) => CalendarSheet(initialDate: store.selectedDate),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       await _jumpTo(picked);
     }
   }
@@ -286,7 +287,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 _selectNotes(false);
                 await _jumpTo(task.date, animate: false);
               }
-              await _syncNoteSchedule(task);
+              // Persistence decides when the editor closes. Android and widget
+              // synchronization can finish after the committed note is visible.
+              unawaited(_syncNoteSchedule(task));
             },
           ),
         ),
@@ -577,33 +580,50 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await WidgetSync.push();
   }
 
-  Future<void> _toggle(Task task) async {
+  Future<void> _queueCompletionUpdate(Future<void> Function() update) {
+    _completionUpdates = _completionUpdates.then((_) => update()).catchError((
+      Object error,
+      StackTrace stack,
+    ) {
+      debugPrint('Agenda completion update failed: $error\n$stack');
+    });
+    return _completionUpdates;
+  }
+
+  Future<void> _toggle(Task task) {
     final store = context.read<TaskStore>();
     final settings = context.read<SettingsStore>();
-    final updated = await store.toggle(task);
-    if (updated.isDone) {
-      final dayTasks = await store.tasksFor(updated.date);
-      final allDone =
-          dayTasks.isNotEmpty && dayTasks.every((item) => item.isDone);
-      if (settings.soundEnabled) {
-        SoundFx.play(allDone ? settings.soundComplete : settings.soundCheck);
+    return _queueCompletionUpdate(() async {
+      if (!mounted) return;
+      await WidgetSync.drainPendingToggles(store);
+      // A second event can still carry the render state from before the tap.
+      // Persist the intended state instead of inverting a newer DB row.
+      final updated = await store.setCompletion(task, !task.isDone);
+      if (updated == null) return;
+      try {
+        await TaskNotifier.instance.syncCompletion(updated);
+      } catch (error, stack) {
+        debugPrint('Completion reminder update failed: $error\n$stack');
       }
-      if (!task.isRecurring) await TaskNotifier.instance.cancel(task.id);
-    } else {
-      if (settings.soundEnabled) SoundFx.play(settings.soundUncheck);
-      if (!task.isRecurring) await TaskNotifier.instance.schedule(updated);
-    }
-    if (task.isRecurring) {
-      await _syncRecurringEffects();
-    } else {
+      if (settings.soundEnabled) {
+        if (updated.isDone) {
+          final dayTasks = await store.tasksFor(updated.date);
+          final allDone =
+              dayTasks.isNotEmpty && dayTasks.every((item) => item.isDone);
+          SoundFx.play(allDone ? settings.soundComplete : settings.soundCheck);
+        } else {
+          SoundFx.play(settings.soundUncheck);
+        }
+      }
       await WidgetSync.push();
-    }
+    });
   }
 
   Future<void> _openFromWidget(Uri? uri) async {
     if (!mounted || uri == null || uri.scheme != 'ohmyesok') return;
 
     if (uri.host == 'money') {
+      unawaited(WidgetSync.push());
       if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'new') {
         if (!mounted) return;
         await Navigator.of(context).push<String>(
@@ -700,16 +720,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
     final store = context.watch<TaskStore>();
     final selected = store.selectedDate;
 
     return EsokTabLayout(
-      headerAction: PopupMenuButton<String>(
-        tooltip: 'Pengaturan',
-        icon: Icon(Icons.more_horiz, size: 20, color: colors.muted),
-        color: colors.surface,
-        surfaceTintColor: Colors.transparent,
+      headerAction: EsokGlassMenu<String>(
+        tooltip: 'Opsi lainnya',
+        dividerBefore: 2,
         onSelected: (value) {
           if (value == 'alarms') {
             TaskNotifier.instance.requestExactAlarms();
@@ -721,11 +738,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
             _openReleaseNotes();
           }
         },
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: 'alarms', child: Text('Alarm & pengingat')),
-          PopupMenuItem(value: 'battery', child: Text('Baterai tanpa batas')),
-          PopupMenuItem(value: 'widget', child: Text('Pasang widget')),
-          PopupMenuItem(value: 'release_notes', child: Text('Catatan rilis')),
+        actions: const [
+          EsokMenuAction('alarms', 'Alarm & pengingat', Icons.alarm_rounded),
+          EsokMenuAction(
+            'battery',
+            'Setelan baterai',
+            Icons.battery_std_rounded,
+          ),
+          EsokMenuAction('widget', 'Pasang widget', Icons.widgets_outlined),
+          EsokMenuAction(
+            'release_notes',
+            'Catatan rilis',
+            Icons.article_outlined,
+          ),
         ],
       ),
       period: Column(

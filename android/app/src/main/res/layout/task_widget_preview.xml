@@ -11,13 +11,14 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="48dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:gravity="center_vertical"
             android:orientation="vertical"
@@ -39,14 +40,15 @@
                 android:includeFontPadding="false"
                 android:text="Rab, 18 Nov · 1/3 selesai"
                 android:textColor="@color/agenda_widget_muted"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
         <ImageView
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/widget_plus_bg"
             android:contentDescription="@string/widget_add_task"
-            android:padding="11dp"
+            android:padding="12dp"
             android:scaleType="centerInside"
             android:src="@drawable/agenda_widget_add" />
     </LinearLayout>

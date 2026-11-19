@@ -13,7 +13,7 @@ Future<TimeOfDay?> showTimePickerSheet(
     sheetAnimationStyle: EsokMotion.presentation(context),
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: const Color(0x5214120E),
+    barrierColor: EsokColors.scrim,
     builder: (context) => TimePickerSheet(initial: initial),
   );
 }
@@ -93,7 +93,7 @@ class _TimePickerSheetState extends State<TimePickerSheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       child: SafeArea(
         top: false,

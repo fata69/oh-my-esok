@@ -30,10 +30,10 @@ class PaydayOverview extends StatelessWidget {
     final firstShort = projection.firstShort;
     final payday = projection.payday;
     final status = firstShort != null
-        ? 'Kurang ${rupiahText(firstShort.balance.abs())} · ${_shortDay(firstShort.date)}'
+        ? 'Perkiraan kurang ${rupiahText(firstShort.balance.abs())} pada ${_shortDay(firstShort.date)}'
         : payday != null
-        ? 'Perkiraan sisa ${rupiahText(projection.remaining)} · ${_shortDay(payday)}'
-        : 'Atur jadwal gajian';
+        ? 'Perkiraan sisa ${rupiahText(projection.remaining)} sampai ${_shortDay(payday)}'
+        : 'Atur tanggal gajian dan tagihan';
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: _PlanRow(

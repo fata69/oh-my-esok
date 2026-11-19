@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jadwal/data/account.dart';
 import 'package:jadwal/data/account_dao.dart';
 import 'package:jadwal/data/category_dao.dart';
 import 'package:jadwal/data/money_transaction_dao.dart';
@@ -120,10 +121,86 @@ void main() {
     expect(find.text('Catatan transaksi QA'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('wallet picker scrolls in landscape at large text size', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(760, 360);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = _UnusedDatabase();
+    final store = MoneyStore(
+      CategoryDao(database),
+      AccountDao(database),
+      MoneyTransactionDao(database),
+    );
+    await store.init();
+    addTearDown(store.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: store,
+        child: MaterialApp(theme: EsokTheme.dark(), home: const TxEditorPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Dompet 1'));
+    await tester.tap(find.text('Dompet 1').hitTestable());
+    await tester.pumpAndSettle();
+    final walletSheet = find.byType(BottomSheet);
+    final lastWallet = find.descendant(
+      of: walletSheet,
+      matching: find.text('Dompet 24'),
+    );
+    await tester.scrollUntilVisible(
+      lastWallet,
+      108,
+      scrollable: find.descendant(
+        of: walletSheet,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(lastWallet);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(lastWallet.hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('Dompet 24').hitTestable(), findsOneWidget);
+  });
 }
 
 class _UnusedDatabase implements Database {
-  // Rendering the editor must not query or write the database.
+  @override
+  Future<List<Map<String, Object?>>> query(
+    String table, {
+    bool? distinct,
+    List<String>? columns,
+    String? where,
+    List<Object?>? whereArgs,
+    String? groupBy,
+    String? having,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) async => switch (table) {
+    'accounts' => [
+      for (var i = 1; i <= 24; i++)
+        Account(
+          id: '$i',
+          name: 'Dompet $i',
+          type: 'bank',
+          sortOrder: i,
+          archived: false,
+          createdAt: 0,
+        ).toMap(),
+    ],
+    'categories' || 'transactions' => [],
+    _ => throw ArgumentError.value(table),
+  };
+
+  // The wallet picker changes only the draft and requires no database write.
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

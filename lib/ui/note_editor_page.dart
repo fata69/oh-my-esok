@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../data/day_note.dart';
 import '../data/task.dart';
 import '../util/format.dart';
+import 'glass_controls.dart';
 import 'motion.dart';
 import 'theme.dart';
 import 'time_picker_sheet.dart';
@@ -28,11 +29,18 @@ class NoteEditorPage extends StatefulWidget {
 class _NoteEditorPageState extends State<NoteEditorPage> {
   late final _title = TextEditingController(text: widget.note?.title);
   late final _body = TextEditingController(text: widget.note?.body);
+  late final _draft = Listenable.merge([_title, _body]);
   late final _id = widget.note?.id ?? const Uuid().v4();
   late final _createdAt =
       widget.note?.createdAt ?? DateTime.now().millisecondsSinceEpoch;
   (DateTime, String?)? _schedule;
   bool _busy = false;
+  bool _confirmingExit = false;
+
+  bool get _hasChanges =>
+      _title.text.trim() != (widget.note?.title.trim() ?? '') ||
+      _body.text.trim() != (widget.note?.body.trim() ?? '') ||
+      _schedule != null;
 
   @override
   void dispose() {
@@ -49,6 +57,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           useSafeArea: true,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
+          barrierColor: EsokColors.scrim,
           sheetAnimationStyle: EsokMotion.presentation(context),
           builder: (_) => _NoteScheduleSheet(schedule: _schedule),
         );
@@ -111,25 +120,93 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     if (mounted && confirmed == true) await _finish(onDelete);
   }
 
+  Future<void> _confirmExit() async {
+    if (_busy || _confirmingExit || !_hasChanges) return;
+    _confirmingExit = true;
+    try {
+      final discard = await showDialog<bool>(
+        context: context,
+        animationStyle: EsokMotion.presentation(context),
+        builder: (context) => AlertDialog(
+          title: const Text('Buang perubahan?'),
+          content: const Text('Perubahan pada catatan ini belum disimpan.'),
+          actions: [
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Lanjut menulis'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Buang'),
+            ),
+          ],
+        ),
+      );
+      if (mounted && discard == true) Navigator.of(context).pop();
+    } finally {
+      _confirmingExit = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
     final typography = Theme.of(context).textTheme;
     final schedule = _schedule;
-    return PopScope(
-      canPop: !_busy,
+    final forceSolid = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final edgeButton = IconButton.styleFrom(
+      backgroundColor: colors.control,
+      foregroundColor: colors.ink,
+      minimumSize: const Size.square(48),
+      visualDensity: VisualDensity.standard,
+    );
+    return ListenableBuilder(
+      listenable: _draft,
+      builder: (context, child) => PopScope<void>(
+        canPop: !_busy && !_hasChanges,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _confirmExit();
+        },
+        child: child!,
+      ),
       child: Scaffold(
         backgroundColor: colors.canvas,
         appBar: AppBar(
           backgroundColor: colors.canvas,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leadingWidth: 72,
+          leading: Padding(
+            padding: const EdgeInsetsDirectional.only(start: 16, end: 8),
+            child: Center(
+              child: IconButton(
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                icon: const BackButtonIcon(),
+                style: edgeButton,
+                onPressed: _busy
+                    ? null
+                    : () {
+                        if (_hasChanges) {
+                          _confirmExit();
+                        } else {
+                          Navigator.of(context).maybePop();
+                        }
+                      },
+              ),
+            ),
+          ),
+          titleSpacing: 0,
           title: Text(widget.note == null ? 'Catatan baru' : 'Edit catatan'),
           actions: [
             if (widget.onDelete != null)
               IconButton(
                 tooltip: 'Hapus catatan',
                 icon: const Icon(Icons.delete_outline_rounded),
+                style: edgeButton,
                 onPressed: _busy ? null : _delete,
               ),
+            const SizedBox(width: 16),
           ],
         ),
         body: SafeArea(
@@ -180,41 +257,57 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     ],
                   ),
                 ),
-                const Divider(),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      TextButton.icon(
-                        onPressed: _busy ? null : _pickSchedule,
-                        icon: const Icon(
-                          Icons.calendar_today_outlined,
-                          size: 18,
-                        ),
-                        label: Text(
-                          schedule == null
-                              ? 'Jadwalkan'
-                              : '${dateTitle(schedule.$1)}'
-                                    '${schedule.$2 == null ? '' : ' · ${timeText(schedule.$2)}'}',
-                        ),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: EsokGlass(
+                    forceSolid: forceSolid,
+                    radius: const BorderRadius.all(Radius.circular(26)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _busy ? null : _pickSchedule,
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                              shape: const StadiumBorder(),
+                            ),
+                            icon: const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 18,
+                            ),
+                            label: Text(
+                              schedule == null
+                                  ? 'Jadwalkan'
+                                  : '${dateTitle(schedule.$1)}'
+                                        '${schedule.$2 == null ? '' : ' · ${timeText(schedule.$2)}'}',
+                            ),
+                          ),
+                          ListenableBuilder(
+                            listenable: _draft,
+                            builder: (context, _) => FilledButton(
+                              onPressed:
+                                  _busy ||
+                                      (_title.text.trim().isEmpty &&
+                                          _body.text.trim().isEmpty)
+                                  ? null
+                                  : _save,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(80, 48),
+                                shape: const StadiumBorder(),
+                                backgroundColor: colors.action,
+                                foregroundColor: colors.onAction,
+                              ),
+                              child: const Text('Simpan'),
+                            ),
+                          ),
+                        ],
                       ),
-                      ListenableBuilder(
-                        listenable: Listenable.merge([_title, _body]),
-                        builder: (context, _) => FilledButton(
-                          onPressed:
-                              _busy ||
-                                  (_title.text.trim().isEmpty &&
-                                      _body.text.trim().isEmpty)
-                              ? null
-                              : _save,
-                          child: const Text('Simpan'),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ],
@@ -278,7 +371,7 @@ class _NoteScheduleSheetState extends State<_NoteScheduleSheet> {
     final colors = EsokColors.of(context);
     return Material(
       color: colors.canvas,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(

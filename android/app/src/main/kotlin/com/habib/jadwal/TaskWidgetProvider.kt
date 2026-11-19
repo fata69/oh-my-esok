@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.StrikethroughSpan
+import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
@@ -47,7 +48,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        private const val TALL_HEIGHT_DP = 206
+        // Header, two complete rows and the upcoming action fit at this height.
+        private const val TALL_HEIGHT_DP = 214
         private val dateLabel = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.forLanguageTag("id-ID"))
 
         internal data class Upcoming(val date: LocalDate, val item: JSONObject)
@@ -130,7 +132,18 @@ class TaskWidgetProvider : AppWidgetProvider() {
             id: Int,
             options: Bundle = manager.getAppWidgetOptions(id),
         ) {
-            manager.updateAppWidget(id, buildViews(context, id, isTall(options)))
+            val agenda = agenda(context)
+            val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                RemoteViews(
+                    mapOf(
+                        SizeF(250f, 110f) to buildViews(context, id, agenda, tall = false),
+                        SizeF(250f, TALL_HEIGHT_DP.toFloat()) to buildViews(context, id, agenda, tall = true),
+                    ),
+                )
+            } else {
+                buildViews(context, id, agenda, isTall(options))
+            }
+            manager.updateAppWidget(id, views)
             manager.notifyAppWidgetViewDataChanged(id, R.id.widget_list)
         }
 
@@ -140,6 +153,16 @@ class TaskWidgetProvider : AppWidgetProvider() {
             if (title.isNotEmpty()) SpannableString(title).apply {
                 setSpan(StrikethroughSpan(), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             } else title
+
+        internal fun taskDescription(context: Context, item: JSONObject): String {
+            val title = item.optString("title")
+            val time = item.optString("time").replace(':', '.')
+            val action = if (item.optBoolean("done")) R.string.widget_uncheck_task else R.string.widget_check_task
+            return withTime(context, context.getString(action, title), time)
+        }
+
+        private fun withTime(context: Context, text: String, time: String) =
+            if (time.isBlank()) text else context.getString(R.string.widget_with_time, text, time)
 
         internal fun toggleExtras(item: JSONObject, date: LocalDate) = Intent().apply {
             putExtra(TaskToggleReceiver.EXTRA_TASK_ID, item.getString("id"))
@@ -176,8 +199,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun buildViews(context: Context, id: Int, tall: Boolean): RemoteViews {
-            val agenda = agenda(context)
+        private fun buildViews(context: Context, id: Int, agenda: Agenda, tall: Boolean): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.task_widget)
             val single = agenda.tasks.singleOrNull()
             val showNext = agenda.showsNext(tall)
@@ -190,6 +212,10 @@ class TaskWidgetProvider : AppWidgetProvider() {
             }
             views.setTextViewText(R.id.widget_label, context.getText(title))
             views.setTextViewText(R.id.widget_counter, description)
+            views.setContentDescription(
+                R.id.widget_header,
+                context.getString(R.string.widget_open_day, context.getText(title), description),
+            )
             views.setOnClickPendingIntent(R.id.widget_header, dayIntent(context, id, agenda.date))
             views.setOnClickPendingIntent(R.id.widget_add, dayIntent(context, id, agenda.date, add = true))
 
@@ -208,7 +234,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 )
                 views.setContentDescription(
                     R.id.widget_single,
-                    context.getString(if (done) R.string.widget_uncheck_task else R.string.widget_check_task, title),
+                    taskDescription(context, single),
                 )
                 val toggle = toggleIntent(context, id, agenda.date.toString(), single.getString("id"))
                     .putExtras(toggleExtras(single, agenda.date))
@@ -233,17 +259,28 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 )
             }
             views.setViewVisibility(R.id.widget_single, visibility(single != null))
+            views.setViewVisibility(R.id.widget_single_spacing, visibility(tall && single != null && showNext))
             views.setViewVisibility(R.id.widget_list, visibility(agenda.tasks.size > 1))
-            views.setViewVisibility(R.id.widget_empty, visibility(agenda.tasks.isEmpty() && !showNext))
+            val showEmpty = agenda.tasks.isEmpty() && (tall || !showNext)
+            views.setViewVisibility(R.id.widget_empty, visibility(showEmpty))
+            views.setTextViewText(
+                R.id.widget_empty,
+                context.getText(if (showNext) R.string.widget_empty_today else R.string.widget_empty),
+            )
             val next = agenda.next
             views.setViewVisibility(R.id.widget_next, visibility(showNext))
+            views.setViewVisibility(R.id.widget_next_divider, visibility(tall && showNext))
             if (showNext && next != null) {
-                views.setTextViewText(
-                    R.id.widget_next_date,
-                    context.getString(R.string.widget_next, next.date.format(dateLabel)),
+                val nextDate = context.getString(R.string.widget_next, next.date.format(dateLabel))
+                val nextTitle = next.item.optString("title")
+                val nextTime = next.item.optString("time").replace(':', '.')
+                views.setTextViewText(R.id.widget_next_date, nextDate)
+                views.setTextViewText(R.id.widget_next_title, nextTitle)
+                views.setTextViewText(R.id.widget_next_time, nextTime)
+                views.setContentDescription(
+                    R.id.widget_next,
+                    context.getString(R.string.widget_upcoming_description, nextDate, withTime(context, nextTitle, nextTime)),
                 )
-                views.setTextViewText(R.id.widget_next_title, next.item.optString("title"))
-                views.setTextViewText(R.id.widget_next_time, next.item.optString("time").replace(':', '.'))
                 views.setOnClickPendingIntent(R.id.widget_next, dayIntent(context, id, next.date))
             }
             return views

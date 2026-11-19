@@ -208,6 +208,16 @@ void main() {
     );
     await tester.enterText(fields.first, 'Ide perjalanan');
     await tester.enterText(fields.last, 'Bawa payung');
+    await tester.pump();
+    await tester.tap(find.byType(BackButtonIcon));
+    await tester.pumpAndSettle();
+    expect(find.text('Buang perubahan?'), findsOneWidget);
+    await tester.tap(find.text('Lanjut menulis'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(fields.last).controller?.text,
+      'Bawa payung',
+    );
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     expect(find.byType(GridView).hitTestable(), findsOneWidget);
@@ -215,15 +225,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GridView).hitTestable(), findsNothing);
     expect(find.text('Bawa payung').hitTestable(), findsOneWidget);
+    expect(find.text('Urutkan').hitTestable(), findsOneWidget);
     await tester.tap(find.byTooltip('Urutkan catatan'));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is CheckedPopupMenuItem<NoteSort> &&
-            widget.value == NoteSort.title,
-      ),
-    );
+    await tester.tap(find.text(NoteSort.title.label).hitTestable());
     await tester.pumpAndSettle();
     expect(
       (await SharedPreferences.getInstance()).getString('note_sort'),
@@ -258,6 +263,26 @@ void main() {
     expect(find.text('Ide perjalanan').hitTestable(), findsOneWidget);
   });
 
+  testWidgets('Membuang perubahan catatan tidak mengubah isi tersimpan', (
+    tester,
+  ) async {
+    await launch(tester, noteStorage: true);
+    await tester.tap(find.text('Catatan').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Tambah catatan'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Draf sementara');
+    await tester.pump();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Buang perubahan?'), findsOneWidget);
+    await tester.tap(find.text('Buang'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NoteEditorPage), findsNothing);
+    expect(find.text('0 catatan'), findsOneWidget);
+    expect(find.text('Draf sementara'), findsNothing);
+  });
+
   testWidgets('Uang follows Gelap, Terang and Sistem while offscreen', (
     tester,
   ) async {
@@ -272,7 +297,7 @@ void main() {
         of: page,
         matching: find.text('Oh My Esok'),
       );
-      final label = find.text('TOTAL DANA');
+      final label = find.text('Saldo dompet aktif');
       final row = find.text('Pengeluaran terakhir');
       expect(tester.widget<Text>(title).style?.color, ink);
       expect(tester.widget<Text>(label).style?.color, muted);
@@ -637,7 +662,7 @@ void main() {
       await tester.tap(day);
       await tester.pumpAndSettle();
       expect(find.byType(CalendarSheet), findsOneWidget);
-      await tester.tap(find.text('Tutup').hitTestable());
+      await tester.tap(find.byTooltip('Tutup').hitTestable());
       await tester.pumpAndSettle();
 
       await select(tester, 'Uang');
@@ -650,7 +675,9 @@ void main() {
       final lastYear = today().year - 1;
       await tester.tap(find.text('$lastYear').hitTestable());
       await tester.pumpAndSettle();
-      await tester.tap(find.bySemanticsLabel('Januari').hitTestable());
+      await tester.tap(
+        find.bySemanticsLabel('Januari $lastYear').hitTestable(),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
 

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +19,8 @@ class WidgetSync {
 
   // Kotlin classes keep their upstream namespace; the installed app ID differs.
   static const androidProvider = 'com.habib.jadwal.TaskWidgetProvider';
+  static const _androidReminders = MethodChannel('esok/agenda-reminders');
+  static Future<void> _pendingDrain = Future<void>.value();
 
   static Future<void> push({bool reportErrors = false}) async {
     try {
@@ -48,6 +52,7 @@ class WidgetSync {
         'money_summary_json',
         jsonEncode({
           'today': todayOut,
+          'date': dateKey(now),
           'month': monthOut,
           'monthIn': monthIn,
           'masked': masked,
@@ -178,8 +183,38 @@ class WidgetSync {
   static Future<bool> drainPendingToggles(
     TaskStore store, {
     bool reportErrors = false,
+  }) {
+    final drain = _pendingDrain.then(
+      (_) => _drainPendingToggles(store, reportErrors: reportErrors),
+    );
+    _pendingDrain = drain.then<void>((_) {}, onError: (Object _) {});
+    return drain;
+  }
+
+  static Future<bool> _drainPendingToggles(
+    TaskStore store, {
+    required bool reportErrors,
   }) async {
     try {
+      if (Platform.isAndroid) {
+        var changed = false;
+        for (var attempt = 0; attempt < 5; attempt++) {
+          final queued = await _androidReminders
+              .invokeMapMethod<String, Object?>('readWidgetToggles');
+          if (queued == null || queued.isEmpty) break;
+          for (final entry in queued.entries) {
+            final toggle = entry.value as Map<Object?, Object?>;
+            await store.setDone(entry.key, toggle['done'] as bool);
+          }
+          // A widget toggle can arrive while the SQLite write is awaiting IO.
+          await _androidReminders.invokeMethod<void>(
+            'ackWidgetToggles',
+            queued,
+          );
+          changed = true;
+        }
+        return changed;
+      }
       final raw = await HomeWidget.getWidgetData<String>('pending_toggles');
       if (raw == null || raw.isEmpty) return false;
 

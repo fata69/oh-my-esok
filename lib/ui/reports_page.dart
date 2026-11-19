@@ -9,9 +9,19 @@ import '../util/format.dart';
 import 'month_picker.dart';
 import 'report_chart.dart';
 import 'tab_layout.dart';
+import 'theme.dart';
 
-class ReportsPage extends StatelessWidget {
+class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
+
+  @override
+  State<ReportsPage> createState() => _ReportsPageState();
+}
+
+enum _ReportPeriod { months, days }
+
+class _ReportsPageState extends State<ReportsPage> {
+  _ReportPeriod _period = _ReportPeriod.months;
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +29,8 @@ class ReportsPage extends StatelessWidget {
     final report = store.monthReport;
     final theme = Theme.of(context);
     final hidden = context.watch<SettingsStore?>()?.hideAmounts ?? false;
+    final daily = _period == _ReportPeriod.days;
+    final colors = EsokColors.of(context);
     return EsokTabLayout(
       period: EsokMonthHeader(
         month: report.month,
@@ -35,7 +47,7 @@ class ReportsPage extends StatelessWidget {
           EsokTabLayout.scrollBottomOf(context),
         ),
         children: [
-          Text('Selisih bulan', style: theme.textTheme.bodyMedium),
+          const Text('Selisih bulan'),
           const SizedBox(height: 4),
           Text(
             hidden ? '••••' : reportAmount(report.net),
@@ -46,69 +58,94 @@ class ReportsPage extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Pemasukan dikurangi pengeluaran',
+            !hidden && report.transactionCount == 0
+                ? 'Belum ada arus kas bulan ini.'
+                : 'Pemasukan dikurangi pengeluaran',
             style: theme.textTheme.bodyMedium,
           ),
-          const SizedBox(height: 16),
-          ReportAmounts(
-            income: report.income,
-            expense: report.expense,
-            incomeColor: reportIncomeColor(theme.brightness),
-            expenseColor: reportExpenseColor(theme.brightness),
-            hidden: hidden,
-          ),
-          if (!hidden && report.transactionCount == 0) ...[
+          if (daily && !hidden) ...[
             const SizedBox(height: 12),
-            Text(
-              'Belum ada arus kas bulan ini.',
-              style: theme.textTheme.bodyMedium,
+            ReportAmounts(
+              income: report.income,
+              expense: report.expense,
+              incomeColor: reportIncomeColor(theme.brightness),
+              expenseColor: reportExpenseColor(theme.brightness),
             ),
           ],
-          _ReportSection(
-            'Tren 6 bulan',
-            subtitle: hidden
-                ? null
-                : 'Ketuk atau geser grafik untuk memilih bulan',
-          ),
-          if (hidden)
-            const _HiddenChart()
-          else
-            ReportFlowChart(
-              monthly: true,
-              key: const ValueKey('report-trend'),
-              points: [
-                for (final point in report.trend)
-                  (
-                    date: point.month,
-                    income: point.income,
-                    expense: point.expense,
-                  ),
-              ],
-            ),
-          const _ReportSection('Arus kas harian'),
+          const _ReportSection('Arus kas'),
           if (hidden)
             const _HiddenChart()
           else ...[
-            ReportFlowChart(
-              key: const ValueKey('report-daily'),
-              monthly: false,
-              points: [
-                for (final day in report.daily)
-                  (date: day.date, income: day.income, expense: day.expense),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ExpansionTile(
-              key: const PageStorageKey('report-daily-details'),
-              tilePadding: EdgeInsets.zero,
-              title: const Text('Rincian per hari'),
-              children: [
-                for (final day in report.daily) ...[
-                  const Divider(height: 16),
-                  _DayDetail(day: day),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: SegmentedButton<_ReportPeriod>(
+                segments: const [
+                  ButtonSegment(
+                    value: _ReportPeriod.months,
+                    label: Text('6 bulan'),
+                  ),
+                  ButtonSegment(
+                    value: _ReportPeriod.days,
+                    label: Text('Harian'),
+                  ),
                 ],
-              ],
+                selected: {_period},
+                showSelectedIcon: false,
+                onSelectionChanged: (values) =>
+                    setState(() => _period = values.single),
+                style: ButtonStyle(
+                  minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+                  foregroundColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.selected)
+                        ? colors.ink
+                        : colors.muted,
+                  ),
+                  backgroundColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.selected)
+                        ? colors.selected
+                        : colors.canvas,
+                  ),
+                  side: WidgetStatePropertyAll(BorderSide(color: colors.line)),
+                ),
+              ),
             ),
+            const SizedBox(height: 12),
+            ReportFlowChart(
+              monthly: !daily,
+              key: ValueKey(daily ? 'report-daily' : 'report-trend'),
+              points: daily
+                  ? [
+                      for (final day in report.daily)
+                        (
+                          date: day.date,
+                          income: day.income,
+                          expense: day.expense,
+                        ),
+                    ]
+                  : [
+                      for (final point in report.trend)
+                        (
+                          date: point.month,
+                          income: point.income,
+                          expense: point.expense,
+                        ),
+                    ],
+            ),
+            if (daily && report.transactionCount != 0) ...[
+              const SizedBox(height: 8),
+              ExpansionTile(
+                key: const PageStorageKey('report-daily-details'),
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Rincian per hari'),
+                children: [
+                  for (final day in report.daily)
+                    if (day.income != 0 || day.expense != 0) ...[
+                      const Divider(height: 16),
+                      _DayDetail(day: day),
+                    ],
+                ],
+              ),
+            ],
           ],
           const _ReportSection('Pengeluaran per kategori'),
           hidden
@@ -121,10 +158,9 @@ class ReportsPage extends StatelessWidget {
 }
 
 class _ReportSection extends StatelessWidget {
-  const _ReportSection(this.title, {this.subtitle});
+  const _ReportSection(this.title);
 
   final String title;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -143,10 +179,6 @@ class _ReportSection extends StatelessWidget {
               style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(subtitle!, style: text.bodyMedium),
-          ],
         ],
       ),
     );

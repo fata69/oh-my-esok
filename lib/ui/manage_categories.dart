@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../data/category.dart';
 import '../state/money_store.dart';
+import 'action_sheet.dart';
 import 'category_icon.dart';
 import 'chevron.dart';
 import 'money_icon_catalog.dart';
@@ -36,7 +37,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _CategorySheet(
         title: kind == 'income' ? 'Kategori pemasukan' : 'Kategori pengeluaran',
         kind: kind,
@@ -60,7 +61,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _CategorySheet(
         title: 'Ubah kategori',
         kind: category.kind,
@@ -120,64 +121,33 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
     final store = context.read<MoneyStore>();
     final count = await store.categoryTransactionCount(category.id);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      sheetAnimationStyle: EsokMotion.presentation(context),
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    final action = await showEsokActionSheet<Future<void> Function()>(
+      context,
+      title: category.name,
+      actions: [
+        EsokSheetAction(
+          () => _edit(category),
+          'Ubah nama atau ikon',
+          Icons.edit_outlined,
         ),
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _Handle(),
-              _ActionRow(
-                label: 'Ubah nama atau ikon',
-                onTap: () {
-                  Navigator.pop(context);
-                  _edit(category);
-                },
-              ),
-              _ActionRow(
-                label: category.archived ? 'Aktifkan lagi' : 'Arsipkan',
-                onTap: () {
-                  Navigator.pop(context);
-                  store.setCategoryArchived(category.id, !category.archived);
-                },
-              ),
-              _ActionRow(
-                label: 'Hapus',
-                danger: true,
-                onTap: count > 0
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        _delete(category);
-                      },
-              ),
-              if (count > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
-                  child: Text(
-                    'Punya $count transaksi — arsipkan saja agar riwayat tetap punya label.',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.5,
-                      color: EsokColors.muted,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        EsokSheetAction(
+          () => store.setCategoryArchived(category.id, !category.archived),
+          category.archived ? 'Aktifkan lagi' : 'Arsipkan',
+          category.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
         ),
-      ),
+        EsokSheetAction(
+          () => _delete(category),
+          'Hapus',
+          Icons.delete_outline_rounded,
+          destructive: true,
+          enabled: count == 0,
+        ),
+      ],
+      footer: count > 0
+          ? 'Punya $count transaksi. Arsipkan agar nama kategori tetap terlihat di riwayat.'
+          : null,
     );
+    if (action != null && mounted) await action();
   }
 
   Future<void> _showArchived() async {
@@ -186,51 +156,39 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
         .where((category) => category.kind == _kind)
         .toList();
     if (archived.isEmpty) return;
-    await showModalBottomSheet<void>(
+    final selected = await showModalBottomSheet<MoneyCategory>(
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      barrierColor: EsokColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => EsokSheetPanel(
+        title: 'Kategori diarsipkan',
+        body: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 0, 16, 12),
+          shrinkWrap: true,
+          itemCount: archived.length,
+          separatorBuilder: (_, _) => const Divider(),
+          itemBuilder: (context, index) => Row(
             children: [
-              const Center(child: _Handle()),
-              const SizedBox(height: 8),
-              Text(
-                'Kategori diarsipkan',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: EsokColors.ink,
+              Expanded(child: Text(archived[index].name)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, archived[index]),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Aktifkan'),
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final category in archived)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(category.name),
-                  trailing: TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      store.setCategoryArchived(category.id, false);
-                    },
-                    child: const Text('Aktifkan'),
-                  ),
-                ),
             ],
           ),
         ),
       ),
     );
+    if (selected != null && mounted) {
+      await store.setCategoryArchived(selected.id, false);
+    }
   }
 
   Future<void> _reorder(
@@ -525,39 +483,6 @@ class _CategoryRow extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        alignment: Alignment.centerLeft,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: onTap == null
-                ? EsokColors.chevron
-                : (danger ? EsokColors.lateInk : EsokColors.ink),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _Handle extends StatelessWidget {
   const _Handle();
 
@@ -621,7 +546,7 @@ class _CategorySheetState extends State<_CategorySheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       child: SafeArea(
         top: false,

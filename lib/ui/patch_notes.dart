@@ -13,7 +13,7 @@ Future<void> showPatchNotes(
     sheetAnimationStyle: EsokMotion.presentation(context),
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: const Color(0x5214120E),
+    barrierColor: EsokColors.scrim,
     builder: (context) =>
         PatchNotesSheet(version: version, buildNumber: buildNumber),
   );
@@ -30,6 +30,17 @@ class PatchNotesSheet extends StatelessWidget {
   final String buildNumber;
 
   static const _releases = [
+    (
+      version: '0.1.0-preview.12',
+      date: '19 Nov 2026',
+      notes: [
+        'Navbar, tombol tambah, menu, dan aksi editor kini memakai kaca netral yang senada di Terang dan AMOLED.',
+        'Uang memisahkan saldo dompet dan arus kas bulan. Laporan punya grafik 6 bulan dan harian dengan nominal pilihan di atas grafik.',
+        'Filter transaksi memakai kalender Hari. Daftar dompet dan panel Setelan lebih mudah dipakai pada layar pendek atau teks besar.',
+        'Widget Agenda menyesuaikan isi dengan ukuran. Widget Uang menandai ringkasan yang perlu diperbarui.',
+        'Agenda yang sudah dicentang dari aplikasi atau widget berhenti mengirim pengingat. Jadwal berikutnya tetap aktif.',
+      ],
+    ),
     (
       version: '0.1.0-preview.11',
       date: '18 Nov 2026',
@@ -257,7 +268,7 @@ class PatchNotesSheet extends StatelessWidget {
       constraints: BoxConstraints(maxHeight: maxHeight),
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       child: SafeArea(
         top: false,

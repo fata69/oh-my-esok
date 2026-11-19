@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../update/update_availability.dart';
 import 'agenda_loading.dart';
+import 'glass_controls.dart';
 import 'home_page.dart';
 import 'money_page.dart';
 import 'motion.dart';
@@ -302,7 +302,6 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
     with TickerProviderStateMixin {
   static const _forceSolid = bool.fromEnvironment('ESOK_SOLID_NAV');
   static const _radius = BorderRadius.all(Radius.circular(40));
-  static final _blur = ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10);
   static const _tabs = [
     (
       'Hari',
@@ -412,18 +411,11 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final highContrast = MediaQuery.highContrastOf(context);
-    final solid = _solid;
-    final tint = colors.surfaceContainerLow;
-    // A bright list item behind the dark bar needs a stronger scrim.
-    final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
     final primary = widget.action;
-    final edge = highContrast ? colors.outline : colors.outlineVariant;
-    final capsule = DecoratedBox(
-      decoration: BoxDecoration(
-        color: solid ? tint : tint.withValues(alpha: tintOpacity),
-        borderRadius: _radius,
-        border: Border.all(color: edge),
-      ),
+    final capsule = EsokGlass(
+      key: const ValueKey('floating-navigation'),
+      radius: _radius,
+      forceSolid: _solid,
       child: Padding(
         padding: const EdgeInsets.all(4),
         child: Stack(
@@ -450,16 +442,10 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
                       decoration: BoxDecoration(
                         color: highContrast
                             ? colors.onSurface
-                            : colors.brightness == Brightness.dark
-                            ? const Color(0xFF313131)
-                            : const Color(0xFFE4E4E7),
+                            : colors.surfaceContainerHighest,
                         border: highContrast
                             ? null
-                            : Border.all(
-                                color: colors.brightness == Brightness.dark
-                                    ? const Color(0xFF686868)
-                                    : const Color(0xFF9B9BA3),
-                              ),
+                            : Border.all(color: colors.outlineVariant),
                         borderRadius: _radius,
                       ),
                     ),
@@ -486,35 +472,23 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
       ),
     );
 
-    final dark = colors.brightness == Brightness.dark;
-    final actionFill = dark ? const Color(0xFF3B3B3B) : const Color(0xFF242424);
-    final actionEdge = dark && highContrast
-        ? colors.onSurface
-        : dark
-        ? const Color(0xFF818181)
-        : actionFill;
-    final button = ClipOval(
-      child: BackdropFilter(
-        filter: solid ? ui.ImageFilter.blur() : _blur,
-        child: Container(
-          key: primary == null ? null : const ValueKey('bottom-create'),
-          width: _addSize,
-          height: _addSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: solid ? actionFill : actionFill.withValues(alpha: 0.97),
-            border: Border.all(color: actionEdge),
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: IconButton(
-              tooltip: primary?.$1 ?? 'Tambah',
-              onPressed: primary?.$2,
-              icon: const Icon(Icons.add_rounded, size: 30),
-              style: IconButton.styleFrom(
-                foregroundColor: Colors.white,
-                shape: const CircleBorder(),
-              ),
+    final button = EsokGlass(
+      radius: _radius,
+      emphasized: true,
+      forceSolid: _solid,
+      child: SizedBox.square(
+        key: primary == null ? null : const ValueKey('bottom-create'),
+        dimension: _addSize,
+        child: Material(
+          type: MaterialType.transparency,
+          child: IconButton(
+            tooltip: primary?.$1 ?? 'Tambah',
+            onPressed: primary?.$2,
+            icon: const Icon(Icons.add_rounded, size: 30),
+            style: IconButton.styleFrom(
+              foregroundColor: Colors.white,
+              disabledForegroundColor: Colors.white,
+              shape: const CircleBorder(),
             ),
           ),
         ),
@@ -535,13 +509,7 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
             constraints: const BoxConstraints(maxWidth: 360),
             child: AnimatedBuilder(
               animation: _reveal,
-              child: ClipRRect(
-                key: const ValueKey('floating-navigation'),
-                borderRadius: _radius,
-                child: solid
-                    ? capsule
-                    : BackdropFilter(filter: _blur, child: capsule),
-              ),
+              child: capsule,
               builder: (context, nav) {
                 final progress = _reveal.value.clamp(0.0, 1.0);
                 final offset = (_revealDistance * (_reveal.value - 1)).clamp(

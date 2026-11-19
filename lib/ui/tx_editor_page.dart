@@ -19,6 +19,7 @@ import '../state/settings_store.dart';
 import '../util/format.dart';
 import '../util/sound_fx.dart';
 import 'category_icon.dart';
+import 'glass_controls.dart';
 import 'items_sheet.dart';
 import 'manage_accounts.dart';
 import 'money_icon_catalog.dart';
@@ -226,7 +227,9 @@ class _TxEditorPageState extends State<TxEditorPage> {
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _WalletSheet(
         title: switch (_kind) {
           'income' => 'Terima ke dompet',
@@ -472,7 +475,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
         context: context,
         sheetAnimationStyle: EsokMotion.presentation(context),
         backgroundColor: Colors.transparent,
-        barrierColor: const Color(0x5214120E),
+        barrierColor: EsokColors.scrim,
         isScrollControlled: true,
         builder: (_) =>
             _ScanConfirmSheet(file: file, shared: widget.receiptImage != null),
@@ -502,7 +505,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
           context: context,
           sheetAnimationStyle: EsokMotion.presentation(context),
           backgroundColor: Colors.transparent,
-          barrierColor: const Color(0x5214120E),
+          barrierColor: EsokColors.scrim,
           isScrollControlled: true,
           builder: (_) => _ScanRowsSheet(transactions: result.transaksi),
         );
@@ -512,7 +515,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
         context: context,
         sheetAnimationStyle: EsokMotion.presentation(context),
         backgroundColor: Colors.transparent,
-        barrierColor: const Color(0x5214120E),
+        barrierColor: EsokColors.scrim,
         isScrollControlled: true,
         builder: (_) => ScanReviewSheet(
           scan: chosen!,
@@ -535,7 +538,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => const _ScanSourceSheet(),
     );
     if (source == null || !mounted) return null;
@@ -590,7 +593,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       isScrollControlled: true,
       builder: (_) => ItemsSheet(detail: detail, total: _amount),
     );
@@ -620,6 +623,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
 
     final media = MediaQuery.of(context);
     final keyboardOpen = media.viewInsets.bottom > 0;
+    final referenceDay = today();
+    final yesterday = referenceDay.subtract(const Duration(days: 1));
     return Scaffold(
       backgroundColor: EsokColors.canvas,
       body: SafeArea(
@@ -633,7 +638,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
             // Choose the dock's placement once for this viewport, irrespective
             // of insets from Android's keyboard.
             final safeHeight = media.size.height - media.viewPadding.vertical;
-            final docked = safeHeight >= keypadHeight + 168;
+            final docked = safeHeight >= keypadHeight + 174;
             final reduceMotion =
                 media.reduceMotion ||
                 media.disableAnimations ||
@@ -670,12 +675,12 @@ class _TxEditorPageState extends State<TxEditorPage> {
                 width: double.infinity,
                 height: 48,
                 child: Center(
-                  child: Text(
-                    _isEditing ? 'Ubah' : 'Catat',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: EsokColors.ink,
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      _isEditing ? 'Ubah' : 'Catat',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -848,61 +853,45 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     Expanded(
                       child: _DateChip(
                         label: 'Hari ini',
-                        selected: _date == today(),
-                        onTap: () => setState(() => _date = today()),
+                        selected: _date == referenceDay,
+                        onTap: () => setState(() => _date = referenceDay),
                       ),
                     ),
                     const SizedBox(width: 7),
                     Expanded(
                       child: _DateChip(
                         label: 'Kemarin',
-                        selected:
-                            _date == today().subtract(const Duration(days: 1)),
-                        onTap: () => setState(
-                          () =>
-                              _date = today().subtract(const Duration(days: 1)),
-                        ),
+                        selected: _date == yesterday,
+                        onTap: () => setState(() => _date = yesterday),
                       ),
                     ),
                     const SizedBox(width: 7),
-                    GestureDetector(
-                      onTap: _pickDate,
-                      child: Container(
-                        height: 38,
-                        padding: const EdgeInsets.symmetric(horizontal: 11),
-                        decoration: BoxDecoration(
-                          color: EsokColors.soft,
-                          borderRadius: BorderRadius.circular(10),
+                    if (_date == null ||
+                        (_date != referenceDay && _date != yesterday))
+                      Expanded(
+                        child: _DateChip(
+                          label: _date == null
+                              ? 'Pilih tanggal'
+                              : shortDateTitle(_date!),
+                          selected: _date != null,
+                          onTap: _pickDate,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.calendar_today_outlined,
-                              size: 15,
-                              color: EsokColors.ink,
-                            ),
-                            if (_date == null) ...[
-                              const SizedBox(width: 6),
-                              const Text('Pilih tanggal'),
-                            ] else if (_date != today() &&
-                                _date !=
-                                    today().subtract(
-                                      const Duration(days: 1),
-                                    )) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                shortDateTitle(_date!),
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: EsokColors.ink,
-                                ),
-                              ),
-                            ],
-                          ],
+                      )
+                    else
+                      IconButton(
+                        tooltip: 'Pilih tanggal',
+                        onPressed: _pickDate,
+                        icon: const Icon(
+                          Icons.calendar_today_outlined,
+                          size: 17,
+                        ),
+                        style: IconButton.styleFrom(
+                          backgroundColor: EsokColors.of(context).control,
+                          foregroundColor: EsokColors.of(context).ink,
+                          minimumSize: const Size.square(48),
+                          visualDensity: VisualDensity.standard,
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -913,7 +902,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
                     onPressed: _delete,
                     style: TextButton.styleFrom(
                       foregroundColor: EsokColors.lateInk,
-                      textStyle: const TextStyle(fontSize: 13),
+                      textStyle: Theme.of(context).textTheme.bodyMedium,
                     ),
                     child: const Text('Hapus transaksi'),
                   ),
@@ -1144,51 +1133,48 @@ class _Segments extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: EsokColors.track,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < _labels.length; i++)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(_values[i]),
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: selected == _values[i]
-                        ? EsokColors.canvas
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: selected == _values[i]
-                        ? [
-                            BoxShadow(
-                              color: EsokColors.ink.withValues(alpha: 0.06),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    _labels[i],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: selected == _values[i]
-                          ? EsokColors.ink
-                          : EsokColors.muted,
+    final colors = EsokColors.of(context);
+    const shape = StadiumBorder();
+    return Material(
+      color: colors.control,
+      shape: shape,
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Row(
+          children: [
+            for (var i = 0; i < _labels.length; i++)
+              Expanded(
+                child: Semantics(
+                  selected: selected == _values[i],
+                  child: TextButton(
+                    onPressed: () => onChanged(_values[i]),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 42),
+                      visualDensity: VisualDensity.standard,
+                      shape: shape,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      backgroundColor: selected == _values[i]
+                          ? colors.surface
+                          : Colors.transparent,
+                      foregroundColor: selected == _values[i]
+                          ? colors.ink
+                          : colors.muted,
+                      side: selected == _values[i]
+                          ? BorderSide(color: colors.line)
+                          : BorderSide.none,
+                      textStyle: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(
+                            fontWeight: selected == _values[i]
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
                     ),
+                    child: Text(_labels[i], textAlign: TextAlign.center),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1228,9 +1214,9 @@ class _CategorySection extends StatelessWidget {
     );
     final action = TextButton.styleFrom(
       foregroundColor: EsokColors.ink,
-      minimumSize: const Size(48, 44),
+      minimumSize: const Size(48, 48),
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      textStyle: const TextStyle(fontSize: 12),
+      textStyle: Theme.of(context).textTheme.bodyMedium,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1623,23 +1609,23 @@ class _DateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 38,
-        decoration: BoxDecoration(
-          color: selected ? EsokColors.ink : EsokColors.soft,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? EsokColors.canvas : EsokColors.inkSoft,
+    final colors = EsokColors.of(context);
+    return Semantics(
+      selected: selected,
+      child: TextButton(
+        onPressed: onTap,
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 40),
+          visualDensity: VisualDensity.standard,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          backgroundColor: selected ? colors.selected : colors.control,
+          foregroundColor: selected ? colors.ink : colors.muted,
+          side: selected ? BorderSide(color: colors.line) : BorderSide.none,
+          textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
+        child: Text(label, textAlign: TextAlign.center),
       ),
     );
   }
@@ -1810,88 +1796,93 @@ class _BottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(11),
-    );
-    final compactIcon = MediaQuery.textScalerOf(context).scale(13) <= 17;
-    final padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 8);
+    final colors = EsokColors.of(context);
+    const shape = StadiumBorder();
+    final showScanIcon = MediaQuery.textScalerOf(context).scale(13) <= 17;
+    const padding = EdgeInsets.symmetric(horizontal: 4, vertical: 8);
     const minimum = Size(0, 48);
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 7,
-              child: TextButton(
-                onPressed: scanning || saving ? null : onScan,
-                style: TextButton.styleFrom(
-                  foregroundColor: EsokColors.ink,
-                  disabledForegroundColor: EsokColors.muted,
-                  minimumSize: minimum,
-                  padding: padding,
-                  textStyle: const TextStyle(fontSize: 13),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (scanning) ...[
-                      const SizedBox.square(
-                        dimension: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 5),
-                    ] else if (compactIcon) ...[
-                      const Icon(Icons.document_scanner_outlined, size: 16),
-                      const SizedBox(width: 5),
-                    ],
-                    Flexible(
-                      child: Semantics(
-                        liveRegion: scanning,
-                        child: Text(
-                          scanning ? 'Memindai…' : 'Pindai struk',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+        child: EsokGlass(
+          radius: const BorderRadius.all(Radius.circular(30)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 7,
+                  child: TextButton(
+                    onPressed: scanning || saving ? null : onScan,
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.ink,
+                      disabledForegroundColor: colors.muted,
+                      shape: shape,
+                      minimumSize: minimum,
+                      padding: padding,
+                      textStyle: Theme.of(context).textTheme.bodyMedium,
                     ),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (scanning) ...[
+                          const SizedBox.square(
+                            dimension: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 5),
+                        ] else if (showScanIcon) ...[
+                          const Icon(Icons.document_scanner_outlined, size: 16),
+                          const SizedBox(width: 5),
+                        ],
+                        Flexible(
+                          child: Semantics(
+                            liveRegion: scanning,
+                            child: Text(
+                              scanning ? 'Memindai…' : 'Pindai struk',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              flex: 5,
-              child: OutlinedButton(
-                onPressed: saving ? null : onCancel,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: EsokColors.ink,
-                  minimumSize: minimum,
-                  padding: padding,
-                  side: BorderSide(color: EsokColors.lineStrong),
-                  shape: shape,
+                const SizedBox(width: 6),
+                Expanded(
+                  flex: 5,
+                  child: TextButton(
+                    onPressed: saving ? null : onCancel,
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.muted,
+                      minimumSize: minimum,
+                      padding: padding,
+                      shape: shape,
+                    ),
+                    child: const Text('Batal'),
+                  ),
                 ),
-                child: const Text('Batal'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 8,
-              child: FilledButton(
-                onPressed: canSave && !saving ? onSave : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: EsokColors.accent,
-                  foregroundColor: EsokColors.onAccent,
-                  disabledBackgroundColor: EsokColors.soft,
-                  disabledForegroundColor: EsokColors.disabled,
-                  minimumSize: minimum,
-                  padding: padding,
-                  shape: shape,
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 8,
+                  child: FilledButton(
+                    onPressed: canSave && !saving ? onSave : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.action,
+                      foregroundColor: colors.onAction,
+                      disabledBackgroundColor: colors.control,
+                      disabledForegroundColor: colors.muted,
+                      minimumSize: minimum,
+                      padding: padding,
+                      shape: shape,
+                    ),
+                    child: Text(saving ? 'Menyimpan…' : 'Simpan'),
+                  ),
                 ),
-                child: Text(saving ? 'Menyimpan…' : 'Simpan'),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -2086,97 +2077,112 @@ class _WalletSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: EsokColors.canvas,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+    final colors = EsokColors.of(context);
+    final typography = Theme.of(context).textTheme;
+    final choices = accounts
+        .where((account) => account.id != excludedId)
+        .toList();
+    return Material(
+      color: colors.canvas,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 34,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 14),
-                decoration: BoxDecoration(
-                  color: EsokColors.handle,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: EsokColors.ink,
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (final account in accounts)
-              if (account.id != excludedId)
-                Semantics(
-                  selected: selectedId == account.id,
-                  child: InkWell(
-                    onTap: () => Navigator.of(context).pop(account.id),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(22, 10, 22, 12),
+          itemCount: choices.length + 2,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
                     child: Container(
-                      constraints: const BoxConstraints(minHeight: 52),
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          WalletIconView(account: account, size: 18),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              account.name,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: EsokColors.ink,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              accountTypeLabel(account.type),
-                              textAlign: TextAlign.end,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: EsokColors.muted,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 18,
-                            child: selectedId == account.id
-                                ? Icon(
-                                    Icons.check,
-                                    size: 18,
-                                    color: EsokColors.ink,
-                                  )
-                                : null,
-                          ),
-                        ],
+                      width: 34,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: colors.handle,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      style: typography.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (choices.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Belum ada dompet yang bisa dipilih.',
+                        style: typography.bodyMedium,
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 8),
+                ],
+              );
+            }
+            if (index == choices.length + 1) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Divider(),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop('__manage__'),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                      foregroundColor: colors.ink,
+                      alignment: AlignmentDirectional.centerStart,
+                    ),
+                    child: const Text('Kelola dompet'),
+                  ),
+                ],
+              );
+            }
+            final account = choices[index - 1];
+            return Semantics(
+              selected: selectedId == account.id,
+              child: InkWell(
+                onTap: () => Navigator.of(context).pop(account.id),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 52),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      WalletIconView(account: account, size: 18),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(account.name, style: typography.bodyLarge),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          accountTypeLabel(account.type),
+                          textAlign: TextAlign.end,
+                          style: typography.bodyMedium,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 18,
+                        child: selectedId == account.id
+                            ? Icon(Icons.check, size: 18, color: colors.ink)
+                            : null,
+                      ),
+                    ],
+                  ),
                 ),
-            const Divider(),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop('__manage__'),
-              style: TextButton.styleFrom(
-                foregroundColor: EsokColors.accent,
-                alignment: Alignment.centerLeft,
               ),
-              child: const Text('Kelola dompet'),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );

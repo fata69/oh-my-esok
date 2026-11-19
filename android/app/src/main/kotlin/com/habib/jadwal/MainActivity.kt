@@ -15,6 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var receiptInbox: ReceiptInboxBridge? = null
+    private var agendaReminders: AgendaReminderBridge? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,6 +33,7 @@ class MainActivity : FlutterActivity() {
 
         UpdateBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         receiptInbox = ReceiptInboxBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        agendaReminders = AgendaReminderBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -126,6 +128,8 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         receiptInbox?.dispose()
         receiptInbox = null
+        agendaReminders?.dispose()
+        agendaReminders = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

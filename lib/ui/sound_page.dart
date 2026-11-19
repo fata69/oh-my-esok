@@ -33,7 +33,7 @@ class SoundPage extends StatelessWidget {
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       isScrollControlled: true,
       builder: (_) => _SoundSheet(
         title: title,
@@ -80,7 +80,7 @@ class SoundPage extends StatelessWidget {
       context: context,
       sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       isScrollControlled: true,
       builder: (_) => _LibrarySheet(settings: settings),
     );
@@ -624,7 +624,7 @@ class _SoundSheet extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 12),
       child: SafeArea(
@@ -710,7 +710,7 @@ class _LibrarySheet extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 12),
       child: SafeArea(

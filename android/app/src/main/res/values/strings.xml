@@ -10,5 +10,17 @@
     <string name="widget_add_task">Tambah tugas hari ini</string>
     <string name="widget_progress">%1$s · %2$d/%3$d selesai</string>
     <string name="widget_next">Berikutnya · %1$s</string>
-    <string name="widget_open">Buka Oh My Esok</string>
+    <string name="widget_open_day">%1$s. %2$s. Buka agenda.</string>
+    <string name="widget_upcoming_description">%1$s. %2$s. Buka agenda.</string>
+    <string name="widget_with_time">%1$s, pukul %2$s</string>
+    <string name="widget_empty_today">Belum ada jadwal hari ini.</string>
+    <string name="widget_add_transaction">Catat transaksi</string>
+    <string name="widget_money_today">Keluar hari ini</string>
+    <string name="widget_money_month_short">Bulan ini</string>
+    <string name="widget_money_placeholder">—</string>
+    <string name="widget_money_refresh">Buka Uang</string>
+    <string name="widget_money_stale_today">Pengeluaran hari ini belum diperbarui. Pengeluaran bulan ini %1$s. Buka tab Uang untuk memperbarui.</string>
+    <string name="widget_money_stale">Ringkasan pengeluaran belum diperbarui. Buka tab Uang untuk memperbarui.</string>
+    <string name="widget_money_masked">Nominal disembunyikan. Buka tab Uang.</string>
+    <string name="widget_money_description">Pengeluaran hari ini %1$s. Pengeluaran bulan ini %2$s. Buka tab Uang.</string>
 </resources>

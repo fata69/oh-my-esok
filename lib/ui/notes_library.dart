@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/day_note.dart';
 import '../state/settings_store.dart';
 import '../util/format.dart';
+import 'glass_controls.dart';
 import 'motion.dart';
 import 'tab_layout.dart';
 import 'theme.dart';
@@ -61,18 +62,38 @@ class NotesToolbar extends StatelessWidget {
               icon: const Icon(Icons.view_agenda_outlined, size: 19),
               style: _layoutStyle(colors, !settings.notesGrid),
             ),
-            PopupMenuButton<NoteSort>(
+            EsokGlassMenu<NoteSort>(
               tooltip: 'Urutkan catatan',
-              icon: const Icon(Icons.sort_rounded, size: 21),
               onSelected: settings.setNoteSort,
-              itemBuilder: (_) => [
+              actions: [
                 for (final sort in NoteSort.values)
-                  CheckedPopupMenuItem(
-                    value: sort,
-                    checked: settings.noteSort == sort,
-                    child: Text(sort.label),
-                  ),
+                  EsokMenuAction(sort, sort.label, switch (sort) {
+                    NoteSort.edited => Icons.edit_outlined,
+                    NoteSort.newest => Icons.arrow_downward_rounded,
+                    NoteSort.oldest => Icons.arrow_upward_rounded,
+                    NoteSort.title => Icons.sort_by_alpha_rounded,
+                  }, selected: settings.noteSort == sort),
               ],
+              trigger: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.sort_rounded, size: 18, color: colors.muted),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Urutkan',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: colors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -82,6 +103,7 @@ class NotesToolbar extends StatelessWidget {
 
   ButtonStyle _layoutStyle(EsokPalette colors, bool selected) =>
       IconButton.styleFrom(
+        minimumSize: const Size.square(48),
         backgroundColor: selected ? colors.control : Colors.transparent,
         foregroundColor: selected ? colors.ink : colors.muted,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -202,16 +224,21 @@ class _NoteTile extends StatelessWidget {
     final colors = EsokColors.of(context);
     final theme = Theme.of(context).textTheme;
     final title = note.displayTitle;
+    final body = note.body.trim();
+    final bodyAsTitle = note.title.trim().isEmpty;
+    final previewBody = bodyAsTitle
+        ? body.substring(title.length).trim()
+        : body;
     final updated = DateTime.fromMillisecondsSinceEpoch(note.updatedAt);
     final preview = Text(
-      note.body,
+      previewBody,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: theme.bodyMedium,
     );
     final radius = BorderRadius.circular(12);
     return Material(
-      color: grid ? colors.surface : Colors.transparent,
+      color: grid ? colors.control : Colors.transparent,
       borderRadius: radius,
       child: InkWell(
         borderRadius: radius,
@@ -227,7 +254,7 @@ class _NoteTile extends StatelessWidget {
             children: [
               Text(
                 title,
-                maxLines: grid ? 1 : 2,
+                maxLines: grid && previewBody.isNotEmpty ? 1 : 2,
                 overflow: TextOverflow.ellipsis,
                 style: theme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
               ),
@@ -238,7 +265,7 @@ class _NoteTile extends StatelessWidget {
                     child: preview,
                   ),
                 )
-              else if (note.body.isNotEmpty)
+              else if (previewBody.isNotEmpty)
                 Padding(padding: const EdgeInsets.only(top: 4), child: preview),
               const SizedBox(height: 4),
               Text(dateTitle(updated), style: theme.labelSmall),

@@ -40,23 +40,44 @@ class _ReportFlowChartState extends State<ReportFlowChart> {
   @override
   void didUpdateWidget(ReportFlowChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.points.last.date != widget.points.last.date) _selected = null;
+    if (oldWidget.points.lastOrNull?.date != widget.points.lastOrNull?.date) {
+      _selected = null;
+    }
   }
 
   void _select(int index) {
-    if (index == (_selected ?? widget.points.length - 1)) return;
+    if (index == (_selected ?? _defaultIndex)) return;
     setState(() => _selected = index);
+  }
+
+  int get _defaultIndex {
+    final points = widget.points;
+    final lastActive = points.lastIndexWhere(
+      (point) => point.income != 0 || point.expense != 0,
+    );
+    return widget.monthly || lastActive < 0 ? points.length - 1 : lastActive;
   }
 
   @override
   Widget build(BuildContext context) {
     final points = widget.points;
-    final selected = _selected ?? points.length - 1;
-    final current = points[selected];
     final theme = Theme.of(context);
+    if (points.isEmpty ||
+        points.every((point) => point.income == 0 && point.expense == 0)) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          widget.monthly
+              ? 'Belum ada arus kas dalam enam bulan.'
+              : 'Belum ada arus kas harian.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      );
+    }
+    final selected = _selected ?? _defaultIndex;
+    final current = points[selected];
     final income = reportIncomeColor(theme.brightness);
     final expense = reportExpenseColor(theme.brightness);
-    final monthFormat = DateFormat('MMM', 'id_ID');
     final heading = widget.monthly
         ? DateFormat('MMM yyyy', 'id_ID').format(current.date)
         : DateFormat('d MMMM yyyy', 'id_ID').format(current.date);
@@ -66,10 +87,15 @@ class _ReportFlowChartState extends State<ReportFlowChart> {
         Row(
           children: [
             Expanded(
-              child: Text(
-                heading,
-                key: const ValueKey('report-point-date'),
-                style: theme.textTheme.titleMedium,
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  heading,
+                  key: const ValueKey('report-point-date'),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
             if (!widget.monthly) ...[
@@ -88,105 +114,32 @@ class _ReportFlowChartState extends State<ReportFlowChart> {
             ],
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 5),
         ReportAmounts(
           income: current.income,
           expense: current.expense,
           incomeColor: income,
           expenseColor: expense,
         ),
-        const SizedBox(height: 15),
-        if (points.every((point) => point.income == 0 && point.expense == 0))
-          Text(
-            widget.monthly
-                ? 'Belum ada arus kas dalam enam bulan.'
-                : 'Belum ada arus kas harian.',
-            style: theme.textTheme.bodyMedium,
+        const SizedBox(height: 14),
+        if (widget.monthly)
+          _MonthlyPlot(
+            points: points,
+            selected: selected,
+            income: income,
+            expense: expense,
+            onSelect: _select,
           )
         else
           ExcludeSemantics(
             child: _FlowPlot(
               points: points,
               selected: selected,
-              monthly: widget.monthly,
               income: income,
               expense: expense,
               onSelect: _select,
             ),
           ),
-        if (widget.monthly) ...[
-          const SizedBox(height: 4),
-          LayoutBuilder(
-            builder: (context, box) {
-              final minWidth = math.max(
-                48.0,
-                MediaQuery.textScalerOf(context).scale(34),
-              );
-              final plotWidth = box.maxWidth - _axisGutterOf(context);
-              final widthAvailable = plotWidth >= minWidth * points.length
-                  ? plotWidth
-                  : box.maxWidth;
-              final columns = (widthAvailable / minWidth).floor().clamp(
-                1,
-                points.length,
-              );
-              // Keep equal cells offset by the axis gutter when they all fit.
-              final width = (widthAvailable / columns).floorToDouble();
-              return Wrap(
-                children: [
-                  for (var i = 0; i < points.length; i++)
-                    SizedBox(
-                      width: width,
-                      child: Semantics(
-                        excludeSemantics: true,
-                        button: true,
-                        selected: i == selected,
-                        label: monthTitle(points[i].date),
-                        value:
-                            'Pemasukan ${reportAmount(points[i].income)}, '
-                            'Pengeluaran ${reportAmount(points[i].expense)}',
-                        onTap: () => _select(i),
-                        child: TextButton(
-                          key: ValueKey('report-month-$i'),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 48),
-                            foregroundColor: i == selected
-                                ? theme.colorScheme.onSurface
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
-                          onPressed: () => _select(i),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                monthFormat.format(points[i].date),
-                                style: TextStyle(
-                                  fontWeight: i == selected
-                                      ? FontWeight.w700
-                                      : FontWeight.w400,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              SizedBox(
-                                width: 16,
-                                height: 2,
-                                child: ColoredBox(
-                                  color: i == selected
-                                      ? income
-                                      : Colors.transparent,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
       ],
     );
   }
@@ -266,11 +219,10 @@ class ReportAmounts extends StatelessWidget {
   }
 }
 
-class _FlowPlot extends StatelessWidget {
-  const _FlowPlot({
+class _MonthlyPlot extends StatelessWidget {
+  const _MonthlyPlot({
     required this.points,
     required this.selected,
-    required this.monthly,
     required this.income,
     required this.expense,
     required this.onSelect,
@@ -278,32 +230,168 @@ class _FlowPlot extends StatelessWidget {
 
   final List<ReportFlowPoint> points;
   final int selected;
-  final bool monthly;
   final Color income;
   final Color expense;
   final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
     final theme = Theme.of(context);
-    final c = theme.colorScheme;
+    final scale = MediaQuery.textScalerOf(context);
+    final labelStyle = theme.textTheme.bodyMedium!;
+    final rowHeight = math.max(48.0, scale.scale(14) * 1.5 + 16);
+    final labelWidth = math.max(54.0, scale.scale(13) * 3.5 + 10);
     final axis = _ReportAxis(points);
     final compact = NumberFormat.compact(locale: 'id_ID');
-    final axisStyle = theme.textTheme.labelSmall?.copyWith(
-      color: c.onSurfaceVariant,
+    final monthFormat = DateFormat('MMM', 'id_ID');
+    final tickStyle = theme.textTheme.labelSmall;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: rowHeight * points.length,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: selected * rowHeight + 3,
+                height: rowHeight - 6,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.control,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                left: labelWidth,
+                right: 8,
+                child: ExcludeSemantics(
+                  child: LayoutBuilder(
+                    builder: (context, box) => _volumeBars(
+                      context,
+                      axis: axis,
+                      points: points,
+                      valueWidth: box.maxWidth,
+                      rodWidth: 12,
+                      income: income,
+                      expense: expense,
+                      horizontal: true,
+                    ),
+                  ),
+                ),
+              ),
+              Column(
+                children: [
+                  for (final (index, point) in points.indexed)
+                    SizedBox(
+                      height: rowHeight,
+                      width: double.infinity,
+                      child: Semantics(
+                        key: ValueKey('report-month-$index'),
+                        button: true,
+                        selected: selected == index,
+                        label: monthTitle(point.date),
+                        value:
+                            'Pemasukan ${reportAmount(point.income)}, '
+                            'Pengeluaran ${reportAmount(point.expense)}',
+                        onTap: () => onSelect(index),
+                        excludeSemantics: true,
+                        child: InkWell(
+                          onTap: () => onSelect(index),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Padding(
+                              padding: const EdgeInsetsDirectional.only(
+                                start: 8,
+                              ),
+                              child: Text(
+                                monthFormat.format(point.date),
+                                style: labelStyle.copyWith(
+                                  color: selected == index
+                                      ? colors.ink
+                                      : colors.muted,
+                                  fontWeight: selected == index
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.only(left: labelWidth, right: 8, top: 4),
+          child: ExcludeSemantics(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final zero = -axis.low / (axis.high - axis.low);
+                final gap = scale.scale(46);
+                return Stack(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(compact.format(axis.low), style: tickStyle),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(compact.format(axis.high), style: tickStyle),
+                    ),
+                    if (math.min(zero, 1 - zero) * box.maxWidth >= gap)
+                      Align(
+                        alignment: Alignment(2 * zero - 1, 0),
+                        child: Text('0', style: tickStyle),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
-    final plotHeight = math.max(
-      146.0,
-      MediaQuery.textScalerOf(context).scale(11) * 10,
-    );
-    final axisPadding = MediaQuery.textScalerOf(context).scale(8);
+  }
+}
+
+class _FlowPlot extends StatelessWidget {
+  const _FlowPlot({
+    required this.points,
+    required this.selected,
+    required this.income,
+    required this.expense,
+    required this.onSelect,
+  });
+
+  final List<ReportFlowPoint> points;
+  final int selected;
+  final Color income;
+  final Color expense;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final theme = Theme.of(context);
+    final scale = MediaQuery.textScalerOf(context);
+    final axis = _ReportAxis(points);
+    final compact = NumberFormat.compact(locale: 'id_ID');
+    final axisStyle = theme.textTheme.labelSmall;
+    final plotHeight = math.max(146.0, scale.scale(11) * 10);
+    final axisPadding = scale.scale(8);
     final axisWidth = _axisGutterOf(context) - 8;
-    final last = points.length - 1;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Rupiah', style: axisStyle),
         SizedBox(
           height: plotHeight + 2 * axisPadding,
           child: Row(
@@ -315,49 +403,9 @@ class _FlowPlot extends StatelessWidget {
                   child: LayoutBuilder(
                     builder: (context, box) {
                       final slot = box.maxWidth / points.length;
-                      final width = math.min(monthly ? 24.0 : 7.0, slot * .52);
-                      void snap(double x) =>
-                          onSelect((x / slot).floor().clamp(0, last));
-
-                      BarChartGroupData group(int i) {
-                        final inbound = points[i].income.toDouble();
-                        final outbound = -points[i].expense.toDouble();
-                        // Imported negatives can put both effects on the same side.
-                        // Separate those marks so neither amount hides the other.
-                        final separate =
-                            (inbound > 0 && outbound > 0) ||
-                            (inbound < 0 && outbound < 0);
-                        final gap = width * .12;
-                        final barWidth = separate ? (width - gap) / 2 : width;
-                        BarChartRodData rod(double value, Color color) {
-                          // fl_chart extends rods shorter than their radius.
-                          // Cap the radius so a small amount keeps its scale.
-                          final trueHeight =
-                              value.abs() / (axis.high - axis.low) * plotHeight;
-                          final round = Radius.circular(
-                            math.min(barWidth / 2, trueHeight),
-                          );
-                          return BarChartRodData(
-                            toY: value,
-                            width: barWidth,
-                            color: value == 0 ? Colors.transparent : color,
-                            borderRadius: value < 0
-                                ? BorderRadius.vertical(bottom: round)
-                                : BorderRadius.vertical(top: round),
-                          );
-                        }
-
-                        return BarChartGroupData(
-                          x: i,
-                          groupVertically: !separate,
-                          barsSpace: gap,
-                          barRods: [
-                            rod(inbound, income),
-                            rod(outbound, expense),
-                          ],
-                        );
-                      }
-
+                      void snap(double x) => onSelect(
+                        (x / slot).floor().clamp(0, points.length - 1),
+                      );
                       return GestureDetector(
                         key: const ValueKey('report-scrub'),
                         behavior: HitTestBehavior.opaque,
@@ -370,54 +418,20 @@ class _FlowPlot extends StatelessWidget {
                           fit: StackFit.expand,
                           children: [
                             Positioned(
-                              left: selected * slot + slot * .06,
-                              width: slot * .88,
+                              left: selected * slot,
+                              width: slot,
                               top: 0,
                               bottom: 0,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: c.onSurface.withValues(alpha: .07),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
+                              child: ColoredBox(color: colors.control),
                             ),
-                            BarChart(
-                              BarChartData(
-                                alignment: BarChartAlignment.spaceAround,
-                                barGroups: [
-                                  for (var i = 0; i < points.length; i++)
-                                    group(i),
-                                ],
-                                baselineY: 0,
-                                minY: axis.low,
-                                maxY: axis.high,
-                                titlesData: const FlTitlesData(show: false),
-                                borderData: FlBorderData(show: false),
-                                gridData: FlGridData(
-                                  drawVerticalLine: false,
-                                  horizontalInterval: axis.step,
-                                  getDrawingHorizontalLine: (_) => FlLine(
-                                    color: c.outlineVariant.withValues(
-                                      alpha: 0.6,
-                                    ),
-                                    strokeWidth: 1,
-                                  ),
-                                ),
-                                extraLinesData: ExtraLinesData(
-                                  horizontalLines: [
-                                    HorizontalLine(
-                                      y: 0,
-                                      color: c.outline,
-                                      strokeWidth: 1,
-                                    ),
-                                  ],
-                                ),
-                                barTouchData: const BarTouchData(
-                                  enabled: false,
-                                ),
-                              ),
-                              // Scrubbing and opening another month must never interpolate values.
-                              duration: Duration.zero,
+                            _volumeBars(
+                              context,
+                              axis: axis,
+                              points: points,
+                              valueWidth: plotHeight,
+                              rodWidth: math.min(7, slot * .62),
+                              income: income,
+                              expense: expense,
                             ),
                           ],
                         ),
@@ -452,20 +466,89 @@ class _FlowPlot extends StatelessWidget {
             ],
           ),
         ),
-        if (!monthly)
-          Padding(
-            padding: EdgeInsets.only(right: axisWidth + 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('1', style: axisStyle),
-                Text('${points.length}', style: axisStyle),
-              ],
-            ),
+        Padding(
+          padding: EdgeInsets.only(right: axisWidth + 8),
+          child: Stack(
+            children: [
+              for (final day in [1, 10, 20, points.length])
+                Align(
+                  alignment: Alignment(2 * (day - .5) / points.length - 1, 0),
+                  child: Text('$day', style: axisStyle),
+                ),
+            ],
           ),
+        ),
       ],
     );
   }
+}
+
+BarChart _volumeBars(
+  BuildContext context, {
+  required _ReportAxis axis,
+  required List<ReportFlowPoint> points,
+  required double valueWidth,
+  required double rodWidth,
+  required Color income,
+  required Color expense,
+  bool horizontal = false,
+}) {
+  final colors = EsokColors.of(context);
+  BarChartGroupData group(int index, ReportFlowPoint point) {
+    final incoming = point.income.toDouble();
+    final outgoing = -point.expense.toDouble();
+    // Signed imports can put two effects on the same side of zero.
+    final separate =
+        (incoming > 0 && outgoing > 0) || (incoming < 0 && outgoing < 0);
+    final gap = separate ? rodWidth * .16 : 0.0;
+    final width = separate ? (rodWidth - gap) / 2 : rodWidth;
+    BarChartRodData rod(double value, Color color) {
+      final length = value.abs() / (axis.high - axis.low) * valueWidth;
+      final radius = Radius.circular(math.min(width * .28, length));
+      return BarChartRodData(
+        fromY: 0,
+        toY: value,
+        width: width,
+        color: value == 0 ? Colors.transparent : color,
+        borderRadius: value < 0
+            ? BorderRadius.vertical(bottom: radius)
+            : BorderRadius.vertical(top: radius),
+      );
+    }
+
+    return BarChartGroupData(
+      x: index,
+      groupVertically: !separate,
+      barsSpace: gap,
+      barRods: [rod(incoming, income), rod(outgoing, expense)],
+    );
+  }
+
+  return BarChart(
+    BarChartData(
+      alignment: BarChartAlignment.spaceAround,
+      barGroups: [
+        for (final (index, point) in points.indexed) group(index, point),
+      ],
+      rotationQuarterTurns: horizontal ? 1 : 0,
+      baselineY: 0,
+      minY: axis.low,
+      maxY: axis.high,
+      titlesData: const FlTitlesData(show: false),
+      borderData: FlBorderData(show: false),
+      gridData: FlGridData(
+        drawVerticalLine: false,
+        horizontalInterval: axis.step,
+        getDrawingHorizontalLine: (_) =>
+            FlLine(color: colors.line.withValues(alpha: .65), strokeWidth: 1),
+      ),
+      extraLinesData: ExtraLinesData(
+        horizontalLines: [HorizontalLine(y: 0, color: colors.outline)],
+      ),
+      barTouchData: const BarTouchData(enabled: false),
+    ),
+    duration: Duration.zero,
+  );
 }
 
 class _ReportAxis {

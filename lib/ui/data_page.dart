@@ -73,7 +73,7 @@ class _DataPageState extends State<DataPage> {
       sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _ExportSheet(data: data),
     );
     if (message != null) _message(message);
@@ -101,7 +101,7 @@ class _DataPageState extends State<DataPage> {
         sheetAnimationStyle: EsokMotion.presentation(context),
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        barrierColor: const Color(0x5214120E),
+        barrierColor: EsokColors.scrim,
         builder: (_) => _ImportSheet(fileName: picked.name, data: data),
       );
       if (confirmed != true || !mounted) return;
@@ -554,7 +554,7 @@ class _ExportSheetState extends State<_ExportSheet> {
     return Container(
       decoration: BoxDecoration(
         color: colors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
       child: SafeArea(
@@ -743,7 +743,7 @@ class _ImportSheet extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: colors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
       child: SafeArea(

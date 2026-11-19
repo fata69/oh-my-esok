@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.util.Log
 import es.antonborri.home_widget.HomeWidgetPlugin
 import org.json.JSONException
 import org.json.JSONObject
@@ -35,28 +36,26 @@ class TaskToggleReceiver : BroadcastReceiver() {
         val items = day.optJSONArray("tasks") ?: return
         val tasks = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
         val task = tasks.firstOrNull { it.optString("id") == taskId } ?: return
-        val pendingRaw = prefs.getString("pending_toggles", "{}") ?: "{}"
-        val pending = try {
-            JSONObject(pendingRaw)
-        } catch (_: JSONException) {
-            JSONObject()
-        }
-        val previousDone = pending.opt(taskId) as? Boolean ?: task.optBoolean("done")
+        val pending = WidgetAgendaToggles.read(context)
+        val previousDone = pending.done(taskId) ?: task.optBoolean("done")
         if (previousDone == newDone) return
 
         pending.put(taskId, newDone)
         for (item in tasks) {
-            val queued = pending.opt(item.optString("id")) as? Boolean ?: continue
+            val queued = pending.done(item.optString("id")) ?: continue
             item.put("done", queued)
         }
         val doneCount = tasks.count { it.optBoolean("done") }
         day.put("done", doneCount)
         day.put("total", tasks.size)
 
-        prefs.edit()
-            .putString("tasks_json", snapshot.toString())
-            .putString("pending_toggles", pending.toString())
-            .apply()
+        pending.save(prefs.edit().putString("tasks_json", snapshot.toString()))
+        try {
+            AgendaReminders.applyToggle(context, taskId, newDone)
+        } catch (error: Exception) {
+            // Delivery also checks the persisted queue if cancelling fails.
+            Log.w("EsokReminders", "Could not apply widget completion to Android alarms", error)
+        }
 
         TaskWidgetProvider.refreshAll(context)
         playToggleSound(context, newDone, newDone && doneCount == tasks.size)

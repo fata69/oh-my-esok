@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -9,11 +12,14 @@ import '../data/task.dart';
 import '../data/database.dart';
 import '../data/task_dao.dart';
 import '../util/format.dart';
+import 'reminder_alarm.dart';
 
 class TaskNotifier {
   TaskNotifier._();
 
   static final TaskNotifier instance = TaskNotifier._();
+  static const _android = MethodChannel('esok/agenda-reminders');
+  static const _migrationKey = 'native_agenda_reminders';
 
   bool _leadEnabled = true;
   int _leadMinutes = 60;
@@ -130,18 +136,61 @@ class TaskNotifier {
     await android?.requestExactAlarmsPermission();
   }
 
-  Future<void> schedule(Task task) async {
+  Future<void> schedule(Task task) => _runTaskOperation(() async {
     if (task.isRecurring) {
-      await syncFromDatabase();
+      await _replaceSchedule(await _readTasks());
+      return;
+    }
+    if (Platform.isAndroid) {
+      await _syncNativeTask(task);
       return;
     }
     await _scheduleOccurrence(task);
+  });
+
+  /// Sync only this occurrence. Finishing Monday must keep Tuesday's alarms.
+  Future<void> syncCompletion(Task task) => _runTaskOperation(() async {
+    if (Platform.isAndroid) {
+      await _syncNativeTask(task);
+      return;
+    }
+    await _scheduleOccurrence(task);
+  });
+
+  Future<void> _prepareNativeSchedule() async {
+    await init();
+    await _ensureChannel();
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_migrationKey) != true) {
+      // One-time migration clears notifications sent by the old plugin receiver.
+      await _plugin.cancelAll();
+      await prefs.setBool(_migrationKey, true);
+    }
   }
+
+  Future<void> _syncNativeTask(Task task) async {
+    await _prepareNativeSchedule();
+    await _android.invokeMethod<void>('updateTask', {
+      'taskId': task.id,
+      'done': task.isDone,
+      'records': _alarmsFor(task, _localNow()),
+    });
+  }
+
+  List<Map<String, Object?>> _alarmsFor(Task task, DateTime now) =>
+      agendaReminderAlarms(
+        task,
+        now: now,
+        when: _scheduledTime(task),
+        channel: _channelId,
+        sound: _soundRaw,
+        leadMinutes: _leadEnabled ? _leadMinutes : null,
+      );
 
   Future<void> _scheduleOccurrence(Task task, {Set<int>? pending}) async {
     await init();
     await _ensureChannel();
-    if (pending == null) await cancel(task.id);
+    if (pending == null) await _cancelPluginTask(task.id);
 
     final when = _scheduledTime(task);
     if (when == null || task.isDone) return;
@@ -228,16 +277,31 @@ class TaskNotifier {
     }
   }
 
-  Future<void> cancel(String taskId) async {
+  Future<void> cancel(String taskId) => _runTaskOperation(() async {
+    if (Platform.isAndroid) {
+      await _prepareNativeSchedule();
+      await _android.invokeMethod<void>('cancel', taskId);
+    } else {
+      await _cancelPluginTask(taskId);
+    }
+  });
+
+  Future<void> _cancelPluginTask(String taskId) async {
     await init();
     await _plugin.cancel(id: notificationId(taskId));
     await _plugin.cancel(id: leadNotificationId(taskId));
   }
 
-  Future<void> cancelAll() async {
+  Future<void> cancelAll() => _enqueue(() async {
+    if (Platform.isAndroid) {
+      await _prepareNativeSchedule();
+      await _android.invokeMethod<void>('clear');
+      _filledDay = null;
+      return;
+    }
     await init();
     await _plugin.cancelAllPendingNotifications();
-  }
+  });
 
   Future<List<Task>> _readTasks() async {
     final db = await AppDatabase.open();
@@ -250,6 +314,9 @@ class TaskNotifier {
   Future<void> _pendingSync = Future<void>.value();
   String? _filledDay;
 
+  Future<void> _runTaskOperation(Future<void> Function() work) =>
+      Platform.isAndroid ? _enqueue(work) : work();
+
   Future<void> _enqueue(Future<void> Function() work) {
     final operation = _pendingSync.then((_) => work());
     _pendingSync = operation.then<void>((_) {}, onError: (Object _) {});
@@ -258,7 +325,10 @@ class TaskNotifier {
 
   Future<void> rescheduleAll(Iterable<Task> tasks) {
     final rows = tasks.toList(growable: false);
-    return _enqueue(() => _replaceSchedule(rows));
+    return _enqueue(
+      () async =>
+          _replaceSchedule(Platform.isAndroid ? await _readTasks() : rows),
+    );
   }
 
   Future<void> topUpRecurring() => _enqueue(() async {
@@ -272,6 +342,11 @@ class TaskNotifier {
     final day = dateKey(now);
     if (_filledDay == day) return;
     final rows = await _readTasks();
+    if (Platform.isAndroid) {
+      await _replaceNativeSchedule(rows, now);
+      _filledDay = day;
+      return;
+    }
     final pending = await _plugin.pendingNotificationRequests();
     await _scheduleRecurring(
       rows,
@@ -285,13 +360,28 @@ class TaskNotifier {
     await init();
     await _refreshTimezone();
     _filledDay = null;
-    await _plugin.cancelAllPendingNotifications();
     final now = _localNow();
-    for (final task in rows.where((task) => !task.isRecurring)) {
-      await _scheduleOccurrence(task);
+    if (Platform.isAndroid) {
+      await _replaceNativeSchedule(rows, now);
+    } else {
+      await _plugin.cancelAllPendingNotifications();
+      for (final task in rows.where((task) => !task.isRecurring)) {
+        await _scheduleOccurrence(task);
+      }
+      await _scheduleRecurring(rows, now);
     }
-    await _scheduleRecurring(rows, now);
     _filledDay = dateKey(now);
+  }
+
+  Future<void> _replaceNativeSchedule(List<Task> rows, DateTime now) async {
+    await _prepareNativeSchedule();
+    final records = [
+      for (final task in rows.where((task) => !task.isRecurring))
+        ..._alarmsFor(task, now),
+      for (final task in _recurringOccurrences(rows, now).take(200))
+        ..._alarmsFor(task, now),
+    ];
+    await _android.invokeMethod<void>('replace', records);
   }
 
   Future<void> _scheduleRecurring(
@@ -299,21 +389,21 @@ class TaskNotifier {
     DateTime now, {
     Set<int>? pending,
   }) async {
-    final from = dateKey(now);
-    final to = dateKey(DateTime(now.year, now.month, now.day + 60));
-    final occurrences =
-        TaskDao.expandTasks(
-          rows.where((task) => task.isRecurring),
-          from,
-          to,
-        ).where(
-          (task) =>
-              !task.isDone && (_scheduledTime(task)?.isAfter(now) ?? false),
-        );
+    final occurrences = _recurringOccurrences(
+      rows,
+      now,
+    ).where((task) => !task.isDone);
     for (final task in occurrences.take(200)) {
       await _scheduleOccurrence(task, pending: pending);
     }
   }
+
+  Iterable<Task> _recurringOccurrences(List<Task> rows, DateTime now) =>
+      TaskDao.expandTasks(
+        rows.where((task) => task.isRecurring),
+        dateKey(now),
+        dateKey(DateTime(now.year, now.month, now.day + 60)),
+      ).where((task) => _scheduledTime(task)?.isAfter(now) ?? false);
 
   Future<void> reschedule(Task task) async {
     await schedule(task);

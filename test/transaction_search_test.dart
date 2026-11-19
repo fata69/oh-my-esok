@@ -12,6 +12,7 @@ import 'package:jadwal/data/money_transaction.dart';
 import 'package:jadwal/data/money_transaction_dao.dart';
 import 'package:jadwal/state/money_store.dart';
 import 'package:jadwal/state/settings_store.dart';
+import 'package:jadwal/ui/calendar_sheet.dart';
 import 'package:jadwal/ui/money_page.dart';
 import 'package:jadwal/ui/theme.dart';
 import 'package:jadwal/ui/tx_editor_page.dart';
@@ -292,12 +293,11 @@ void main() {
     Future<void> selectDay() async {
       await tap(filter);
       await tap(find.text('Sepanjang bulan'));
-      final dialog = find.byType(DatePickerDialog);
-      final picker = tester.widget<DatePickerDialog>(dialog);
-      expect(picker.firstDate, DateTime(2025, 12));
-      expect(picker.lastDate, DateTime(2025, 12, 31));
-      await tap(find.descendant(of: dialog, matching: find.text('20')));
-      await tap(find.text('Pilih'));
+      final calendar = find.byType(CalendarSheet);
+      final picker = tester.widget<CalendarSheet>(calendar);
+      expect(picker.initialDate, DateTime(2025, 12));
+      expect(picker.lockToInitialMonth, isTrue);
+      await tap(find.bySemanticsLabel('Sabtu, 20 Desember 2025'));
       expect(find.text('20 Desember'), findsOneWidget);
       await tap(apply);
     }

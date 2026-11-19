@@ -228,6 +228,8 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final typography = Theme.of(context).textTheme;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final parsed = parseQuickAdd(_titleController.text);
     final canSave = _titleController.text.trim().isNotEmpty;
@@ -239,8 +241,8 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
 
     return Container(
       decoration: BoxDecoration(
-        color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        color: colors.canvas,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(24, 10, 24, 24 + bottomInset),
@@ -253,7 +255,7 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                 width: 34,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: EsokColors.handle,
+                  color: colors.handle,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -264,18 +266,20 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                 Expanded(
                   child: Text(
                     isEditing ? 'Ubah tugas' : 'Tugas baru',
-                    style: TextStyle(
-                      fontSize: 17,
+                    style: typography.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      letterSpacing: -0.01,
-                      color: EsokColors.ink,
                     ),
                   ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, size: 20),
-                  color: EsokColors.muted,
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  style: IconButton.styleFrom(
+                    backgroundColor: colors.control,
+                    foregroundColor: colors.ink,
+                    minimumSize: const Size.square(48),
+                    visualDensity: VisualDensity.standard,
+                  ),
                   tooltip: 'Tutup',
                 ),
               ],
@@ -300,7 +304,7 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
               textCapitalization: TextCapitalization.sentences,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _save(),
-              style: TextStyle(fontSize: 17, color: EsokColors.ink),
+              style: typography.titleMedium,
               decoration: _fieldDecoration(hint: 'Apa yang perlu dikerjakan?'),
             ),
             if ((!_dateLocked && parsed.dateFound) || parsed.timeFound)
@@ -367,29 +371,28 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
               minLines: 2,
               maxLines: 4,
               textCapitalization: TextCapitalization.sentences,
-              style: TextStyle(fontSize: 15, color: EsokColors.ink),
+              style: typography.bodyLarge,
               decoration: _fieldDecoration(hint: 'Catatan (opsional)'),
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              height: 48,
-              child: FilledButton(
-                onPressed: canSave ? _save : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: EsokColors.accent,
-                  disabledBackgroundColor: EsokColors.soft,
-                  foregroundColor: EsokColors.fabText,
-                  disabledForegroundColor: EsokColors.muted,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+            FilledButton(
+              onPressed: canSave ? _save : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.action,
+                disabledBackgroundColor: colors.control,
+                foregroundColor: colors.onAction,
+                disabledForegroundColor: colors.muted,
+                shape: const StadiumBorder(),
+                minimumSize: const Size(0, 48),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
                 ),
-                child: const Text('Simpan'),
+                textStyle: typography.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
+              child: const Text('Simpan'),
             ),
             if (isEditing && widget.scope == null)
               Padding(
@@ -529,48 +532,52 @@ class _PickerChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final typography = Theme.of(context).textTheme;
+    final radius = BorderRadius.circular(16);
     return Material(
-      color: EsokColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          height: 46,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Icon(icon, size: 16, color: EsokColors.muted),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: muted ? EsokColors.muted : EsokColors.ink,
-                    ),
+      color: colors.control,
+      borderRadius: radius,
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: radius,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(12, 7, 4, 7),
+                  child: Row(
+                    children: [
+                      Icon(icon, size: 16, color: colors.muted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: typography.bodyMedium?.copyWith(
+                            color: muted ? colors.muted : colors.ink,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (onClear != null)
-                  GestureDetector(
-                    onTap: onClear,
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.close,
-                        size: 14,
-                        color: EsokColors.muted,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
-        ),
+          if (onClear != null)
+            IconButton(
+              onPressed: onClear,
+              tooltip: 'Hapus jam',
+              icon: const Icon(Icons.close_rounded, size: 17),
+              style: IconButton.styleFrom(
+                foregroundColor: colors.muted,
+                minimumSize: const Size.square(48),
+                visualDensity: VisualDensity.standard,
+              ),
+            ),
+        ],
       ),
     );
   }
