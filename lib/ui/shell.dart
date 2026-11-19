@@ -49,15 +49,24 @@ class _EsokShellState extends State<EsokShell> {
         // The extended body exposes the measured height of the chrome and
         // the system inset. Bound the tabs with a persistent creation action.
         extendBody: true,
-        body: IndexedStack(
-          index: _index,
+        body: Stack(
+          fit: StackFit.expand,
           children: [
-            _AboveDock(
-              child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
+            _TabPane(
+              active: _index == 0,
+              child: _AboveDock(
+                child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
+              ),
             ),
-            const _AboveDock(child: MoneyPage()),
-            const _AboveDock(child: ReportsPage()),
-            const SettingsPage(),
+            _TabPane(
+              active: _index == 1,
+              child: const _AboveDock(child: MoneyPage()),
+            ),
+            _TabPane(
+              active: _index == 2,
+              child: const _AboveDock(child: ReportsPage()),
+            ),
+            _TabPane(active: _index == 3, child: const SettingsPage()),
           ],
         ),
         bottomNavigationBar: keyboardVisible
@@ -85,6 +94,63 @@ class _EsokShellState extends State<EsokShell> {
                   },
                 ),
               ),
+      ),
+    );
+  }
+}
+
+class _TabPane extends StatefulWidget {
+  const _TabPane({required this.active, required this.child});
+  final bool active;
+  final Widget child;
+  @override
+  State<_TabPane> createState() => _TabPaneState();
+}
+
+class _TabPaneState extends State<_TabPane> {
+  late bool _visible = widget.active;
+
+  @override
+  void didUpdateWidget(_TabPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active) _visible = true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced =
+        MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context);
+    return Offstage(
+      offstage: !widget.active && (reduced || !_visible),
+      child: TickerMode(
+        enabled: widget.active || _visible,
+        child: ExcludeSemantics(
+          excluding: !widget.active,
+          child: IgnorePointer(
+            ignoring: !widget.active,
+            child: AnimatedOpacity(
+              opacity: widget.active ? 1 : 0,
+              duration: reduced
+                  ? Duration.zero
+                  : Duration(milliseconds: widget.active ? 240 : 160),
+              curve: Curves.easeOutCubic,
+              onEnd: () {
+                if (mounted && !widget.active && _visible) {
+                  setState(() => _visible = false);
+                }
+              },
+              child: AnimatedSlide(
+                offset: widget.active ? Offset.zero : const Offset(.018, 0),
+                duration: reduced
+                    ? Duration.zero
+                    : const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -141,81 +207,81 @@ class _FloatingTabBar extends StatelessWidget {
     final tint = colors.surfaceContainerLow;
     // A bright list item behind the dark bar needs a stronger scrim.
     final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
-    Widget glass({
-      Key? key,
-      required BorderRadius radius,
-      required Color surface,
-      required Widget child,
-    }) {
-      final layer = DecoratedBox(
-        decoration: BoxDecoration(
-          color: solid ? surface : surface.withValues(alpha: tintOpacity),
-          borderRadius: radius,
-          border: Border.all(
-            color: highContrast ? colors.outline : colors.outlineVariant,
-          ),
-        ),
-        child: child,
-      );
-      return ClipRRect(
-        key: key,
-        borderRadius: radius,
-        child: solid ? layer : BackdropFilter(filter: _blur, child: layer),
-      );
-    }
-
-    final navigation = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 360),
-      child: glass(
-        key: const ValueKey('floating-navigation'),
-        radius: _radius,
-        surface: tint,
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            children: [
-              for (var i = 0; i < _tabs.length; i++)
-                Expanded(
-                  child: _NavItem(
-                    label: _tabs[i].$1,
-                    icon: _tabs[i].$2,
-                    selected: index == i,
-                    highContrast: highContrast,
-                    onTap: () => onChanged(i),
-                  ),
+    final primary = action;
+    final edge = highContrast ? colors.outline : colors.outlineVariant;
+    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
+    final capsule = DecoratedBox(
+      decoration: BoxDecoration(
+        color: solid ? tint : tint.withValues(alpha: tintOpacity),
+        borderRadius: _radius,
+        border: Border.all(color: edge),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            for (var i = 0; i < _tabs.length; i++)
+              Expanded(
+                child: _NavItem(
+                  label: _tabs[i].$1,
+                  icon: _tabs[i].$2,
+                  selected: index == i,
+                  highContrast: highContrast,
+                  onTap: () => onChanged(i),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
-    final primary = action;
-    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
-    final button = primary == null
-        ? null
-        : SizedBox.square(
-            key: const ValueKey('bottom-create'),
-            dimension: 52,
-            child: glass(
-              radius: BorderRadius.circular(26),
-              surface: Color.alphaBlend(
-                ink.withValues(alpha: highContrast ? 0 : .09),
-                tint,
-              ),
-              child: Material(
-                type: MaterialType.transparency,
-                child: IconButton(
-                  tooltip: primary.$1,
-                  onPressed: primary.$2,
-                  icon: const Icon(Icons.add_rounded, size: 25),
-                  style: IconButton.styleFrom(
-                    foregroundColor: ink,
-                    shape: const CircleBorder(),
+
+    // Keep the circle whole throughout the transition. The capsule paints
+    // over it while they overlap, so it can emerge from behind the edge.
+    final accessory = ExcludeSemantics(
+      excluding: primary == null,
+      child: IgnorePointer(
+        ignoring: primary == null,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: primary == null ? 0 : 1),
+          duration: solid ? Duration.zero : const Duration(milliseconds: 420),
+          curve: primary == null ? Curves.easeInCubic : Curves.easeOutBack,
+          builder: (context, progress, child) => Opacity(
+            opacity: progress.clamp(0, 1),
+            child: Transform.translate(
+              offset: Offset(-30 * (1 - progress), 0),
+              child: Transform.scale(scale: .90 + .10 * progress, child: child),
+            ),
+          ),
+          child: ClipOval(
+            child: BackdropFilter(
+              filter: solid ? ui.ImageFilter.blur() : _blur,
+              child: Container(
+                key: primary == null ? null : const ValueKey('bottom-create'),
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: solid ? tint : tint.withValues(alpha: tintOpacity),
+                  border: Border.all(color: edge),
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: IconButton(
+                    tooltip: primary?.$1 ?? 'Tambah',
+                    onPressed: primary?.$2,
+                    icon: const Icon(Icons.add_rounded, size: 25),
+                    style: IconButton.styleFrom(
+                      foregroundColor: ink,
+                      shape: const CircleBorder(),
+                    ),
                   ),
                 ),
               ),
             ),
-          );
+          ),
+        ),
+      ),
+    );
 
     return SafeArea(
       top: false,
@@ -223,41 +289,42 @@ class _FloatingTabBar extends StatelessWidget {
       // The larger gesture-detection zone would lift this tap-only control.
       maintainBottomViewPadding: true,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(12, button == null ? 0 : 8, 12, 6),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
         child: Align(
           alignment: Alignment.bottomCenter,
           heightFactor: 1,
-          child: button == null
-              ? navigation
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth >= 424) {
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(child: navigation),
-                          const SizedBox(width: 12),
-                          button,
-                        ],
-                      );
-                    }
-                    return ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 360),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Align(
-                            alignment: AlignmentDirectional.centerEnd,
-                            child: button,
-                          ),
-                          const SizedBox(height: 8),
-                          navigation,
-                        ],
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.centerRight,
+              children: [
+                Positioned(right: 0, child: accessory),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        key: const ValueKey('floating-navigation'),
+                        borderRadius: _radius,
+                        child: solid
+                            ? capsule
+                            : BackdropFilter(filter: _blur, child: capsule),
                       ),
-                    );
-                  },
+                    ),
+                    AnimatedContainer(
+                      key: const ValueKey('create-accessory-slot'),
+                      width: primary == null ? 0 : 60,
+                      height: 52,
+                      duration: solid
+                          ? Duration.zero
+                          : const Duration(milliseconds: 340),
+                      curve: Curves.easeInOutCubic,
+                    ),
+                  ],
                 ),
+              ],
+            ),
+          ),
         ),
       ),
     );
