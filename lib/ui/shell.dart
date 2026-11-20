@@ -118,33 +118,34 @@ class EsokLoadingShell extends StatelessWidget {
     final loading = onRetry == null;
     return _ShellFrame(
       body: EsokTabLayout(
+        toolbarLeading: loading
+            ? const ExcludeSemantics(child: EsokPeriodHeader.loading())
+            : null,
         headerAction: loading
             ? ExcludeSemantics(
-                child: SizedBox.square(
-                  dimension: 48,
-                  child: Center(
-                    child: EsokGlass(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    EsokGlass(
                       radius: const BorderRadius.all(Radius.circular(20)),
                       shadow: false,
                       child: SizedBox.square(
                         dimension: 38,
                         child: Icon(
                           CupertinoIcons.ellipsis,
-                          size: 19,
+                          size: 18,
                           color: EsokColors.of(context).muted,
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               )
             : null,
-        period: loading
-            ? const ExcludeSemantics(
-                child: Column(
-                  children: [EsokPeriodHeader.loading(), DaySectionSwitch()],
-                ),
-              )
+        eyebrow: loading ? 'Oh My Esok' : null,
+        largeTitle: loading ? 'Hari Ini' : null,
+        belowHeader: loading
+            ? const ExcludeSemantics(child: DaySectionSwitch())
             : null,
         child: loading
             ? const AgendaLoading(label: 'Membuka Oh My Esok')

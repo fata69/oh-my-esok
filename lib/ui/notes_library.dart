@@ -18,16 +18,16 @@ class NotesToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsStore>();
     final colors = EsokColors.of(context);
-    final compact = MediaQuery.sizeOf(context).height < 480;
-    final detail = MediaQuery.textScalerOf(context).scale(13) * 1.4;
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: compact ? 48 : 62 + detail),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: EsokTabLayout.gutter),
-        child: Align(
-          heightFactor: 1,
-          child: _controls(context, settings, colors),
-        ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        EsokTabLayout.gutter,
+        0,
+        EsokTabLayout.gutter,
+        4,
+      ),
+      child: Align(
+        heightFactor: 1,
+        child: _controls(context, settings, colors),
       ),
     );
   }

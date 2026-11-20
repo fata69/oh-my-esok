@@ -87,6 +87,7 @@ class _MonthPickerState extends State<_MonthPicker> {
                 onPrevious: _year > _firstYear ? () => _shiftYear(-1) : null,
                 onNext: _year < _lastYear ? () => _shiftYear(1) : null,
                 onSelect: () => setState(() => _pickYear = !_pickYear),
+                centered: true,
               ),
               if (_pickYear)
                 SizedBox(

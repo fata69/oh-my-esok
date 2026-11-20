@@ -81,6 +81,7 @@ class _CalendarSheetState extends State<CalendarSheet> {
                 : () => _changeMonth(-1),
             onNext: widget.lockToInitialMonth ? null : () => _changeMonth(1),
             onSelect: null,
+            centered: true,
           ),
           const SizedBox(height: 4),
           Row(

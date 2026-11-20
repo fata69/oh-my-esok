@@ -31,6 +31,15 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.15',
+      date: '20 Nov 2026',
+      notes: [
+        'Bilah navigasi atas dirapikan menjadi satu baris ringkas bergaya iOS 26: pil tanggal/bulan Liquid Glass mungil di kiri, tombol Tutup hari atau aksi cepat di kanan, dan judul besar (Large Title) yang bersih di bawahnya.',
+        'Tab Uang kini memiliki tombol kaca melingkar untuk pencarian cepat dan tombol sembunyikan/tampilkan nominal langsung di bilah atas.',
+        'Judul besar Hari Ini, Catatan, Laporan, dan Setelan kini konsisten di seluruh tab tanpa header ganda yang memakan layar.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.14',
       date: '20 Nov 2026',
       notes: [

@@ -719,55 +719,24 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await showPatchNotes(context, version: version, buildNumber: buildNumber);
   }
 
+  String _dayLargeTitle(DateTime date) {
+    final delta = daysBetween(today(), date);
+    if (delta == 0) return 'Hari Ini';
+    if (delta == 1) return 'Besok';
+    if (delta == -1) return 'Kemarin';
+    return dateTitle(date);
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<TaskStore>();
     final selected = store.selectedDate;
 
     return EsokTabLayout(
-      headerAction: EsokGlassMenu<String>(
-        tooltip: 'Opsi lainnya',
-        dividerBefore: 2,
-        onSelected: (value) {
-          if (value == 'alarms') {
-            TaskNotifier.instance.requestExactAlarms();
-          } else if (value == 'battery') {
-            _openBatterySettings();
-          } else if (value == 'widget') {
-            _pinWidget();
-          } else if (value == 'release_notes') {
-            _openReleaseNotes();
-          }
-        },
-        actions: const [
-          EsokMenuAction('alarms', 'Alarm & pengingat', CupertinoIcons.alarm),
-          EsokMenuAction(
-            'battery',
-            'Setelan baterai',
-            CupertinoIcons.battery_75_percent,
-          ),
-          EsokMenuAction(
-            'widget',
-            'Pasang widget',
-            CupertinoIcons.square_grid_2x2,
-          ),
-          EsokMenuAction(
-            'release_notes',
-            'Catatan rilis',
-            CupertinoIcons.doc_text,
-          ),
-        ],
-      ),
-      period: Column(
-        children: [
-          if (_showNotes)
-            NotesToolbar(count: store.notes.length)
-          else
-            EsokPeriodHeader(
-              title: dateTitle(selected),
-              detail:
-                  '${weekdayName(selected)} · ${positionLabel(selected)}'
-                  '${selected.year == today().year ? '' : ' · ${selected.year}'}',
+      toolbarLeading: _showNotes
+          ? null
+          : EsokPeriodHeader(
+              title: '${shortDateTitle(selected)} ${selected.year}',
               selectLabel: 'Pilih tanggal',
               previousLabel: 'Hari sebelumnya',
               nextLabel: 'Hari berikutnya',
@@ -777,7 +746,61 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onNext: () => _jumpTo(selected.add(const Duration(days: 1))),
               onSelect: _openCalendar,
             ),
+      headerAction: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_showNotes) ...[
+            EsokToolbarPillButton(
+              icon: CupertinoIcons.moon,
+              label: 'Tutup hari',
+              onTap: () => _openDayReview(selected),
+            ),
+            const SizedBox(width: 8),
+          ],
+          EsokGlassMenu<String>(
+            tooltip: 'Opsi lainnya',
+            dividerBefore: 2,
+            onSelected: (value) {
+              if (value == 'alarms') {
+                TaskNotifier.instance.requestExactAlarms();
+              } else if (value == 'battery') {
+                _openBatterySettings();
+              } else if (value == 'widget') {
+                _pinWidget();
+              } else if (value == 'release_notes') {
+                _openReleaseNotes();
+              }
+            },
+            actions: const [
+              EsokMenuAction('alarms', 'Alarm & pengingat', CupertinoIcons.alarm),
+              EsokMenuAction(
+                'battery',
+                'Setelan baterai',
+                CupertinoIcons.battery_75_percent,
+              ),
+              EsokMenuAction(
+                'widget',
+                'Pasang widget',
+                CupertinoIcons.square_grid_2x2,
+              ),
+              EsokMenuAction(
+                'release_notes',
+                'Catatan rilis',
+                CupertinoIcons.doc_text,
+              ),
+            ],
+          ),
+        ],
+      ),
+      eyebrow: _showNotes
+          ? 'Oh My Esok'
+          : '${weekdayName(selected)} · Oh My Esok',
+      largeTitle: _showNotes ? 'Catatan' : _dayLargeTitle(selected),
+      belowHeader: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           DaySectionSwitch(notes: _showNotes, onChanged: _selectNotes),
+          if (_showNotes) NotesToolbar(count: store.notes.length),
         ],
       ),
       child: IndexedStack(

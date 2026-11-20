@@ -6,7 +6,9 @@ import '../data/account.dart';
 import '../data/money_transaction.dart';
 import '../data/task.dart';
 import '../state/money_store.dart';
+import '../state/settings_store.dart';
 import '../util/format.dart';
+import '../widget/widget_sync.dart';
 import 'action_sheet.dart';
 import 'calendar_sheet.dart';
 import 'category_icon.dart';
@@ -232,8 +234,10 @@ class _MoneyPageState extends State<MoneyPage> {
     final transactions = visible.values.expand((rows) => rows).toList();
     final text = Theme.of(context).textTheme;
     final colors = EsokColors.of(context);
+    final settings = context.watch<SettingsStore?>();
+    final hidden = settings?.hideAmounts ?? false;
     final header = <Widget>[
-      _BalanceBlock(store: store),
+      _BalanceBlock(store: store, hidden: hidden),
       PaydayOverview(store: store),
       const SizedBox(height: 24),
       Semantics(
@@ -336,16 +340,40 @@ class _MoneyPageState extends State<MoneyPage> {
     ];
 
     return EsokTabLayout(
-      period: EsokMonthHeader(
+      toolbarLeading: EsokMonthHeader(
         month: store.month,
         onPrevious: store.previousMonth,
         onNext: store.nextMonth,
         onSelected: store.setMonth,
       ),
+      headerAction: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          EsokToolbarIconButton(
+            icon: CupertinoIcons.search,
+            tooltip: 'Cari transaksi',
+            onTap: () => Navigator.of(context).push<void>(
+              EsokMotion.route<void>((_) => const _TransactionSearchPage()),
+            ),
+          ),
+          if (settings != null) ...[
+            const SizedBox(width: 8),
+            EsokToolbarIconButton(
+              icon: hidden ? CupertinoIcons.eye_slash : CupertinoIcons.eye,
+              tooltip: hidden ? 'Tampilkan nominal' : 'Sembunyikan nominal',
+              active: hidden,
+              onTap: () async {
+                await settings.setHideAmounts(!hidden);
+                await WidgetSync.push();
+              },
+            ),
+          ],
+        ],
+      ),
       child: ListView.builder(
         padding: EdgeInsets.fromLTRB(
           EsokTabLayout.gutter,
-          4,
+          12,
           EsokTabLayout.gutter,
           EsokTabLayout.scrollBottomOf(context),
         ),
@@ -780,11 +808,13 @@ class _LedgerFilterSheetState extends State<_LedgerFilterSheet> {
 }
 
 class _BalanceBlock extends StatelessWidget {
-  const _BalanceBlock({required this.store});
+  const _BalanceBlock({required this.store, this.hidden = false});
 
   final MoneyStore store;
+  final bool hidden;
 
   String _flowAmount(int value) {
+    if (hidden) return '••••••';
     final sign = value < 0 ? '−' : (value > 0 ? '+' : '');
     return '$sign${rupiahText(value.abs())}';
   }
@@ -796,7 +826,7 @@ class _BalanceBlock extends StatelessWidget {
     final incomeInk = EsokColors.incomeInk(brightness);
     final expenseInk = EsokColors.expenseInk(brightness);
     final total = store.totalBalance;
-    final totalColor = total < 0 ? colors.negative : colors.ink;
+    final totalColor = !hidden && total < 0 ? colors.negative : colors.ink;
     final accounts = store.activeAccounts;
     final allOpeningZero = accounts.every(
       (account) => account.openingBalance == 0,
@@ -812,7 +842,7 @@ class _BalanceBlock extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Text(
-          numberText(total),
+          hidden ? '••••••' : numberText(total),
           style: TextStyle(
             fontSize: 36,
             fontWeight: FontWeight.w700,

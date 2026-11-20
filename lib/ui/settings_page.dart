@@ -428,6 +428,8 @@ class _SettingsPageState extends State<SettingsPage> {
     ];
 
     return EsokTabLayout(
+      eyebrow: 'Oh My Esok',
+      largeTitle: 'Setelan',
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(

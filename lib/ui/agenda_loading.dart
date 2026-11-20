@@ -1,8 +1,6 @@
-import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:material_ui/material_ui.dart';
 
 import 'glass_controls.dart';
-import 'motion.dart';
 import 'tab_layout.dart';
 import 'theme.dart';
 
@@ -20,7 +18,7 @@ class DaySectionSwitch extends StatelessWidget {
         EsokTabLayout.gutter,
         0,
         EsokTabLayout.gutter,
-        compact ? 2 : 6,
+        compact ? 4 : 10,
       ),
       child: EsokSegmentedControl<bool>(
         value: notes,
@@ -41,32 +39,37 @@ class AgendaHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
+      child: Row(
         children: [
+          Text(
+            'AGENDA',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: colors.muted,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(width: 10),
           if (progress case final label?)
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: Text(
+                label,
+                textAlign: TextAlign.end,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colors.muted,
+                ),
               ),
             )
           else
-            const EsokSkeletonBlock(width: 87, height: 8),
-          ApplePressable(
-            child: TextButton.icon(
-              onPressed: onCloseDay,
-              style: TextButton.styleFrom(
-                foregroundColor: colors.tint,
-                minimumSize: const Size(48, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+            const Expanded(
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: EsokSkeletonBlock(width: 82, height: 8),
               ),
-              icon: const Icon(CupertinoIcons.moon, size: 15),
-              label: const Text('Tutup hari'),
             ),
-          ),
         ],
       ),
     );

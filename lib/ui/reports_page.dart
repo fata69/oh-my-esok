@@ -35,30 +35,30 @@ class _ReportsPageState extends State<ReportsPage> {
     final daily = _period == _ReportPeriod.days;
     final colors = EsokColors.of(context);
     return EsokTabLayout(
-      period: EsokMonthHeader(
+      toolbarLeading: EsokMonthHeader(
         month: report.month,
         onPrevious: store.previousMonth,
         onNext: store.nextMonth,
         onSelected: store.setMonth,
       ),
+      headerAction: Text(
+        'Arus kas',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w500,
+          color: colors.muted,
+        ),
+      ),
+      largeTitle: 'Laporan',
       child: ListView(
         key: const PageStorageKey('reports'),
         padding: EdgeInsets.fromLTRB(
           EsokTabLayout.gutter,
-          8,
+          4,
           EsokTabLayout.gutter,
           EsokTabLayout.scrollBottomOf(context),
         ),
         children: [
-          Semantics(
-            header: true,
-            child: Text(
-              'Arus kas',
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(height: 10),
           if (hidden)
             const EsokContentGroup(
               children: [

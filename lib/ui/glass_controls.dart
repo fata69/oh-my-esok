@@ -402,7 +402,7 @@ class EsokGlassMenu<T> extends StatelessWidget {
         child: Center(
           child: Icon(
             CupertinoIcons.ellipsis,
-            size: 19,
+            size: 18,
             color: colors.ink,
           ),
         ),
@@ -424,11 +424,7 @@ class EsokGlassMenu<T> extends StatelessWidget {
         itemBuilder: (_) => [
           _GlassMenuItems(actions: actions, dividerBefore: dividerBefore),
         ],
-        child: trigger ??
-            SizedBox.square(
-              dimension: 48,
-              child: Center(child: defaultTrigger),
-            ),
+        child: trigger ?? defaultTrigger,
       ),
     );
   }

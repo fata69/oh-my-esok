@@ -293,13 +293,13 @@ void main() {
     Future<void> verifyLedger(Color canvas, Color ink, Color muted) async {
       await select(tester, 'Uang');
       final page = find.byType(MoneyPage);
-      final title = find.descendant(
+      final month = find.descendant(
         of: page,
-        matching: find.text('Oh My Esok'),
+        matching: find.text(monthTitle(today())),
       );
       final label = find.text('Saldo dompet aktif');
       final row = find.text('Pengeluaran terakhir');
-      expect(tester.widget<Text>(title).style?.color, ink);
+      expect(tester.widget<Text>(month).style?.color, ink);
       expect(tester.widget<Text>(label).style?.color, muted);
       expect(tester.widget<Text>(row).style?.color, ink);
       expect(Scaffold.of(tester.element(label)).widget.backgroundColor, canvas);
@@ -347,14 +347,23 @@ void main() {
       expect(size.height, greaterThanOrEqualTo(48));
     }
 
-    void verifyHeader(Type page) {
+    void verifyLargeTitle(Type page, String title) {
       final header = find.descendant(
         of: find.byType(page),
-        matching: find.text('Oh My Esok'),
+        matching: find.text(title),
       );
-      expect(tester.getTopLeft(header).dx, 24);
+      expect(tester.getTopLeft(header).dx, EsokTabLayout.gutter + 2);
       expect(tester.getRect(header).top, greaterThanOrEqualTo(24));
       expect(tester.widget<Text>(header).style?.fontFamily, 'PlusJakartaSans');
+    }
+
+    void verifyToolbarPill(Type page) {
+      final pill = find.descendant(
+        of: find.byType(page),
+        matching: find.byType(EsokPeriodHeader),
+      );
+      expect(tester.getTopLeft(pill).dx, EsokTabLayout.gutter);
+      expect(tester.getRect(pill).top, greaterThanOrEqualTo(24));
     }
 
     void verifyDock() {
@@ -372,18 +381,19 @@ void main() {
       expect(tester.getSize(create), const Size.square(52));
     }
 
-    verifyHeader(HomePage);
+    verifyToolbarPill(HomePage);
+    verifyLargeTitle(HomePage, 'Hari Ini');
     verifyDock();
     expect(find.byTooltip('Tambah agenda').hitTestable(), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
-    final date = find.text(dateTitle(today()));
+    final date = find.text('${shortDateTitle(today())} ${today().year}');
     final dateSize = tester.widget<Text>(date).style?.fontSize;
     expect(find.text('Buku kas ›'), findsNothing);
     expect(find.text('Catat pengeluaran'), findsNothing);
     expect(find.text('Catat transaksi'), findsNothing);
 
     await select(tester, 'Uang');
-    verifyHeader(MoneyPage);
+    verifyToolbarPill(MoneyPage);
     verifyDock();
     expect(find.byTooltip('Catat transaksi').hitTestable(), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
@@ -421,7 +431,7 @@ void main() {
     expect(create, findsNothing);
     await select(tester, 'Setelan');
     expect(create, findsNothing);
-    verifyHeader(SettingsPage);
+    verifyLargeTitle(SettingsPage, 'Setelan');
     final license = find.text('Lisensi font');
     await tester.scrollUntilVisible(
       license,
@@ -654,9 +664,12 @@ void main() {
       addTearDown(tester.view.reset);
       await launch(tester);
 
+      final dayPill = find.byType(EsokPeriodHeader).hitTestable();
       final day = find.byTooltip('Pilih tanggal').hitTestable();
+      final dayTopLeft = tester.getTopLeft(dayPill);
+      expect(dayTopLeft.dx, EsokTabLayout.gutter);
+      expect(tester.getSize(dayPill).height, lessThanOrEqualTo(42));
       final center = tester.getCenter(day);
-      expect(center.dx, 195);
       final left = tester.getCenter(find.byTooltip('Hari sebelumnya'));
       final right = tester.getCenter(find.byTooltip('Hari berikutnya'));
       expect(left.dx + right.dx, closeTo(center.dx * 2, .01));
@@ -667,8 +680,10 @@ void main() {
       await tester.pumpAndSettle();
 
       await select(tester, 'Uang');
+      final monthPill = find.byType(EsokPeriodHeader).hitTestable();
       final month = find.byTooltip('Pilih bulan').hitTestable();
-      expect(tester.getCenter(month), center);
+      expect(tester.getTopLeft(monthPill), dayTopLeft);
+      expect(tester.getSize(monthPill).height, lessThanOrEqualTo(42));
       await tester.tap(month);
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Pilih tahun').hitTestable());
@@ -683,7 +698,7 @@ void main() {
       expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
 
       await select(tester, 'Laporan');
-      expect(tester.getCenter(month), center);
+      expect(tester.getTopLeft(monthPill), dayTopLeft);
       expect(find.text('Januari $lastYear').hitTestable(), findsOneWidget);
       await tester.tap(month);
       await tester.pumpAndSettle();

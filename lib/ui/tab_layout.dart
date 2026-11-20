@@ -53,65 +53,133 @@ class EsokGroupedRow extends StatelessWidget {
   }
 }
 
+/// Sleek Apple iOS 26 tab scaffold: compact Liquid Glass top toolbar + Large Title.
 class EsokTabLayout extends StatelessWidget {
   const EsokTabLayout({
     super.key,
+    this.toolbarLeading,
     this.headerAction,
+    this.eyebrow,
+    this.largeTitle,
+    this.largeTitleTrailing,
+    this.belowHeader,
     this.period,
     required this.child,
   });
 
-  static const gutter = 24.0;
+  static const gutter = 20.0;
 
   // The shell's extended body reports the full, measured navigation height here.
   // Let the list scroll behind it, with enough space to reveal the final row.
   static double scrollBottomOf(BuildContext context) =>
       MediaQuery.paddingOf(context).bottom + 20;
 
+  final Widget? toolbarLeading;
   final Widget? headerAction;
+  final String? eyebrow;
+  final String? largeTitle;
+  final Widget? largeTitleTrailing;
+  final Widget? belowHeader;
   final Widget? period;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = EsokColors.of(context);
     final compact = MediaQuery.sizeOf(context).height < 480;
+    final leading = toolbarLeading ?? period;
+    final hasToolbar = leading != null || headerAction != null;
+    final hasTitle = largeTitle != null || eyebrow != null;
+
     return SafeArea(
       bottom: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsetsDirectional.fromSTEB(
-              gutter,
-              compact ? 0 : 6,
-              headerAction == null ? gutter : 12,
-              0,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: compact ? 40 : 48),
+          if (hasToolbar)
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(
+                gutter,
+                compact ? 2 : 8,
+                gutter,
+                compact ? 2 : 4,
+              ),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        'Oh My Esok',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontSize: compact ? 19 : 22,
-                          height: 1.18,
-                          letterSpacing: -0.45,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  if (leading != null)
+                    Expanded(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: leading,
                       ),
-                    ),
-                  ),
-                  ?headerAction,
+                    )
+                  else
+                    const Spacer(),
+                  if (headerAction != null) ...[
+                    if (leading != null) const SizedBox(width: 8),
+                    headerAction!,
+                  ],
                 ],
               ),
             ),
-          ),
-          ?period,
+          if (hasTitle)
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(
+                gutter + 2,
+                hasToolbar ? (compact ? 2 : 8) : (compact ? 4 : 12),
+                gutter + 2,
+                compact ? 4 : 10,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (eyebrow != null)
+                          Text(
+                            eyebrow!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: colors.muted,
+                            ),
+                          ),
+                        if (largeTitle != null)
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              largeTitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.headlineSmall?.copyWith(
+                                fontSize: compact ? 24 : 30,
+                                height: 1.15,
+                                letterSpacing: -0.7,
+                                fontWeight: FontWeight.w700,
+                                color: colors.ink,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (largeTitleTrailing != null) ...[
+                    const SizedBox(width: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: largeTitleTrailing!,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ?belowHeader,
           Expanded(child: child),
         ],
       ),
@@ -119,6 +187,7 @@ class EsokTabLayout extends StatelessWidget {
   }
 }
 
+/// Compact, content-hugging Liquid Glass date/month pill (Apple iOS 26 toolbar style).
 class EsokPeriodHeader extends StatelessWidget {
   const EsokPeriodHeader({
     super.key,
@@ -130,9 +199,10 @@ class EsokPeriodHeader extends StatelessWidget {
     this.detail,
     required this.selectLabel,
     required this.onSelect,
+    this.centered = false,
   }) : _loading = false;
 
-  const EsokPeriodHeader.loading({super.key})
+  const EsokPeriodHeader.loading({super.key, this.centered = false})
     : title = '',
       previousLabel = '',
       nextLabel = '',
@@ -151,6 +221,7 @@ class EsokPeriodHeader extends StatelessWidget {
   final String? detail;
   final String selectLabel;
   final VoidCallback? onSelect;
+  final bool centered;
   final bool _loading;
 
   @override
@@ -158,118 +229,203 @@ class EsokPeriodHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = EsokColors.of(context);
     final compact = MediaQuery.sizeOf(context).height < 480;
-    final detailStyle = theme.textTheme.bodyMedium!;
-    final textScaler = MediaQuery.textScalerOf(context);
-    final titleStyle = theme.textTheme.titleMedium?.copyWith(
-      fontSize: 17,
-      height: 1.16,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.3,
+    final pillHeight = compact ? 34.0 : 38.0;
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontSize: 13.5,
+      height: 1.15,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.2,
+      color: colors.ink,
     );
+
+    final pill = EsokGlass(
+      radius: const BorderRadius.all(Radius.circular(22)),
+      shadow: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: pillHeight),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _PeriodArrow(
+              label: previousLabel,
+              left: true,
+              height: pillHeight,
+              onTap: onPrevious,
+            ),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: EsokSkeletonBlock(width: 82, height: 11, radius: 5),
+              )
+            else if (onSelect == null)
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  ),
+                ),
+              )
+            else
+              Flexible(
+                child: Tooltip(
+                  message: selectLabel,
+                  child: InkWell(
+                    onTap: onSelect,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            _PeriodArrow(
+              label: nextLabel,
+              left: false,
+              height: pillHeight,
+              onTap: onNext,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!centered) return pill;
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, compact ? 0 : 6, 16, compact ? 0 : 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Center(
+      padding: EdgeInsets.fromLTRB(8, compact ? 0 : 4, 8, compact ? 4 : 8),
+      child: Center(child: pill),
+    );
+  }
+}
+
+/// Compact 38dp circular Liquid Glass icon button for the top Apple toolbar.
+class EsokToolbarIconButton extends StatelessWidget {
+  const EsokToolbarIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.color,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final Color? color;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final compact = MediaQuery.sizeOf(context).height < 480;
+    final size = compact ? 34.0 : 38.0;
+    final fg = color ?? (active ? colors.tint : colors.ink);
+    return ApplePressable(
+      child: Tooltip(
+        message: tooltip,
+        child: EsokGlass(
+          radius: const BorderRadius.all(Radius.circular(20)),
+          shadow: false,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: SizedBox.square(
+              dimension: size,
+              child: Icon(icon, size: 17, color: fg),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact 38dp stadium Liquid Glass action pill (e.g. "Tutup hari") for the top toolbar.
+class EsokToolbarPillButton extends StatelessWidget {
+  const EsokToolbarPillButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.compactLabelWhenTight = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color? color;
+  final bool compactLabelWhenTight;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EsokColors.of(context);
+    final media = MediaQuery.of(context);
+    final compact = media.size.height < 480;
+    final height = compact ? 34.0 : 38.0;
+    final fg = color ?? colors.tint;
+    final iconOnly =
+        compactLabelWhenTight &&
+        (media.size.width < 355 || media.textScaler.scale(13) > 19);
+
+    if (iconOnly) {
+      return EsokToolbarIconButton(
+        icon: icon,
+        tooltip: label,
+        onTap: onTap,
+        color: fg,
+      );
+    }
+
+    return ApplePressable(
+      child: Tooltip(
+        message: label,
+        child: EsokGlass(
+          radius: const BorderRadius.all(Radius.circular(20)),
+          shadow: false,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 296),
-              child: EsokGlass(
-                radius: const BorderRadius.all(Radius.circular(28)),
-                shadow: false,
+              constraints: BoxConstraints(minHeight: height),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _PeriodArrow(
-                      label: previousLabel,
-                      left: true,
-                      onTap: onPrevious,
+                    Icon(icon, size: 14, color: fg),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                        color: fg,
+                      ),
                     ),
-                    Expanded(
-                      child: _loading
-                          ? SizedBox(
-                              height: (textScaler.scale(17) * 1.16 + 8).clamp(
-                                48.0,
-                                double.infinity,
-                              ),
-                              child: const Center(
-                                child: EsokSkeletonBlock(
-                                  width: 118,
-                                  height: 13,
-                                  radius: 6,
-                                ),
-                              ),
-                            )
-                          : onSelect == null
-                          ? Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Text(
-                                title,
-                                textAlign: TextAlign.center,
-                                style: titleStyle,
-                              ),
-                            )
-                          : Tooltip(
-                              message: selectLabel,
-                              child: TextButton(
-                                onPressed: onSelect,
-                                style: TextButton.styleFrom(
-                                  minimumSize: const Size(48, 48),
-                                  visualDensity: VisualDensity.standard,
-                                  foregroundColor: colors.ink,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 4,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const SizedBox(width: 12),
-                                    Flexible(
-                                      child: Text(
-                                        title,
-                                        textAlign: TextAlign.center,
-                                        style: titleStyle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      CupertinoIcons.chevron_down,
-                                      size: 13,
-                                      color: colors.muted,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ),
-                    _PeriodArrow(label: nextLabel, left: false, onTap: onNext),
                   ],
                 ),
               ),
             ),
           ),
-          if (!compact && _loading)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: SizedBox(
-                height:
-                    textScaler.scale(detailStyle.fontSize!) *
-                    detailStyle.height!,
-                child: const Center(
-                  child: EsokSkeletonBlock(width: 82, height: 8),
-                ),
-              ),
-            )
-          else if (!compact && detail != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                detail!,
-                textAlign: TextAlign.center,
-                style: detailStyle,
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -415,11 +571,13 @@ class _PeriodArrow extends StatelessWidget {
   const _PeriodArrow({
     required this.label,
     required this.left,
+    required this.height,
     required this.onTap,
   });
 
   final String label;
   final bool left;
+  final double height;
   final VoidCallback? onTap;
 
   @override
@@ -429,16 +587,17 @@ class _PeriodArrow extends StatelessWidget {
       child: IconButton(
         tooltip: label.isEmpty ? null : label,
         onPressed: onTap,
+        padding: EdgeInsets.zero,
+        constraints: BoxConstraints(minWidth: 34, minHeight: height),
         style: IconButton.styleFrom(
-          minimumSize: const Size.square(48),
-          visualDensity: VisualDensity.standard,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           foregroundColor: colors.ink,
         ),
         icon: Opacity(
-          opacity: onTap == null ? 0.28 : 0.78,
+          opacity: onTap == null ? 0.25 : 0.72,
           child: Icon(
             left ? CupertinoIcons.chevron_left : CupertinoIcons.chevron_right,
-            size: 16,
+            size: 13,
           ),
         ),
       ),
