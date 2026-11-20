@@ -1,10 +1,11 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:material_ui/material_ui.dart';
 
-import 'chevron.dart';
+import 'glass_controls.dart';
 import 'motion.dart';
 import 'theme.dart';
 
-/// A quiet surface for one related group of content, with room for row ink.
+/// Apple Inset Grouped Card surface for one related group of content.
 class EsokContentGroup extends StatelessWidget {
   const EsokContentGroup({super.key, required this.children});
 
@@ -13,8 +14,8 @@ class EsokContentGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _groupColor(context),
-      borderRadius: BorderRadius.circular(16),
+      color: EsokColors.of(context).surface,
+      borderRadius: EsokColors.cardRadius,
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -24,12 +25,7 @@ class EsokContentGroup extends StatelessWidget {
   }
 }
 
-Color _groupColor(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark
-    ? const Color(0xFF141414)
-    : const Color(0xFFF3F3F5);
-
-/// Separate list children share one silhouette while still building lazily.
+/// Separate list children share one Apple Inset Grouped Card silhouette lazily.
 class EsokGroupedRow extends StatelessWidget {
   const EsokGroupedRow({
     super.key,
@@ -44,9 +40,9 @@ class EsokGroupedRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const radius = Radius.circular(16);
+    const radius = Radius.circular(20);
     return Material(
-      color: _groupColor(context),
+      color: EsokColors.of(context).surface,
       borderRadius: BorderRadius.vertical(
         top: first ? radius : Radius.zero,
         bottom: last ? radius : Radius.zero,
@@ -70,7 +66,7 @@ class EsokTabLayout extends StatelessWidget {
   // The shell's extended body reports the full, measured navigation height here.
   // Let the list scroll behind it, with enough space to reveal the final row.
   static double scrollBottomOf(BuildContext context) =>
-      MediaQuery.paddingOf(context).bottom + 16;
+      MediaQuery.paddingOf(context).bottom + 20;
 
   final Widget? headerAction;
   final Widget? period;
@@ -79,6 +75,7 @@ class EsokTabLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact = MediaQuery.sizeOf(context).height < 480;
     return SafeArea(
       bottom: false,
       child: Column(
@@ -87,12 +84,12 @@ class EsokTabLayout extends StatelessWidget {
           Padding(
             padding: EdgeInsetsDirectional.fromSTEB(
               gutter,
-              6,
+              compact ? 0 : 6,
               headerAction == null ? gutter : 12,
               0,
             ),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
+              constraints: BoxConstraints(minHeight: compact ? 40 : 48),
               child: Row(
                 children: [
                   Expanded(
@@ -101,8 +98,9 @@ class EsokTabLayout extends StatelessWidget {
                       child: Text(
                         'Oh My Esok',
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontSize: 20,
-                          height: 1.2,
+                          fontSize: compact ? 19 : 22,
+                          height: 1.18,
+                          letterSpacing: -0.45,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -163,101 +161,121 @@ class EsokPeriodHeader extends StatelessWidget {
     final detailStyle = theme.textTheme.bodyMedium!;
     final textScaler = MediaQuery.textScalerOf(context);
     final titleStyle = theme.textTheme.titleMedium?.copyWith(
-      fontSize: 20,
-      height: 1.14,
+      fontSize: 17,
+      height: 1.16,
       fontWeight: FontWeight.w700,
-      letterSpacing: -.35,
+      letterSpacing: -0.3,
     );
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, compact ? 0 : 6, 16, compact ? 0 : 8),
+      padding: EdgeInsets.fromLTRB(16, compact ? 0 : 6, 16, compact ? 0 : 10),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 292),
-              child: Row(
-                children: [
-                  _PeriodArrow(
-                    label: previousLabel,
-                    left: true,
-                    onTap: onPrevious,
-                  ),
-                  Expanded(
-                    child: _loading
-                        ? SizedBox(
-                            height: (textScaler.scale(20) * 1.14 + 8).clamp(
-                              48.0,
-                              double.infinity,
-                            ),
-                            child: const Center(
-                              child: EsokSkeletonBlock(width: 124, height: 14),
-                            ),
-                          )
-                        : onSelect == null
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Text(
-                              title,
-                              textAlign: TextAlign.center,
-                              style: titleStyle,
-                            ),
-                          )
-                        : Tooltip(
-                            message: selectLabel,
-                            child: TextButton(
-                              onPressed: onSelect,
-                              style: TextButton.styleFrom(
-                                minimumSize: const Size(48, 48),
-                                visualDensity: VisualDensity.standard,
-                                foregroundColor: colors.ink,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 4,
+              constraints: const BoxConstraints(maxWidth: 296),
+              child: EsokGlass(
+                radius: const BorderRadius.all(Radius.circular(28)),
+                shadow: false,
+                child: Row(
+                  children: [
+                    _PeriodArrow(
+                      label: previousLabel,
+                      left: true,
+                      onTap: onPrevious,
+                    ),
+                    Expanded(
+                      child: _loading
+                          ? SizedBox(
+                              height: (textScaler.scale(17) * 1.16 + 8).clamp(
+                                48.0,
+                                double.infinity,
+                              ),
+                              child: const Center(
+                                child: EsokSkeletonBlock(
+                                  width: 118,
+                                  height: 13,
+                                  radius: 6,
                                 ),
                               ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const SizedBox(width: 16),
-                                  Flexible(
-                                    child: Text(
-                                      title,
-                                      textAlign: TextAlign.center,
-                                      style: titleStyle,
+                            )
+                          : onSelect == null
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Text(
+                                title,
+                                textAlign: TextAlign.center,
+                                style: titleStyle,
+                              ),
+                            )
+                          : Tooltip(
+                              message: selectLabel,
+                              child: TextButton(
+                                onPressed: onSelect,
+                                style: TextButton.styleFrom(
+                                  minimumSize: const Size(48, 48),
+                                  visualDensity: VisualDensity.standard,
+                                  foregroundColor: colors.ink,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(width: 12),
+                                    Flexible(
+                                      child: Text(
+                                        title,
+                                        textAlign: TextAlign.center,
+                                        style: titleStyle,
+                                      ),
                                     ),
-                                  ),
-                                  Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    size: 16,
-                                    color: colors.muted,
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      CupertinoIcons.chevron_down,
+                                      size: 13,
+                                      color: colors.muted,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  _PeriodArrow(label: nextLabel, left: false, onTap: onNext),
-                ],
+                    ),
+                    _PeriodArrow(label: nextLabel, left: false, onTap: onNext),
+                  ],
+                ),
               ),
             ),
           ),
           if (!compact && _loading)
-            SizedBox(
-              height:
-                  textScaler.scale(detailStyle.fontSize!) * detailStyle.height!,
-              child: const Center(
-                child: EsokSkeletonBlock(width: 82, height: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: SizedBox(
+                height:
+                    textScaler.scale(detailStyle.fontSize!) *
+                    detailStyle.height!,
+                child: const Center(
+                  child: EsokSkeletonBlock(width: 82, height: 8),
+                ),
               ),
             )
           else if (!compact && detail != null)
-            Text(detail!, textAlign: TextAlign.center, style: detailStyle),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                detail!,
+                textAlign: TextAlign.center,
+                style: detailStyle,
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Presents a date picker with the app's shared route treatment.
+/// Presents a date picker with the app's shared Apple sheet treatment.
 Future<T?> showEsokPickerSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
@@ -272,7 +290,7 @@ Future<T?> showEsokPickerSheet<T>(
   builder: builder,
 );
 
-/// A rounded, opaque panel for date controls, with a fixed dismiss action.
+/// A rounded Apple sheet panel for date/month pickers with a grabber and dismiss pill.
 class EsokPickerSheet extends StatelessWidget {
   const EsokPickerSheet({
     super.key,
@@ -290,7 +308,7 @@ class EsokPickerSheet extends StatelessWidget {
     final colors = EsokColors.of(context);
     final rim = MediaQuery.highContrastOf(context)
         ? colors.outline
-        : colors.line;
+        : EsokColors.hairline(Theme.of(context).brightness);
     return Center(
       heightFactor: 1,
       child: ConstrainedBox(
@@ -298,8 +316,8 @@ class EsokPickerSheet extends StatelessWidget {
         child: Material(
           color: colors.surface,
           shape: RoundedRectangleBorder(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            side: BorderSide(color: rim),
+            borderRadius: EsokColors.sheetRadius,
+            side: BorderSide(color: rim, width: 0.75),
           ),
           clipBehavior: Clip.antiAlias,
           child: SafeArea(
@@ -307,19 +325,19 @@ class EsokPickerSheet extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 9),
+                const SizedBox(height: 10),
                 SizedBox(
-                  width: 32,
-                  height: 4,
+                  width: 36,
+                  height: 4.5,
                   child: DecoratedBox(
                     decoration: ShapeDecoration(
-                      color: colors.handle,
+                      color: colors.handle.withValues(alpha: 0.55),
                       shape: const StadiumBorder(),
                     ),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(22, 5, 12, 0),
+                  padding: const EdgeInsetsDirectional.fromSTEB(22, 6, 12, 0),
                   child: Row(
                     children: [
                       Expanded(
@@ -332,16 +350,18 @@ class EsokPickerSheet extends StatelessWidget {
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Tutup',
-                        onPressed: () => Navigator.pop(context),
-                        style: IconButton.styleFrom(
-                          minimumSize: const Size.square(48),
-                          visualDensity: VisualDensity.standard,
-                          foregroundColor: colors.ink,
-                          backgroundColor: colors.control,
+                      ApplePressable(
+                        child: IconButton(
+                          tooltip: 'Tutup',
+                          onPressed: () => Navigator.pop(context),
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size.square(48),
+                            visualDensity: VisualDensity.standard,
+                            foregroundColor: colors.ink,
+                            backgroundColor: colors.control,
+                          ),
+                          icon: const Icon(CupertinoIcons.xmark, size: 17),
                         ),
-                        icon: const Icon(Icons.close_rounded, size: 20),
                       ),
                     ],
                   ),
@@ -404,16 +424,23 @@ class _PeriodArrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: label.isEmpty ? null : label,
-      onPressed: onTap,
-      style: IconButton.styleFrom(
-        minimumSize: const Size.square(48),
-        visualDensity: VisualDensity.standard,
-      ),
-      icon: Opacity(
-        opacity: onTap == null ? 0.32 : 1,
-        child: EsokChevron(left: left, size: 16),
+    final colors = EsokColors.of(context);
+    return ApplePressable(
+      child: IconButton(
+        tooltip: label.isEmpty ? null : label,
+        onPressed: onTap,
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(48),
+          visualDensity: VisualDensity.standard,
+          foregroundColor: colors.ink,
+        ),
+        icon: Opacity(
+          opacity: onTap == null ? 0.28 : 0.78,
+          child: Icon(
+            left ? CupertinoIcons.chevron_left : CupertinoIcons.chevron_right,
+            size: 16,
+          ),
+        ),
       ),
     );
   }

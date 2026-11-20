@@ -9,6 +9,7 @@ import 'chevron.dart';
 import 'money_icon_catalog.dart';
 import 'money_icon_picker.dart';
 import 'motion.dart';
+import 'tab_layout.dart';
 import 'theme.dart';
 
 class ManageAccountsPage extends StatefulWidget {
@@ -307,25 +308,38 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
                   for (final group in groups) ...[
                     if (active.any((account) => account.type == group.$1)) ...[
                       Padding(
-                        padding: const EdgeInsets.only(top: 16, bottom: 4),
+                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 7),
                         child: Text(
-                          group.$2,
+                          group.$2.toUpperCase(),
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.09,
-                            color: EsokColors.muted,
+                            letterSpacing: 0.4,
+                            color: EsokColors.of(context).muted,
                           ),
                         ),
                       ),
-                      for (final account in active.where(
-                        (account) => account.type == group.$1,
-                      ))
-                        _AccountRow(
-                          account: account,
-                          balance: store.balanceForAccount(account.id),
-                          onTap: () => _showActions(account),
-                        ),
+                      EsokContentGroup(
+                        children: [
+                          for (final (index, account)
+                              in active
+                                  .where((account) => account.type == group.$1)
+                                  .indexed) ...[
+                            if (index > 0)
+                              const Divider(height: 1, indent: 54),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                              child: _AccountRow(
+                                account: account,
+                                balance: store.balanceForAccount(account.id),
+                                onTap: () => _showActions(account),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ],
                   if (active.isEmpty)
@@ -373,38 +387,39 @@ class _TotalDanaBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = total < 0 ? EsokColors.negative : EsokColors.ink;
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: EsokColors.soft,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'TOTAL',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.09,
-                color: EsokColors.muted,
+    final colors = EsokColors.of(context);
+    final color = total < 0 ? colors.destructive : colors.ink;
+    return EsokContentGroup(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'TOTAL',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                    color: colors.muted,
+                  ),
+                ),
               ),
-            ),
+              Text(
+                numberText(total),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                  color: color,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
-          Text(
-            numberText(total),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: color,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

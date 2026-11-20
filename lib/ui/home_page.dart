@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
@@ -739,17 +740,21 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           }
         },
         actions: const [
-          EsokMenuAction('alarms', 'Alarm & pengingat', Icons.alarm_rounded),
+          EsokMenuAction('alarms', 'Alarm & pengingat', CupertinoIcons.alarm),
           EsokMenuAction(
             'battery',
             'Setelan baterai',
-            Icons.battery_std_rounded,
+            CupertinoIcons.battery_75_percent,
           ),
-          EsokMenuAction('widget', 'Pasang widget', Icons.widgets_outlined),
+          EsokMenuAction(
+            'widget',
+            'Pasang widget',
+            CupertinoIcons.square_grid_2x2,
+          ),
           EsokMenuAction(
             'release_notes',
             'Catatan rilis',
-            Icons.article_outlined,
+            CupertinoIcons.doc_text,
           ),
         ],
       ),
@@ -926,23 +931,46 @@ class _DayPaneState extends State<_DayPane> {
               onCloseDay: widget.onCloseDay,
             ),
             if (tasks.isEmpty)
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: TextButton(
-                  onPressed: widget.onCreate,
-                  child: const Text('Tambah agenda'),
-                ),
+              EsokContentGroup(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hari ini masih luang.',
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 6),
+                        TextButton(
+                          onPressed: widget.onCreate,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(48, 44),
+                            alignment: AlignmentDirectional.centerStart,
+                          ),
+                          child: const Text('Tambah agenda'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               )
-            else ...[
-              for (final (index, task) in tasks.indexed)
-                _TaskRow(
-                  key: ValueKey(task.id),
-                  task: task,
-                  showDivider: index != tasks.length - 1,
-                  onToggle: () => widget.onToggle(task),
-                  onOpen: () => widget.onOpen(task),
-                ),
-            ],
+            else
+              EsokContentGroup(
+                children: [
+                  for (final (index, task) in tasks.indexed)
+                    _TaskRow(
+                      key: ValueKey(task.id),
+                      task: task,
+                      showDivider: index != tasks.length - 1,
+                      onToggle: () => widget.onToggle(task),
+                      onOpen: () => widget.onOpen(task),
+                    ),
+                ],
+              ),
             if (isPast && undone > 0) ...[
               const SizedBox(height: 20),
               _LateNote(count: undone),
@@ -1032,16 +1060,14 @@ class _TaskRow extends StatelessWidget {
     final duration = EsokMotion.reduced(context)
         ? Duration.zero
         : EsokMotion.feedback;
-    final checkedColor = Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF63D99A)
-        : const Color(0xFF08754A);
+    final checkedColor = colors.tint;
     final titleStyle = Theme.of(context).textTheme.bodyLarge!.copyWith(
-      fontSize: 16,
+      fontSize: 15.5,
       fontWeight: FontWeight.w500,
-      height: 1.3,
+      height: 1.32,
       color: task.isDone ? colors.muted : colors.ink,
       decoration: task.isDone ? TextDecoration.lineThrough : null,
-      decorationThickness: 1,
+      decorationThickness: 1.2,
       decorationColor: colors.muted,
     );
 
@@ -1062,24 +1088,35 @@ class _TaskRow extends StatelessWidget {
                     width: 48,
                     height: 56,
                     child: Center(
-                      child: AnimatedContainer(
+                      child: AnimatedScale(
+                        scale: task.isDone ? 1.0 : 0.96,
                         duration: duration,
                         curve: EsokMotion.settle,
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: task.isDone
-                              ? checkedColor
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: task.isDone ? checkedColor : colors.muted,
-                            width: 1.5,
+                        child: AnimatedContainer(
+                          duration: duration,
+                          curve: EsokMotion.settle,
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: task.isDone
+                                ? checkedColor
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: task.isDone
+                                  ? checkedColor
+                                  : colors.outline.withValues(alpha: 0.72),
+                              width: 1.65,
+                            ),
                           ),
+                          child: task.isDone
+                              ? const Icon(
+                                  CupertinoIcons.checkmark,
+                                  size: 13,
+                                  color: Colors.white,
+                                )
+                              : null,
                         ),
-                        child: task.isDone
-                            ? Icon(Icons.check, size: 13, color: colors.canvas)
-                            : null,
                       ),
                     ),
                   ),
@@ -1336,45 +1373,50 @@ class _BottomCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
     final prefix = boldPrefix;
-    return Material(
-      color: colors.soft,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text.rich(
-                  TextSpan(
-                    style: TextStyle(fontSize: 12, color: colors.inkSoft),
-                    children: [
-                      if (prefix != null)
-                        TextSpan(
-                          text: prefix,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      if (prefix != null)
-                        TextSpan(text: label.substring(prefix.length)),
-                      if (prefix == null) TextSpan(text: label),
-                    ],
+    return ApplePressable(
+      child: Material(
+        color: colors.surface,
+        borderRadius: EsokColors.cardRadius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: EsokColors.cardRadius,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      style: TextStyle(fontSize: 13, color: colors.inkSoft),
+                      children: [
+                        if (prefix != null)
+                          TextSpan(
+                            text: prefix,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: colors.ink,
+                            ),
+                          ),
+                        if (prefix != null)
+                          TextSpan(text: label.substring(prefix.length)),
+                        if (prefix == null) TextSpan(text: label),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                '$action ›',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.03,
-                  color: colors.accent,
+                const SizedBox(width: 10),
+                Text(
+                  '$action ›',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.02,
+                    color: colors.tint,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

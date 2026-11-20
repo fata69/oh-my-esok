@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../update/update_availability.dart';
@@ -66,22 +66,14 @@ class _EsokShellState extends State<EsokShell> with WidgetsBindingObserver {
         children: [
           _TabPane(
             active: _index == 0,
-            child: _AboveDock(
-              child: HomePage(
-                key: _home,
-                onOpenMoney: () => _selectTab(1),
-                onNotesChanged: (notes) => _showNotes.value = notes,
-              ),
+            child: HomePage(
+              key: _home,
+              onOpenMoney: () => _selectTab(1),
+              onNotesChanged: (notes) => _showNotes.value = notes,
             ),
           ),
-          _TabPane(
-            active: _index == 1,
-            child: const _AboveDock(child: MoneyPage()),
-          ),
-          _TabPane(
-            active: _index == 2,
-            child: const _AboveDock(child: ReportsPage()),
-          ),
+          _TabPane(active: _index == 1, child: const MoneyPage()),
+          _TabPane(active: _index == 2, child: const ReportsPage()),
           _TabPane(active: _index == 3, child: const SettingsPage()),
         ],
       ),
@@ -125,39 +117,50 @@ class EsokLoadingShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final loading = onRetry == null;
     return _ShellFrame(
-      body: _AboveDock(
-        child: EsokTabLayout(
-          headerAction: loading
-              ? ExcludeSemantics(
-                  child: IconButton(
-                    onPressed: null,
-                    icon: const Icon(Icons.more_horiz, size: 20),
-                  ),
-                )
-              : null,
-          period: loading
-              ? const ExcludeSemantics(
-                  child: Column(
-                    children: [EsokPeriodHeader.loading(), DaySectionSwitch()],
-                  ),
-                )
-              : null,
-          child: loading
-              ? const AgendaLoading(label: 'Membuka Oh My Esok')
-              : ListView(
-                  padding: const EdgeInsets.all(EsokTabLayout.gutter),
-                  children: [
-                    const Text('Aplikasi belum bisa dibuka.'),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: TextButton(
-                        onPressed: onRetry,
-                        child: const Text('Coba lagi'),
+      body: EsokTabLayout(
+        headerAction: loading
+            ? ExcludeSemantics(
+                child: SizedBox.square(
+                  dimension: 48,
+                  child: Center(
+                    child: EsokGlass(
+                      radius: const BorderRadius.all(Radius.circular(20)),
+                      shadow: false,
+                      child: SizedBox.square(
+                        dimension: 38,
+                        child: Icon(
+                          CupertinoIcons.ellipsis,
+                          size: 19,
+                          color: EsokColors.of(context).muted,
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-        ),
+              )
+            : null,
+        period: loading
+            ? const ExcludeSemantics(
+                child: Column(
+                  children: [EsokPeriodHeader.loading(), DaySectionSwitch()],
+                ),
+              )
+            : null,
+        child: loading
+            ? const AgendaLoading(label: 'Membuka Oh My Esok')
+            : ListView(
+                padding: const EdgeInsets.all(EsokTabLayout.gutter),
+                children: [
+                  const Text('Aplikasi belum bisa dibuka.'),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      onPressed: onRetry,
+                      child: const Text('Coba lagi'),
+                    ),
+                  ),
+                ],
+              ),
       ),
       dock: loading
           ? IgnorePointer(
@@ -191,7 +194,7 @@ class _ShellFrame extends StatelessWidget {
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       systemNavigationBarColor: Colors.transparent,
       systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarContrastEnforced: true,
+      systemNavigationBarContrastEnforced: false,
       systemNavigationBarIconBrightness: isDark
           ? Brightness.light
           : Brightness.dark,
@@ -201,8 +204,7 @@ class _ShellFrame extends StatelessWidget {
       value: overlay,
       child: Scaffold(
         backgroundColor: EsokColors.of(context).canvas,
-        // The extended body exposes the measured height of the chrome and
-        // the system inset. Bound the tabs with a persistent creation action.
+        // Let content flow cleanly underneath the floating Liquid Glass dock.
         extendBody: true,
         body: body,
         bottomNavigationBar: dock,
@@ -256,28 +258,15 @@ class _TabPaneState extends State<_TabPane> {
                   }
                 });
               },
-              child: widget.child,
+              child: AnimatedScale(
+                scale: reduced || widget.active ? 1.0 : 0.988,
+                duration: reduced ? Duration.zero : EsokMotion.enter,
+                curve: EsokMotion.settle,
+                child: widget.child,
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _AboveDock extends StatelessWidget {
-  const _AboveDock({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
-      child: MediaQuery.removePadding(
-        context: context,
-        removeBottom: true,
-        child: child,
       ),
     );
   }
@@ -303,36 +292,18 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
   static const _forceSolid = bool.fromEnvironment('ESOK_SOLID_NAV');
   static const _radius = BorderRadius.all(Radius.circular(40));
   static const _tabs = [
-    (
-      'Hari',
-      '<rect x="4" y="5" width="16" height="16" rx="2"/>'
-          '<path d="M8 3v4m8-4v4M4 10h16M8 14h3m-3 3h6"/>',
-    ),
-    (
-      'Uang',
-      '<path d="M19 8V4H6a2 2 0 0 0 0 4h14v13H6a2 2 0 0 1-2-2V6'
-          'm13 6h4v5h-4a2.5 2.5 0 0 1 0-5Zm.2 2.5h.1"/>',
-    ),
-    (
-      'Laporan',
-      '<rect x="3" y="13" width="4" height="8" rx="1"/>'
-          '<rect x="10" y="5" width="4" height="16" rx="1"/>'
-          '<rect x="17" y="9" width="4" height="12" rx="1"/>',
-    ),
-    (
-      'Setelan',
-      '<path d="m9.5 3-.6 2.2-2 .9-2-.6L3 9l1.6 1.6v2.8L3 15l1.9 3.5'
-          ' 2-.6 2 .9.6 2.2h5l.6-2.2 2-.9 2 .6 1.9-3.5-1.6-1.6v-2.8'
-          'L21 9l-1.9-3.5-2 .6-2-.9-.6-2.2Z"/><circle cx="12" cy="12" r="3"/>',
-    ),
+    ('Hari', CupertinoIcons.calendar, CupertinoIcons.calendar_today),
+    ('Uang', CupertinoIcons.creditcard, CupertinoIcons.creditcard_fill),
+    ('Laporan', CupertinoIcons.chart_bar, CupertinoIcons.chart_bar_fill),
+    ('Setelan', CupertinoIcons.gear_alt, CupertinoIcons.gear_alt_fill),
   ];
 
   static const _addSize = 52.0;
   static const _gap = 8.0;
   static const _revealDistance = 26.0;
-  static const _enter = SpringDescription(mass: 1, stiffness: 800, damping: 44);
-  static const _exit = SpringDescription(mass: 1, stiffness: 800, damping: 57);
-  // Match the Morphe pill's stiffness and 0.8 damping ratio at unit mass.
+  static const _enter = SpringDescription(mass: 1, stiffness: 760, damping: 42);
+  static const _exit = SpringDescription(mass: 1, stiffness: 760, damping: 54);
+  // Retargetable Apple spring for the floating liquid selection lens.
   static const _glide = SpringDescription(mass: 1, stiffness: 400, damping: 32);
   late final _reveal = AnimationController.unbounded(
     vsync: this,
@@ -386,8 +357,6 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
       _reveal.value = _target;
       return;
     }
-    // One spring drives the space and the circle. Retarget from live position
-    // and velocity so interrupting a tab switch keeps the glass in motion.
     _reveal.animateWith(
       SpringSimulation(
         _target == 1 ? _enter : _exit,
@@ -409,9 +378,19 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
+    final dark = brightness == Brightness.dark;
+    final colors = EsokColors.of(context);
     final highContrast = MediaQuery.highContrastOf(context);
     final primary = widget.action;
+
+    // Organic translucent glass selection lens (no stiff sticker border).
+    final lensColor = highContrast
+        ? colors.ink
+        : dark
+        ? Colors.white.withValues(alpha: 0.13)
+        : Colors.black.withValues(alpha: 0.065);
+
     final capsule = EsokGlass(
       key: const ValueKey('floating-navigation'),
       radius: _radius,
@@ -428,25 +407,39 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
                   heightFactor: 1,
                   child: AnimatedBuilder(
                     animation: _indicator,
-                    builder: (context, pill) => FractionalTranslation(
-                      // Move the painted pill in tab units without laying out
-                      // the icons and labels again on each frame.
-                      translation: Offset(
-                        _indicator.value.clamp(0.0, _tabs.length - 1.0),
-                        0,
-                      ),
-                      child: pill,
-                    ),
+                    builder: (context, pill) {
+                      final velocityStretch = _solid
+                          ? 0.0
+                          : (_indicator.velocity.abs() * 0.011).clamp(
+                              0.0,
+                              0.14,
+                            );
+                      return FractionalTranslation(
+                        translation: Offset(
+                          _indicator.value.clamp(0.0, _tabs.length - 1.0),
+                          0,
+                        ),
+                        child: Transform.scale(
+                          scaleX: 1.0 + velocityStretch,
+                          scaleY: 1.0 - velocityStretch * 0.25,
+                          child: pill,
+                        ),
+                      );
+                    },
                     child: DecoratedBox(
                       key: const ValueKey('dock-selection'),
                       decoration: BoxDecoration(
-                        color: highContrast
-                            ? colors.onSurface
-                            : colors.surfaceContainerHighest,
-                        border: highContrast
-                            ? null
-                            : Border.all(color: colors.outlineVariant),
+                        color: lensColor,
                         borderRadius: _radius,
+                        boxShadow: highContrast || dark
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: Colors.white.withValues(alpha: 0.55),
+                                  blurRadius: 0.5,
+                                  offset: const Offset(0, -0.5),
+                                ),
+                              ],
                       ),
                     ),
                   ),
@@ -460,6 +453,7 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
                     child: _NavItem(
                       label: _tabs[i].$1,
                       icon: _tabs[i].$2,
+                      activeIcon: _tabs[i].$3,
                       selected: widget.index == i,
                       highContrast: highContrast,
                       onTap: () => widget.onChanged(i),
@@ -472,23 +466,25 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
       ),
     );
 
-    final button = EsokGlass(
-      radius: _radius,
-      emphasized: true,
-      forceSolid: _solid,
-      child: SizedBox.square(
-        key: primary == null ? null : const ValueKey('bottom-create'),
-        dimension: _addSize,
-        child: Material(
-          type: MaterialType.transparency,
-          child: IconButton(
-            tooltip: primary?.$1 ?? 'Tambah',
-            onPressed: primary?.$2,
-            icon: const Icon(Icons.add_rounded, size: 30),
-            style: IconButton.styleFrom(
-              foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.white,
-              shape: const CircleBorder(),
+    final button = ApplePressable(
+      scale: 0.93,
+      child: EsokGlass(
+        radius: _radius,
+        forceSolid: _solid,
+        child: SizedBox.square(
+          key: primary == null ? null : const ValueKey('bottom-create'),
+          dimension: _addSize,
+          child: Material(
+            type: MaterialType.transparency,
+            child: IconButton(
+              tooltip: primary?.$1 ?? 'Tambah',
+              onPressed: primary?.$2,
+              icon: const Icon(CupertinoIcons.add, size: 25),
+              style: IconButton.styleFrom(
+                foregroundColor: colors.ink,
+                disabledForegroundColor: colors.muted,
+                shape: const CircleBorder(),
+              ),
             ),
           ),
         ),
@@ -497,16 +493,14 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
 
     return SafeArea(
       top: false,
-      // The OS navigation bar inset already protects both system modes.
-      // The larger gesture-detection zone would lift this tap-only control.
       maintainBottomViewPadding: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
         child: Align(
           alignment: Alignment.bottomCenter,
           heightFactor: 1,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
+            constraints: const BoxConstraints(maxWidth: 368),
             child: AnimatedBuilder(
               animation: _reveal,
               child: capsule,
@@ -517,8 +511,6 @@ class _FloatingTabBarState extends State<_FloatingTabBar>
                   2.0,
                 );
                 final hidden = primary == null || progress <= .001;
-                // The bar covers the intact circle until its right edge
-                // emerges. Keep its 52 dp size and the dock's centerline.
                 return Stack(
                   clipBehavior: Clip.none,
                   alignment: Alignment.centerRight,
@@ -564,31 +556,34 @@ class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
     required this.icon,
+    required this.activeIcon,
     required this.selected,
     required this.highContrast,
     required this.onTap,
   });
 
   final String label;
-  final String icon;
+  final IconData icon;
+  final IconData activeIcon;
   final bool selected;
   final bool highContrast;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final colors = EsokColors.of(context);
     final inverted = selected && highContrast;
     final foreground = inverted
-        ? colors.surface
-        : selected || highContrast
-        ? colors.onSurface
-        : colors.onSurfaceVariant;
+        ? colors.canvas
+        : selected
+        ? colors.tint
+        : highContrast
+        ? colors.ink
+        : colors.muted;
     final keyboardFocusColor = selected
-        ? foreground.withValues(alpha: 0.08)
-        : colors.surfaceContainerHigh;
+        ? foreground.withValues(alpha: 0.10)
+        : colors.control;
     const radius = BorderRadius.all(Radius.circular(32));
-    final stroke = selected ? 2.1 : 1.8;
     return Semantics(
       container: true,
       button: true,
@@ -616,14 +611,7 @@ class _NavItem extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SvgPicture.string(
-                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-                    'fill="none" stroke="currentColor" stroke-width="$stroke" '
-                    'stroke-linecap="round" stroke-linejoin="round">$icon</svg>',
-                    width: 20,
-                    height: 20,
-                    colorFilter: ColorFilter.mode(foreground, BlendMode.srcIn),
-                  ),
+                  Icon(selected ? activeIcon : icon, size: 21, color: foreground),
                   const SizedBox(height: 2),
                   FittedBox(
                     fit: BoxFit.scaleDown,
@@ -631,9 +619,9 @@ class _NavItem extends StatelessWidget {
                       label,
                       maxLines: 1,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         height: 1.15,
-                        letterSpacing: 0,
+                        letterSpacing: -0.1,
                         color: foreground,
                         fontWeight: selected
                             ? FontWeight.w600

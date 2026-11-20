@@ -1,3 +1,4 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:material_ui/material_ui.dart';
@@ -16,6 +17,7 @@ import '../update/update_availability.dart';
 import 'ai_model_picker.dart';
 import 'chevron.dart';
 import 'data_page.dart';
+import 'glass_controls.dart';
 import 'manage_accounts.dart';
 import 'manage_categories.dart';
 import 'sound_page.dart';
@@ -253,7 +255,7 @@ class _SettingsPageState extends State<SettingsPage> {
         label: 'Tampilan',
         divided: false,
         children: [
-          const _SettingsRow(title: 'Tema', icon: Icons.brightness_6_outlined),
+          const _SettingsRow(title: 'Tema', icon: CupertinoIcons.brightness),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
             child: _ThemeSelector(
@@ -269,26 +271,26 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _SettingsRow.toggle(
             title: 'Pengingat awal',
-            icon: Icons.notifications_none,
+            icon: CupertinoIcons.bell,
             subtitle: 'Tambahan sebelum tenggat',
             value: settings.leadEnabled,
             onToggle: _toggleLead,
           ),
           _SettingsRow(
             title: 'Jarak pengingat',
-            icon: Icons.schedule_outlined,
+            icon: CupertinoIcons.clock,
             subtitle: _leadOptions[settings.leadMinutes] ?? _leadOptions[60],
             onTap: _openLeadDuration,
           ),
           _SettingsRow(
             title: 'Alarm presisi',
-            icon: Icons.alarm_outlined,
+            icon: CupertinoIcons.alarm,
             subtitle: 'Izin Android untuk alarm tepat waktu',
             onTap: _openExactAlarm,
           ),
           _SettingsRow(
             title: 'Optimasi baterai',
-            icon: Icons.battery_saver_outlined,
+            icon: CupertinoIcons.battery_75_percent,
             subtitle: 'Jaga pengingat saat layar mati',
             onTap: _openBattery,
           ),
@@ -299,18 +301,18 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _SettingsRow.toggle(
             title: 'Efek suara',
-            icon: Icons.volume_up_outlined,
+            icon: CupertinoIcons.speaker_2,
             subtitle: 'Bunyi saat saldo berubah',
             value: settings.soundEnabled,
             onToggle: _toggleSoundEnabled,
           ),
           _SettingsRow(
             title: 'Pilihan suara',
-            icon: Icons.graphic_eq_outlined,
+            icon: CupertinoIcons.waveform,
             subtitle: 'Nada agenda, pengingat, dan saldo',
             onTap: () => Navigator.of(
               context,
-            ).push(MaterialPageRoute<void>(builder: (_) => const SoundPage())),
+            ).push(EsokMotion.route<void>((_) => const SoundPage())),
           ),
         ],
       ),
@@ -319,22 +321,19 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _SettingsRow(
             title: 'Dompet',
-            icon: Icons.account_balance_wallet_outlined,
+            icon: CupertinoIcons.creditcard,
             subtitle: 'Saldo tunai, rekening, dan dompet digital',
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const ManageAccountsPage(),
-              ),
+              EsokMotion.route<void>((_) => const ManageAccountsPage()),
             ),
           ),
           _SettingsRow(
             title: 'Kategori',
-            icon: Icons.category_outlined,
+            icon: CupertinoIcons.square_grid_2x2,
             subtitle: 'Kelompok pemasukan dan pengeluaran',
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) =>
-                    const ManageCategoriesPage(initialKind: 'expense'),
+              EsokMotion.route<void>(
+                (_) => const ManageCategoriesPage(initialKind: 'expense'),
               ),
             ),
           ),
@@ -345,14 +344,14 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _SettingsRow(
             title: 'Ekspor & impor',
-            icon: Icons.swap_vert,
+            icon: CupertinoIcons.arrow_up_arrow_down,
             onTap: () => Navigator.of(
               context,
-            ).push(MaterialPageRoute<void>(builder: (_) => const DataPage())),
+            ).push(EsokMotion.route<void>((_) => const DataPage())),
           ),
           _SettingsRow(
             title: 'Cadangkan sekarang',
-            icon: Icons.save_alt_rounded,
+            icon: CupertinoIcons.cloud_upload,
             subtitle: _backupLabel,
             trailing: _backupBusy
                 ? const SizedBox(
@@ -370,7 +369,7 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _SettingsRow(
             title: 'API key Gemini',
-            icon: Icons.key_outlined,
+            icon: CupertinoIcons.lock,
             subtitle: settings.aiReady
                 ? 'Tersimpan di perangkat ini'
                 : 'Belum diisi · pakai API key milikmu sendiri',
@@ -378,7 +377,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           _SettingsRow(
             title: 'Model Gemini',
-            icon: Icons.tune_outlined,
+            icon: CupertinoIcons.sparkles,
             subtitle: settings.aiModel,
             onTap: _editAiModel,
           ),
@@ -389,7 +388,7 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _SettingsRow.toggle(
             title: 'Sembunyikan nominal',
-            icon: Icons.visibility_off_outlined,
+            icon: CupertinoIcons.eye_slash,
             subtitle: 'Berlaku di widget uang dan Laporan',
             value: settings.hideAmounts,
             onToggle: _toggleHideAmounts,
@@ -401,7 +400,7 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           const _SettingsRow(
             title: 'Oh My Esok',
-            icon: Icons.info_outline,
+            icon: CupertinoIcons.info,
             subtitle: 'Dikembangkan dan dikelola oleh Fata (@fata69)',
           ),
           ListenableBuilder(
@@ -410,17 +409,17 @@ class _SettingsPageState extends State<SettingsPage> {
               final available = UpdateAvailability.instance.available;
               return _SettingsRow(
                 title: 'Pembaruan aplikasi',
-                icon: Icons.system_update_outlined,
+                icon: CupertinoIcons.arrow_down_circle,
                 subtitle: available ? 'Pembaruan tersedia' : 'Versi $_version',
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
+                  EsokMotion.route<void>((_) => const UpdatePage()),
                 ),
               );
             },
           ),
           _SettingsRow(
             title: 'Lisensi font',
-            icon: Icons.description_outlined,
+            icon: CupertinoIcons.doc_text,
             subtitle: 'SIL Open Font License 1.1',
             onTap: _showFontLicense,
           ),
@@ -463,23 +462,25 @@ class _SettingsGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final highContrast = MediaQuery.highContrastOf(context);
     final colors = EsokColors.of(context);
-    final separator = highContrast ? colors.outline : colors.line;
+    final separator = highContrast
+        ? colors.outline
+        : EsokColors.hairline(Theme.of(context).brightness);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _SectionLabel(label),
         Material(
-          color: colors.subtle,
-          borderRadius: BorderRadius.circular(14),
+          color: colors.surface,
+          borderRadius: EsokColors.cardRadius,
           clipBehavior: Clip.antiAlias,
           child: ListTileTheme(
             data: const ListTileThemeData(
-              contentPadding: EdgeInsets.symmetric(horizontal: 12),
-              minTileHeight: 48,
+              contentPadding: EdgeInsets.symmetric(horizontal: 14),
+              minTileHeight: 50,
               minVerticalPadding: 8,
               horizontalTitleGap: 12,
-              minLeadingWidth: 20,
+              minLeadingWidth: 22,
               titleAlignment: ListTileTitleAlignment.center,
             ),
             child: Column(
@@ -489,10 +490,10 @@ class _SettingsGroup extends StatelessWidget {
                   if (divided && index > 0)
                     Divider(
                       height: 1,
-                      thickness: 1,
+                      thickness: 0.6,
                       color: separator,
-                      indent: 44,
-                      endIndent: 12,
+                      indent: 48,
+                      endIndent: 0,
                     ),
                   child,
                 ],
@@ -513,75 +514,14 @@ class _ThemeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final selected = dark ? colors.selected : colors.surface;
-    const modes = [
-      (ThemeMode.light, 'Terang'),
-      (ThemeMode.system, 'Ikut sistem'),
-      (ThemeMode.dark, 'Gelap'),
-    ];
-    const radius = BorderRadius.all(Radius.circular(8));
-
-    return Material(
-      color: colors.control,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            for (final (mode, label) in modes)
-              Expanded(
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  selected: mode == value,
-                  inMutuallyExclusiveGroup: true,
-                  label: label,
-                  onTap: () => onChanged(mode),
-                  excludeSemantics: true,
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      color: mode == value ? selected : Colors.transparent,
-                      borderRadius: radius,
-                    ),
-                    child: InkWell(
-                      onTap: () => onChanged(mode),
-                      borderRadius: radius,
-                      splashFactory: NoSplash.splashFactory,
-                      highlightColor: colors.ink.withValues(alpha: .08),
-                      focusColor: colors.ink.withValues(alpha: .16),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 8,
-                          ),
-                          child: Center(
-                            heightFactor: 1,
-                            child: Text(
-                              label,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                letterSpacing: 0,
-                                fontWeight: FontWeight.w600,
-                                color: mode == value
-                                    ? colors.ink
-                                    : colors.muted,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
+    return EsokSegmentedControl<ThemeMode>(
+      value: value,
+      onChanged: onChanged,
+      segments: const [
+        (ThemeMode.light, 'Terang'),
+        (ThemeMode.system, 'Ikut sistem'),
+        (ThemeMode.dark, 'Gelap'),
+      ],
     );
   }
 }

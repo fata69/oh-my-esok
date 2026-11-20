@@ -1,3 +1,4 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import '../state/payday_projection.dart';
 import '../util/format.dart';
 import 'glass_controls.dart';
 import 'motion.dart';
+import 'tab_layout.dart';
 import 'theme.dart';
 import 'tx_editor_page.dart';
 
@@ -98,49 +100,62 @@ class _PaydayPage extends StatelessWidget {
       primaryAction: _AddBillAction(onPressed: () => _addBill(context, store)),
       children: [
         if (payday != null && account != null) ...[
-          Text(
-            short == null
-                ? 'Perkiraan sisa setelah tagihan'
-                : 'Perkiraan kekurangan',
-            style: text.bodyMedium,
+          EsokContentGroup(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      short == null
+                          ? 'Perkiraan sisa setelah tagihan'
+                          : 'Perkiraan kekurangan',
+                      style: text.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      rupiahText(short?.balance.abs() ?? projection.remaining),
+                      style: text.headlineMedium?.copyWith(
+                        color: short == null
+                            ? EsokColors.incomeInk(Theme.of(context).brightness)
+                            : _warningInk(context),
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      short == null
+                          ? 'Dari saldo tercatat · ${account.name}'
+                          : 'Mulai ${_fullDay(short.date)} · ${account.name}',
+                      style: text.bodyMedium,
+                    ),
+                    if (short != null &&
+                        short.balance != projection.remaining) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Menjelang gajian, kurang ${rupiahText(projection.remaining.abs())}',
+                        style: text.bodyMedium,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            rupiahText(short?.balance.abs() ?? projection.remaining),
-            style: text.headlineMedium?.copyWith(
-              color: short == null ? null : _warningInk(context),
-              fontWeight: FontWeight.w600,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            short == null
-                ? 'Dari saldo tercatat · ${account.name}'
-                : 'Mulai ${_fullDay(short.date)} · ${account.name}',
-            style: text.bodyMedium,
-          ),
-          if (short != null && short.balance != projection.remaining) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Menjelang gajian, kurang ${rupiahText(projection.remaining.abs())}',
-              style: text.bodyMedium,
-            ),
-          ],
           const SizedBox(height: 12),
         ],
         _PlanRow(
-          icon: Icons.calendar_today_outlined,
+          icon: CupertinoIcons.calendar,
           title: payday == null
               ? 'Atur jadwal gajian'
               : 'Gajian ${_fullDay(payday)}',
           subtitle: plan.schedule == null
               ? null
               : _frequency(plan.schedule!.monthly),
-          tonal: false,
           onTap: () => _editSchedule(context, store),
         ),
-        const Divider(),
         const SizedBox(height: 20),
         Semantics(
           header: true,
@@ -203,21 +218,24 @@ class _AddBillAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(32));
-    return EsokGlass(
-      radius: radius,
-      emphasized: true,
-      child: Material(
-        color: Colors.transparent,
-        child: TextButton.icon(
-          onPressed: onPressed,
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.white,
-            minimumSize: const Size(48, 52),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            shape: const RoundedRectangleBorder(borderRadius: radius),
+    final colors = EsokColors.of(context);
+    return ApplePressable(
+      scale: 0.95,
+      child: EsokGlass(
+        radius: radius,
+        child: Material(
+          color: Colors.transparent,
+          child: TextButton.icon(
+            onPressed: onPressed,
+            style: TextButton.styleFrom(
+              foregroundColor: colors.tint,
+              minimumSize: const Size(48, 52),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: const RoundedRectangleBorder(borderRadius: radius),
+            ),
+            icon: const Icon(CupertinoIcons.add, size: 19),
+            label: const Text('Tambah tagihan'),
           ),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Tambah tagihan'),
         ),
       ),
     );
@@ -745,7 +763,6 @@ class _PlanRow extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.iconColor,
-    this.tonal = true,
     required this.onTap,
   });
 
@@ -754,72 +771,87 @@ class _PlanRow extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final Color? iconColor;
-  final bool tonal;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
     final text = Theme.of(context).textTheme;
-    return Material(
-      color: tonal ? colors.subtle : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: tonal ? 14 : 0,
-              vertical: 9,
-            ),
-            child: LayoutBuilder(
-              builder: (context, box) {
-                final value = trailing;
-                final stackValue =
-                    value != null &&
-                    (box.maxWidth < 270 ||
-                        MediaQuery.textScalerOf(context).scale(16) >= 19.5);
-                return Row(
-                  children: [
-                    Icon(icon, size: 18, color: iconColor ?? colors.muted),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: text.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (subtitle != null)
-                            Text(subtitle!, style: text.bodyMedium),
-                          if (stackValue) ...[const SizedBox(height: 4), value],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (value != null && !stackValue) ...[
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: box.maxWidth * .42,
+    return ApplePressable(
+      child: Material(
+        color: colors.surface,
+        borderRadius: EsokColors.cardRadius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: EsokColors.cardRadius,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 58),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  final value = trailing;
+                  final stackValue =
+                      value != null &&
+                      (box.maxWidth < 270 ||
+                          MediaQuery.textScalerOf(context).scale(16) >= 19.5);
+                  return Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: colors.control,
+                          shape: BoxShape.circle,
                         ),
-                        child: value,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          icon,
+                          size: 16,
+                          color: iconColor ?? colors.ink,
+                        ),
                       ),
-                      const SizedBox(width: 5),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: text.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (subtitle != null)
+                              Text(subtitle!, style: text.bodyMedium),
+                            if (stackValue) ...[
+                              const SizedBox(height: 4),
+                              value,
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (value != null && !stackValue) ...[
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: box.maxWidth * .42,
+                          ),
+                          child: value,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Icon(
+                        CupertinoIcons.chevron_right,
+                        size: 15,
+                        color: colors.muted,
+                      ),
                     ],
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 17,
-                      color: colors.muted,
-                    ),
-                  ],
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -857,7 +889,7 @@ Color _warningInk(BuildContext context) =>
     EsokColors.expenseInk(Theme.of(context).brightness);
 
 Future<void> _push(BuildContext context, Widget page) =>
-    Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
+    Navigator.of(context).push<void>(EsokMotion.route<void>((_) => page));
 
 Future<T?> _showPlanSheet<T>(
   BuildContext context, {

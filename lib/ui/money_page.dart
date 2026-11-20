@@ -1,3 +1,4 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -36,9 +37,8 @@ class MoneyPage extends StatefulWidget {
   }) async {
     final store = context.read<MoneyStore>();
     final saved = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (_) =>
-            TxEditorPage(transaction: transaction, initialDate: initialDate),
+      EsokMotion.route<String>(
+        (_) => TxEditorPage(transaction: transaction, initialDate: initialDate),
       ),
     );
     if (saved == null || !context.mounted) return;
@@ -62,17 +62,17 @@ class MoneyPage extends StatefulWidget {
       context,
       title: 'Transaksi',
       actions: [
-        const EsokSheetAction('edit', 'Ubah', Icons.edit_outlined),
+        const EsokSheetAction('edit', 'Ubah', CupertinoIcons.pencil),
         if (transaction.detail?.trim().isNotEmpty == true)
           const EsokSheetAction(
             'items',
             'Rincian barang',
-            Icons.receipt_outlined,
+            CupertinoIcons.doc_text,
           ),
         const EsokSheetAction(
           'delete',
           'Hapus',
-          Icons.delete_outline_rounded,
+          CupertinoIcons.trash,
           destructive: true,
         ),
       ],
@@ -247,52 +247,60 @@ class _MoneyPageState extends State<MoneyPage> {
       Row(
         children: [
           Expanded(
-            child: EsokContentGroup(
-              children: [
-                InkWell(
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const _TransactionSearchPage(),
-                    ),
+            child: Material(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => Navigator.of(context).push<void>(
+                  EsokMotion.route<void>(
+                    (_) => const _TransactionSearchPage(),
                   ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.search, size: 20),
-                          SizedBox(width: 8),
-                          Expanded(child: Text('Cari transaksi')),
-                        ],
-                      ),
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.search,
+                          size: 18,
+                          color: colors.muted,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Cari transaksi',
+                            style: TextStyle(color: colors.muted, fontSize: 14.5),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
           ),
           const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: _editFilter,
-            style: TextButton.styleFrom(
-              foregroundColor: colors.ink,
-              minimumSize: const Size(48, 48),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              backgroundColor: filterActive ? colors.selected : null,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: colors.line),
+          ApplePressable(
+            child: TextButton.icon(
+              onPressed: _editFilter,
+              style: TextButton.styleFrom(
+                foregroundColor: filterActive ? colors.onAction : colors.ink,
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                backgroundColor: filterActive ? colors.tint : colors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
+              icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 17),
+              label: const Text('Filter'),
             ),
-            icon: Icon(
-              filterActive ? Icons.filter_alt : Icons.filter_alt_outlined,
-              size: 17,
-            ),
-            label: const Text('Filter'),
           ),
         ],
       ),
@@ -806,10 +814,10 @@ class _BalanceBlock extends StatelessWidget {
         Text(
           numberText(total),
           style: TextStyle(
-            fontSize: 39,
+            fontSize: 36,
             fontWeight: FontWeight.w700,
             height: 1.1,
-            letterSpacing: -0.03,
+            letterSpacing: -0.9,
             color: totalColor,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
@@ -858,16 +866,14 @@ class _BalanceBlock extends StatelessWidget {
               flex: 2,
               child: TextButton(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ManageAccountsPage(),
-                  ),
+                  EsokMotion.route<void>((_) => const ManageAccountsPage()),
                 ),
                 style: TextButton.styleFrom(
-                  foregroundColor: colors.ink,
+                  foregroundColor: colors.tint,
                   minimumSize: const Size(48, 48),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   textStyle: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                      ?.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 child: const Text('Kelola dompet', textAlign: TextAlign.end),
               ),
@@ -1130,10 +1136,12 @@ class _TransactionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
+    final brightness = Theme.of(context).brightness;
     final amountColor = transaction.isTransfer || _isAdjustment
         ? colors.inkSoft
-        : colors.ink;
-    final brightness = Theme.of(context).brightness;
+        : transaction.isIncome
+        ? EsokColors.incomeInk(brightness)
+        : EsokColors.expenseInk(brightness);
     final iconColor = transaction.isIncome
         ? EsokColors.incomeInk(brightness)
         : transaction.isExpense

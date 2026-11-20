@@ -6,6 +6,7 @@ import '../state/money_store.dart';
 import 'action_sheet.dart';
 import 'category_icon.dart';
 import 'chevron.dart';
+import 'glass_controls.dart';
 import 'money_icon_catalog.dart';
 import 'money_icon_picker.dart';
 import 'motion.dart';
@@ -281,27 +282,14 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: EsokColors.track,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    _KindTab(
-                      label: 'Pengeluaran',
-                      selected: _kind == 'expense',
-                      onTap: () => setState(() => _kind = 'expense'),
-                    ),
-                    _KindTab(
-                      label: 'Pemasukan',
-                      selected: _kind == 'income',
-                      onTap: () => setState(() => _kind = 'income'),
-                    ),
-                  ],
-                ),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
+              child: EsokSegmentedControl<String>(
+                value: _kind,
+                onChanged: (value) => setState(() => _kind = value),
+                segments: const [
+                  ('expense', 'Pengeluaran'),
+                  ('income', 'Pemasukan'),
+                ],
               ),
             ),
             Expanded(
@@ -346,53 +334,6 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _KindTab extends StatelessWidget {
-  const _KindTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? EsokColors.canvas : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: selected
-                ? const [
-                    BoxShadow(
-                      color: Color(0x1414120E),
-                      blurRadius: 2,
-                      offset: Offset(0, 1),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: selected ? EsokColors.ink : EsokColors.muted,
-            ),
-          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
@@ -248,7 +249,7 @@ class _TxEditorPageState extends State<TxEditorPage> {
     if (selected == null || !mounted) return;
     if (selected == '__manage__') {
       await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const ManageAccountsPage()),
+        EsokMotion.route<void>((_) => const ManageAccountsPage()),
       );
       if (!mounted) return;
       final refreshed = context.read<MoneyStore>().activeAccounts;
@@ -270,13 +271,14 @@ class _TxEditorPageState extends State<TxEditorPage> {
       });
       return;
     }
+    final latestAccounts = context.read<MoneyStore>().activeAccounts;
     setState(() {
       if (to) {
         _toAccountId = selected;
       } else {
         _accountId = selected;
         if (_isTransfer && _toAccountId == selected) {
-          _toAccountId = accounts
+          _toAccountId = latestAccounts
               .where((account) => account.id != selected)
               .firstOrNull
               ?.id;
@@ -795,11 +797,11 @@ class _TxEditorPageState extends State<TxEditorPage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                 child: Container(
-                  height: 62,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
-                    color: EsokColors.soft,
-                    borderRadius: BorderRadius.circular(12),
+                    color: EsokColors.of(context).surface,
+                    borderRadius: EsokColors.cardRadius,
                   ),
                   child: Row(
                     children: [
@@ -814,8 +816,8 @@ class _TxEditorPageState extends State<TxEditorPage> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.06,
-                            color: EsokColors.muted,
+                            letterSpacing: 0.4,
+                            color: EsokColors.of(context).muted,
                           ),
                         ),
                       ),
@@ -829,12 +831,20 @@ class _TxEditorPageState extends State<TxEditorPage> {
                                 ? 'Isi nominal'
                                 : 'Rp ${numberText(_signedAmount)}',
                             style: TextStyle(
-                              fontSize: 25,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.02,
+                              fontSize: 27,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
                               color: _amount == 0
-                                  ? EsokColors.disabled
-                                  : EsokColors.ink,
+                                  ? EsokColors.of(context).disabled
+                                  : _kind == 'income'
+                                  ? EsokColors.incomeInk(
+                                      Theme.of(context).brightness,
+                                    )
+                                  : _kind == 'expense'
+                                  ? EsokColors.expenseInk(
+                                      Theme.of(context).brightness,
+                                    )
+                                  : EsokColors.of(context).ink,
                               fontFeatures: const [
                                 FontFeature.tabularFigures(),
                               ],
@@ -2062,7 +2072,7 @@ class _ScanRowsSheetState extends State<_ScanRowsSheet> {
   }
 }
 
-class _WalletSheet extends StatelessWidget {
+class _WalletSheet extends StatefulWidget {
   const _WalletSheet({
     required this.title,
     required this.accounts,
@@ -2076,115 +2086,412 @@ class _WalletSheet extends StatelessWidget {
   final String? excludedId;
 
   @override
+  State<_WalletSheet> createState() => _WalletSheetState();
+}
+
+class _WalletSheetState extends State<_WalletSheet> {
+  bool _creating = false;
+  bool _saving = false;
+  String _type = 'ewallet';
+  String? _iconKey;
+  String? _error;
+  final _name = TextEditingController();
+  final _opening = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _opening.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickIcon() async {
+    final picked = await showMoneyIconPicker(
+      context,
+      iconSet: MoneyIconSet.wallet,
+      value: _iconKey,
+      automatic: walletIconSpec(_type, null),
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _iconKey = picked.id);
+  }
+
+  Future<void> _saveWallet() async {
+    final trimmed = _name.text.trim();
+    if (trimmed.isEmpty) {
+      setState(() => _error = 'Isi nama dompet dulu.');
+      return;
+    }
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final digits = _opening.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final opening = int.tryParse(digits) ?? 0;
+    try {
+      final account = await context.read<MoneyStore>().addAccount(
+        trimmed,
+        _type,
+        openingBalance: opening,
+        iconKey: _iconKey,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(account.id);
+    } on NameConflictException {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Dompet dengan nama itu sudah ada.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Gagal membuat dompet. Coba lagi.';
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
     final typography = Theme.of(context).textTheme;
-    final choices = accounts
-        .where((account) => account.id != excludedId)
+    final choices = widget.accounts
+        .where((account) => account.id != widget.excludedId)
         .toList();
-    return Material(
-      color: colors.canvas,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      clipBehavior: Clip.antiAlias,
-      child: SafeArea(
-        top: false,
-        child: ListView.builder(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 12),
-          itemCount: choices.length + 2,
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 34,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 14),
-                      decoration: BoxDecoration(
-                        color: colors.handle,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Material(
+        color: colors.canvas,
+        borderRadius: EsokColors.sheetRadius,
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(
+          top: false,
+          child: AnimatedSize(
+            duration: EsokMotion.reduced(context)
+                ? Duration.zero
+                : EsokMotion.enter,
+            curve: EsokMotion.settle,
+            alignment: Alignment.topCenter,
+            child: _creating
+                ? _buildCreateForm(context, colors, typography)
+                : _buildList(context, colors, typography, choices),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreateForm(
+    BuildContext context,
+    EsokPalette colors,
+    TextTheme typography,
+  ) {
+    final selectedSpec = walletIconSpec(_type, _iconKey);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4.5,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: colors.handle.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              TextButton(
+                onPressed: _saving
+                    ? null
+                    : () => setState(() {
+                        _creating = false;
+                        _error = null;
+                      }),
+                child: const Text('Batal'),
+              ),
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    'Dompet baru',
+                    textAlign: TextAlign.center,
+                    style: typography.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      title,
-                      style: typography.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (choices.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'Belum ada dompet yang bisa dipilih.',
-                        style: typography.bodyMedium,
-                      ),
-                    )
-                  else
-                    const SizedBox(height: 8),
-                ],
-              );
-            }
-            if (index == choices.length + 1) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Divider(),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop('__manage__'),
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      foregroundColor: colors.ink,
-                      alignment: AlignmentDirectional.centerStart,
-                    ),
-                    child: const Text('Kelola dompet'),
-                  ),
-                ],
-              );
-            }
-            final account = choices[index - 1];
-            return Semantics(
-              selected: selectedId == account.id,
-              child: InkWell(
-                onTap: () => Navigator.of(context).pop(account.id),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 52),
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                ),
+              ),
+              TextButton(
+                onPressed: _saving ? null : _saveWallet,
+                child: Text(_saving ? 'Menyimpan…' : 'Simpan'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Dompet baru langsung terpilih untuk transaksi ini.',
+            textAlign: TextAlign.center,
+            style: typography.bodySmall,
+          ),
+          const SizedBox(height: 14),
+          EsokSegmentedControl<String>(
+            value: _type,
+            onChanged: (value) => setState(() => _type = value),
+            segments: const [
+              ('cash', 'Tunai'),
+              ('bank', 'Bank'),
+              ('ewallet', 'E-Wallet'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: colors.surface,
+            borderRadius: EsokColors.cardRadius,
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 10, 6),
                   child: Row(
                     children: [
-                      WalletIconView(account: account, size: 18),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(account.name, style: typography.bodyLarge),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          accountTypeLabel(account.type),
-                          textAlign: TextAlign.end,
-                          style: typography.bodyMedium,
+                      ApplePressable(
+                        child: InkWell(
+                          onTap: _pickIcon,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: colors.control,
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: MoneyIconGlyph(
+                              spec: selectedSpec,
+                              size: 19,
+                              color: colors.ink,
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 18,
-                        child: selectedId == account.id
-                            ? Icon(Icons.check, size: 18, color: colors.ink)
-                            : null,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _name,
+                          autofocus: true,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          onChanged: (_) {
+                            if (_error != null) setState(() => _error = null);
+                          },
+                          decoration: const InputDecoration(
+                            hintText: 'Nama dompet (mis. SeaBank, BCA)',
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, indent: 16),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                  child: TextField(
+                    controller: _opening,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _saveWallet(),
+                    decoration: const InputDecoration(
+                      hintText: 'Saldo awal (opsional, Rp)',
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_error case final error?) ...[
+            const SizedBox(height: 8),
+            Text(
+              error,
+              style: typography.bodySmall?.copyWith(color: colors.destructive),
+            ),
+          ],
+          const SizedBox(height: 14),
+          FilledButton(
+            onPressed: _saving ? null : _saveWallet,
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+            child: Text(_saving ? 'Menyimpan…' : 'Simpan & pilih dompet'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList(
+    BuildContext context,
+    EsokPalette colors,
+    TextTheme typography,
+    List<Account> choices,
+  ) {
+    return ListView(
+      shrinkWrap: true,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+      children: [
+        Center(
+          child: Container(
+            width: 36,
+            height: 4.5,
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+              color: colors.handle.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ),
+        Semantics(
+          header: true,
+          child: Text(
+            widget.title,
+            style: typography.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (choices.isEmpty)
+          Material(
+            color: colors.surface,
+            borderRadius: EsokColors.cardRadius,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Belum ada dompet yang bisa dipilih.',
+                style: typography.bodyMedium,
+              ),
+            ),
+          )
+        else
+          Material(
+            color: colors.surface,
+            borderRadius: EsokColors.cardRadius,
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                for (final (index, account) in choices.indexed) ...[
+                  if (index > 0) const Divider(height: 1, indent: 52),
+                  Semantics(
+                    selected: widget.selectedId == account.id,
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).pop(account.id),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 54),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: colors.control,
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: WalletIconView(account: account, size: 16),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                account.name,
+                                style: typography.bodyLarge?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                accountTypeLabel(account.type),
+                                textAlign: TextAlign.end,
+                                style: typography.bodySmall,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 18,
+                              child: widget.selectedId == account.id
+                                  ? Icon(
+                                      CupertinoIcons.checkmark,
+                                      size: 17,
+                                      color: colors.tint,
+                                    )
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        const SizedBox(height: 12),
+        ApplePressable(
+          child: Material(
+            color: colors.surface,
+            borderRadius: EsokColors.cardRadius,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: const ValueKey('inline-create-wallet'),
+              onTap: () => setState(() => _creating = true),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 50),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.add, size: 18, color: colors.tint),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Buat dompet baru',
+                        style: typography.bodyLarge?.copyWith(
+                          color: colors.tint,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
-      ),
+        const SizedBox(height: 4),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('__manage__'),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 44),
+            foregroundColor: colors.muted,
+          ),
+          child: const Text('Kelola dompet'),
+        ),
+      ],
     );
   }
 }

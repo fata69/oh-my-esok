@@ -305,8 +305,8 @@ void main() {
       expect(Scaffold.of(tester.element(label)).widget.backgroundColor, canvas);
     }
 
-    const dark = (Color(0xFF000000), Color(0xFFEEEEEE), Color(0xFFB4B4B4));
-    const light = (Color(0xFFFCFCFC), Color(0xFF202020), Color(0xFF646464));
+    const dark = (Color(0xFF000000), Color(0xFFF5F5F7), Color(0xFF98989F));
+    const light = (Color(0xFFF2F2F7), Color(0xFF111113), Color(0xFF636366));
     await verifyLedger(dark.$1, dark.$2, dark.$3);
     for (final (mode, expected) in [
       ('Gelap', dark),
@@ -361,7 +361,8 @@ void main() {
       final list = find.byType(ListView).first;
       final dock = tester.getRect(nav);
       final button = tester.getRect(create);
-      expect(tester.getRect(list).bottom, lessThanOrEqualTo(dock.top));
+      // Content flows smoothly behind the floating Liquid Glass dock.
+      expect(tester.getRect(list).bottom, greaterThan(dock.top));
       expect(button.left - dock.right, closeTo(8, .01));
       expect(button.center.dy, closeTo(dock.center.dy, 0.01));
       expect(

@@ -1,3 +1,4 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +7,10 @@ import '../state/money_report.dart';
 import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../util/format.dart';
+import 'glass_controls.dart';
+import 'manage_categories.dart';
 import 'month_picker.dart';
+import 'motion.dart';
 import 'report_chart.dart';
 import 'tab_layout.dart';
 import 'theme.dart';
@@ -41,7 +45,7 @@ class _ReportsPageState extends State<ReportsPage> {
         key: const PageStorageKey('reports'),
         padding: EdgeInsets.fromLTRB(
           EsokTabLayout.gutter,
-          12,
+          8,
           EsokTabLayout.gutter,
           EsokTabLayout.scrollBottomOf(context),
         ),
@@ -54,73 +58,77 @@ class _ReportsPageState extends State<ReportsPage> {
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          if (hidden) ...[
-            const SizedBox(height: 14),
-            const _HiddenChart(),
-          ] else ...[
-            ReportFlowChart(
-              monthly: !daily,
-              key: ValueKey(daily ? 'report-daily' : 'report-trend'),
-              points: daily
-                  ? [
-                      for (final day in report.daily)
-                        (
-                          date: day.date,
-                          income: day.income,
-                          expense: day.expense,
-                        ),
-                    ]
-                  : [
-                      for (final point in report.trend)
-                        (
-                          date: point.month,
-                          income: point.income,
-                          expense: point.expense,
-                        ),
-                    ],
-              rangeControls: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  for (final (period, label) in const [
-                    (_ReportPeriod.months, '6 bulan'),
-                    (_ReportPeriod.days, 'Harian'),
-                  ])
-                    Semantics(
-                      selected: _period == period,
-                      inMutuallyExclusiveGroup: true,
-                      child: TextButton(
-                        onPressed: () => setState(() => _period = period),
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(72, 48),
-                          foregroundColor: _period == period
-                              ? colors.ink
-                              : colors.muted,
-                          backgroundColor: _period == period
-                              ? colors.control
-                              : null,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: Text(label),
-                      ),
+          const SizedBox(height: 10),
+          if (hidden)
+            const EsokContentGroup(
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(16),
+                  child: _HiddenChart(),
+                ),
+              ],
+            )
+          else ...[
+            EsokContentGroup(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  child: ReportFlowChart(
+                    monthly: !daily,
+                    key: ValueKey(daily ? 'report-daily' : 'report-trend'),
+                    points: daily
+                        ? [
+                            for (final day in report.daily)
+                              (
+                                date: day.date,
+                                income: day.income,
+                                expense: day.expense,
+                              ),
+                          ]
+                        : [
+                            for (final point in report.trend)
+                              (
+                                date: point.month,
+                                income: point.income,
+                                expense: point.expense,
+                              ),
+                          ],
+                    rangeControls: EsokSegmentedControl<_ReportPeriod>(
+                      value: _period,
+                      onChanged: (period) => setState(() => _period = period),
+                      segments: const [
+                        (_ReportPeriod.months, '6 bulan'),
+                        (_ReportPeriod.days, 'Harian'),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
             if (daily && report.transactionCount != 0) ...[
-              const SizedBox(height: 8),
-              ExpansionTile(
-                key: const PageStorageKey('report-daily-details'),
-                tilePadding: EdgeInsets.zero,
-                title: const Text('Rincian per hari'),
+              const SizedBox(height: 12),
+              EsokContentGroup(
                 children: [
-                  for (final day in report.daily)
-                    if (day.income != 0 || day.expense != 0) ...[
-                      const Divider(height: 16),
-                      _DayDetail(day: day),
+                  ExpansionTile(
+                    key: const PageStorageKey('report-daily-details'),
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    title: Text(
+                      'Rincian per hari',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    children: [
+                      for (final day in report.daily)
+                        if (day.income != 0 || day.expense != 0) ...[
+                          const Divider(height: 16),
+                          _DayDetail(day: day),
+                        ],
                     ],
+                  ),
                 ],
               ),
             ],
@@ -128,9 +136,33 @@ class _ReportsPageState extends State<ReportsPage> {
           _ReportSection(
             'Pengeluaran per kategori',
             period: DateFormat('MMM yyyy', 'id_ID').format(report.month),
+            action: TextButton(
+              onPressed: () => Navigator.of(context).push(
+                EsokMotion.route<void>(
+                  (_) => const ManageCategoriesPage(initialKind: 'expense'),
+                ),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: colors.tint,
+                minimumSize: const Size(48, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: const Text('Kelola'),
+            ),
           ),
           hidden
-              ? const _HiddenChart()
+              ? const EsokContentGroup(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: _HiddenChart(),
+                    ),
+                  ],
+                )
               : _CategoryBreakdown(categories: report.expensesByCategory),
         ],
       ),
@@ -139,39 +171,38 @@ class _ReportsPageState extends State<ReportsPage> {
 }
 
 class _ReportSection extends StatelessWidget {
-  const _ReportSection(this.title, {required this.period});
+  const _ReportSection(this.title, {required this.period, this.action});
 
   final String title;
   final String period;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 22, bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.only(top: 22, bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Divider(),
-          const SizedBox(height: 14),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  title,
-                  style: text.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    title,
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              Text(period, style: text.bodyMedium),
-            ],
+                Text(period, style: text.bodySmall),
+              ],
+            ),
           ),
+          ?action,
         ],
       ),
     );
@@ -208,55 +239,80 @@ class _CategoryBreakdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (categories.isEmpty) {
-      return const Text('Belum ada pengeluaran untuk bulan ini.');
+      return const EsokContentGroup(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('Belum ada pengeluaran untuk bulan ini.'),
+          ),
+        ],
+      );
     }
     final theme = Theme.of(context);
-    final c = theme.colorScheme;
+    final colors = EsokColors.of(context);
+    final expenseInk = EsokColors.expenseInk(theme.brightness);
     final showShares = categories.any((entry) => entry.share > 0);
     final percent = NumberFormat('0.#', 'id_ID');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return EsokContentGroup(
       children: [
-        if (!showShares) ...[
-          Text(
-            'Proporsi tidak ditampilkan karena total bertanda atau nol.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-        ],
-        for (var i = 0; i < categories.length; i++) ...[
-          if (i != 0) const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            alignment: WrapAlignment.spaceBetween,
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(categories[i].name, style: theme.textTheme.bodyMedium),
-              Text(
-                showShares
-                    ? '${reportAmount(categories[i].total)} · '
-                          '${percent.format(categories[i].share * 100)}%'
-                    : reportAmount(categories[i].total),
-                style: theme.textTheme.titleSmall,
-              ),
+              if (!showShares) ...[
+                Text(
+                  'Proporsi tidak ditampilkan karena total bertanda atau nol.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+              ],
+              for (var i = 0; i < categories.length; i++) ...[
+                if (i != 0) const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(height: 1),
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      categories[i].name,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      showShares
+                          ? '${reportAmount(categories[i].total)} · '
+                                '${percent.format(categories[i].share * 100)}%'
+                          : reportAmount(categories[i].total),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+                if (showShares) ...[
+                  const SizedBox(height: 8),
+                  ExcludeSemantics(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        key: ValueKey('report-allocation-$i'),
+                        value: categories[i].share,
+                        minHeight: 6,
+                        color: expenseInk.withValues(alpha: 0.85),
+                        backgroundColor: colors.control,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ],
           ),
-          if (showShares) ...[
-            const SizedBox(height: 6),
-            ExcludeSemantics(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  key: ValueKey('report-allocation-$i'),
-                  value: categories[i].share,
-                  minHeight: 5,
-                  color: c.onSurfaceVariant,
-                  backgroundColor: c.surfaceContainerHighest,
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ],
     );
   }
@@ -266,11 +322,15 @@ class _HiddenChart extends StatelessWidget {
   const _HiddenChart();
 
   @override
-  Widget build(BuildContext context) => const Row(
+  Widget build(BuildContext context) => Row(
     children: [
-      Icon(Icons.visibility_off_outlined),
-      SizedBox(width: 10),
-      Expanded(child: Text('Grafik dan nominal disembunyikan.')),
+      Icon(
+        CupertinoIcons.eye_slash,
+        size: 19,
+        color: EsokColors.of(context).muted,
+      ),
+      const SizedBox(width: 10),
+      const Expanded(child: Text('Grafik dan nominal disembunyikan.')),
     ],
   );
 }

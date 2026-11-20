@@ -31,6 +31,16 @@ class PatchNotesSheet extends StatelessWidget {
 
   static const _releases = [
     (
+      version: '0.1.0-preview.14',
+      date: '20 Nov 2026',
+      notes: [
+        'Tampilan diperbarui mengikuti panduan Apple HIG / iOS 26 Liquid Glass dengan permukaan Inset Grouped, ikon SF Symbols monokrom bersih, dan kaca transparan bertepi spekular di mode Terang maupun AMOLED.',
+        'Konten mengalir langsung di balik navbar kaca mengambang dengan animasi spring yang lebih luwes dan transisi layar Cupertino.',
+        'Buat dompet baru kini bisa langsung dilakukan dari layar Catat transaksi tanpa perlu keluar ke Setelan, dan langsung terpilih otomatis.',
+        'Rencana Sampai Gajian, Kelola Dompet, Laporan, dan Setelan diperbarui memakai kartu grup dan kontrol segmen yang seragam.',
+      ],
+    ),
+    (
       version: '0.1.0-preview.13',
       date: '19 Nov 2026',
       notes: [
