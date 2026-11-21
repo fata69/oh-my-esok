@@ -4,7 +4,12 @@ import 'package:provider/provider.dart';
 import '../data/account.dart';
 import '../state/money_store.dart';
 import '../util/format.dart';
+import 'action_sheet.dart';
 import 'chevron.dart';
+import 'money_icon_catalog.dart';
+import 'money_icon_picker.dart';
+import 'motion.dart';
+import 'tab_layout.dart';
 import 'theme.dart';
 
 class ManageAccountsPage extends StatefulWidget {
@@ -18,25 +23,31 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
   Future<void> _add() async {
     final draft = await showModalBottomSheet<_AccountDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (_) => const _AccountSheet(title: 'Sumber dana baru'),
+      barrierColor: EsokColors.scrim,
+      builder: (_) => const _AccountSheet(title: 'Dompet baru'),
     );
     if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().addAccount(draft.name, draft.type);
+      await context.read<MoneyStore>().addAccount(
+        draft.name,
+        draft.type,
+        iconKey: draft.iconKey,
+      );
     } on NameConflictException {
-      _message('Sumber dana itu sudah ada.');
+      _message('Dompet itu sudah ada.');
     }
   }
 
   Future<void> _editOpening(Account account) async {
     final value = await showModalBottomSheet<int>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _AmountSheet(
         title: 'Ubah dana awal',
         subtitle: 'Posisi dana sebelum transaksi paling awal.',
@@ -52,9 +63,10 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     final current = store.balanceForAccount(account.id);
     final value = await showModalBottomSheet<int>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _AmountSheet(
         title: 'Koreksi saldo',
         subtitle: 'Saldo menurut catatan: ${numberText(current)}',
@@ -68,21 +80,28 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
   Future<void> _rename(Account account) async {
     final draft = await showModalBottomSheet<_AccountDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _AccountSheet(
-        title: 'Ubah sumber dana',
+        title: 'Ubah dompet',
         initialName: account.name,
         initialType: account.type,
+        initialIconKey: account.iconKey,
         lockType: true,
       ),
     );
     if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().renameAccount(account.id, draft.name);
+      await context.read<MoneyStore>().renameAccount(
+        account.id,
+        draft.name,
+        iconKey: draft.iconKey,
+        clearIcon: draft.iconKey == null && account.iconKey != null,
+      );
     } on NameConflictException {
-      _message('Sumber dana itu sudah ada.');
+      _message('Dompet itu sudah ada.');
     }
   }
 
@@ -92,14 +111,15 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     );
     if (!mounted) return;
     if (count > 0) {
-      _message('Sumber dana ini punya $count transaksi. Arsipkan saja.');
+      _message('Dompet ini punya $count transaksi. Arsipkan saja.');
       return;
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: EsokMotion.presentation(context),
       builder: (context) => AlertDialog(
         backgroundColor: EsokColors.canvas,
-        title: const Text('Hapus sumber dana?'),
+        title: const Text('Hapus dompet?'),
         content: Text('“${account.name}” akan dihapus permanen.'),
         actions: [
           TextButton(
@@ -116,8 +136,10 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     if (confirmed != true || !mounted) return;
     try {
       await context.read<MoneyStore>().deleteAccount(account.id);
+    } on PaydayAccountInUseException {
+      _message('Dompet ini masih dipakai di Sampai Gajian.');
     } on ItemInUseException {
-      _message('Sumber dana ini masih dipakai transaksi.');
+      _message('Dompet ini masih dipakai transaksi.');
     }
   }
 
@@ -125,127 +147,82 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
     final store = context.read<MoneyStore>();
     final count = await store.accountTransactionCount(account.id);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    final action = await showEsokActionSheet<Future<void> Function()>(
+      context,
+      title: account.name,
+      actions: [
+        EsokSheetAction(
+          () => _editOpening(account),
+          'Ubah dana awal',
+          Icons.payments_outlined,
         ),
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Center(child: _Handle()),
-              _ActionRow(
-                label: 'Ubah dana awal',
-                onTap: () {
-                  Navigator.pop(context);
-                  _editOpening(account);
-                },
-              ),
-              _ActionRow(
-                label: 'Koreksi saldo',
-                onTap: () {
-                  Navigator.pop(context);
-                  _adjust(account);
-                },
-              ),
-              _ActionRow(
-                label: 'Ubah nama',
-                onTap: () {
-                  Navigator.pop(context);
-                  _rename(account);
-                },
-              ),
-              _ActionRow(
-                label: account.archived ? 'Aktifkan lagi' : 'Arsipkan',
-                onTap: () {
-                  Navigator.pop(context);
-                  store.setAccountArchived(account.id, !account.archived);
-                },
-              ),
-              _ActionRow(
-                label: 'Hapus',
-                danger: true,
-                onTap: count > 0
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        _delete(account);
-                      },
-              ),
-              if (count > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
-                  child: Text(
-                    'Punya $count transaksi — arsipkan saja agar riwayat tetap punya label.',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.5,
-                      color: EsokColors.muted,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        EsokSheetAction(
+          () => _adjust(account),
+          'Koreksi saldo',
+          Icons.tune_rounded,
         ),
-      ),
+        EsokSheetAction(
+          () => _rename(account),
+          'Ubah nama atau ikon',
+          Icons.edit_outlined,
+        ),
+        EsokSheetAction(
+          () => store.setAccountArchived(account.id, !account.archived),
+          account.archived ? 'Aktifkan lagi' : 'Arsipkan',
+          account.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
+        ),
+        EsokSheetAction(
+          () => _delete(account),
+          'Hapus',
+          Icons.delete_outline_rounded,
+          destructive: true,
+          enabled: count == 0,
+        ),
+      ],
+      footer: count > 0
+          ? 'Punya $count transaksi. Arsipkan agar nama dompet tetap terlihat di riwayat.'
+          : null,
     );
+    if (action != null && mounted) await action();
   }
 
   Future<void> _showArchived() async {
     final store = context.read<MoneyStore>();
     final archived = store.archivedAccounts;
     if (archived.isEmpty) return;
-    await showModalBottomSheet<void>(
+    final selected = await showModalBottomSheet<Account>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      barrierColor: EsokColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => EsokSheetPanel(
+        title: 'Dompet diarsipkan',
+        body: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 0, 16, 12),
+          shrinkWrap: true,
+          itemCount: archived.length,
+          separatorBuilder: (_, _) => const Divider(),
+          itemBuilder: (context, index) => Row(
             children: [
-              const Center(child: _Handle()),
-              const SizedBox(height: 8),
-              Text(
-                'Sumber dana diarsipkan',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: EsokColors.ink,
+              Expanded(child: Text(archived[index].name)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, archived[index]),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Aktifkan'),
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final account in archived)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(account.name),
-                  trailing: TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      store.setAccountArchived(account.id, false);
-                    },
-                    child: const Text('Aktifkan'),
-                  ),
-                ),
             ],
           ),
         ),
       ),
     );
+    if (selected != null && mounted) {
+      await store.setAccountArchived(selected.id, false);
+    }
   }
 
   void _message(String message) {
@@ -287,7 +264,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
                   ),
                   Expanded(
                     child: Text(
-                      'Sumber dana',
+                      'Dompet',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -320,36 +297,56 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Tempat menyimpan uang: tunai, rekening, atau dompet digital.',
+                      style: TextStyle(fontSize: 13, color: EsokColors.muted),
+                    ),
+                  ),
                   _TotalDanaBar(total: store.totalBalance),
                   for (final group in groups) ...[
                     if (active.any((account) => account.type == group.$1)) ...[
                       Padding(
-                        padding: const EdgeInsets.only(top: 16, bottom: 4),
+                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 7),
                         child: Text(
-                          group.$2,
+                          group.$2.toUpperCase(),
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.09,
-                            color: EsokColors.muted,
+                            letterSpacing: 0.4,
+                            color: EsokColors.of(context).muted,
                           ),
                         ),
                       ),
-                      for (final account in active.where(
-                        (account) => account.type == group.$1,
-                      ))
-                        _AccountRow(
-                          account: account,
-                          balance: store.balanceForAccount(account.id),
-                          onTap: () => _showActions(account),
-                        ),
+                      EsokContentGroup(
+                        children: [
+                          for (final (index, account)
+                              in active
+                                  .where((account) => account.type == group.$1)
+                                  .indexed) ...[
+                            if (index > 0)
+                              const Divider(height: 1, indent: 54),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                              child: _AccountRow(
+                                account: account,
+                                balance: store.balanceForAccount(account.id),
+                                onTap: () => _showActions(account),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ],
                   if (active.isEmpty)
                     Padding(
                       padding: EdgeInsets.only(top: 80),
                       child: Text(
-                        'Belum ada sumber dana.',
+                        'Belum ada dompet.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 13, color: EsokColors.muted),
                       ),
@@ -364,7 +361,7 @@ class _ManageAccountsPageState extends State<ManageAccountsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           alignment: Alignment.center,
                           child: Text(
-                            'Lihat $archivedCount sumber dana diarsipkan',
+                            'Lihat $archivedCount dompet diarsipkan',
                             style: TextStyle(
                               fontSize: 12,
                               color: EsokColors.muted,
@@ -390,38 +387,39 @@ class _TotalDanaBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = total < 0 ? EsokColors.negative : EsokColors.ink;
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: EsokColors.soft,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'TOTAL',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.09,
-                color: EsokColors.muted,
+    final colors = EsokColors.of(context);
+    final color = total < 0 ? colors.destructive : colors.ink;
+    return EsokContentGroup(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'TOTAL',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                    color: colors.muted,
+                  ),
+                ),
               ),
-            ),
+              Text(
+                numberText(total),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                  color: color,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
-          Text(
-            numberText(total),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: color,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -436,9 +434,6 @@ class _AccountRow extends StatelessWidget {
   final Account account;
   final int balance;
   final VoidCallback onTap;
-
-  String get _initial =>
-      account.name.isEmpty ? '?' : account.name.substring(0, 1).toUpperCase();
 
   @override
   Widget build(BuildContext context) {
@@ -458,14 +453,7 @@ class _AccountRow extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: Text(
-                _initial,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: EsokColors.muted,
-                ),
-              ),
+              child: WalletIconView(account: account, size: 17),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -475,17 +463,11 @@ class _AccountRow extends StatelessWidget {
                 children: [
                   Text(
                     account.name,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      color: EsokColors.ink,
-                    ),
+                    style: TextStyle(fontSize: 14.5, color: EsokColors.ink),
                   ),
                   Text(
                     accountTypeLabel(account.type),
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: EsokColors.muted,
-                    ),
+                    style: TextStyle(fontSize: 10.5, color: EsokColors.muted),
                   ),
                 ],
               ),
@@ -507,44 +489,12 @@ class _AccountRow extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        alignment: Alignment.centerLeft,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: onTap == null
-                ? EsokColors.chevron
-                : (danger ? EsokColors.lateInk : EsokColors.ink),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AccountDraft {
-  const _AccountDraft(this.name, this.type);
+  const _AccountDraft(this.name, this.type, this.iconKey);
 
   final String name;
   final String type;
+  final String? iconKey;
 }
 
 class _AccountSheet extends StatefulWidget {
@@ -552,12 +502,14 @@ class _AccountSheet extends StatefulWidget {
     required this.title,
     this.initialName,
     this.initialType = 'cash',
+    this.initialIconKey,
     this.lockType = false,
   });
 
   final String title;
   final String? initialName;
   final String initialType;
+  final String? initialIconKey;
   final bool lockType;
 
   @override
@@ -567,6 +519,7 @@ class _AccountSheet extends StatefulWidget {
 class _AccountSheetState extends State<_AccountSheet> {
   late final TextEditingController _controller;
   late String _type;
+  String? _iconKey;
   String? _error;
 
   @override
@@ -574,6 +527,7 @@ class _AccountSheetState extends State<_AccountSheet> {
     super.initState();
     _controller = TextEditingController(text: widget.initialName ?? '');
     _type = widget.initialType;
+    _iconKey = widget.initialIconKey;
   }
 
   @override
@@ -588,7 +542,7 @@ class _AccountSheetState extends State<_AccountSheet> {
       setState(() => _error = 'Nama tidak boleh kosong.');
       return;
     }
-    Navigator.of(context).pop(_AccountDraft(name, _type));
+    Navigator.of(context).pop(_AccountDraft(name, _type, _iconKey));
   }
 
   @override
@@ -602,99 +556,112 @@ class _AccountSheetState extends State<_AccountSheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
-      padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Center(child: _Handle()),
-          Text(
-            widget.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: EsokColors.ink,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            onSubmitted: (_) => _submit(),
-            style: TextStyle(fontSize: 15, color: EsokColors.ink),
-            decoration: InputDecoration(
-              hintText: 'Nama sumber dana',
-              errorText: _error,
-              filled: true,
-              fillColor: EsokColors.soft,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Center(child: _Handle()),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: EsokColors.ink,
+                ),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+              const SizedBox(height: 14),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                onSubmitted: (_) => _submit(),
+                style: TextStyle(fontSize: 15, color: EsokColors.ink),
+                decoration: InputDecoration(
+                  hintText: 'Nama dompet',
+                  errorText: _error,
+                  filled: true,
+                  fillColor: EsokColors.soft,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
+                  ),
+                ),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
-              ),
-            ),
-          ),
-          if (!widget.lockType) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: [
-                for (final type in types)
-                  GestureDetector(
-                    onTap: () => setState(() => _type = type.$1),
-                    child: IntrinsicWidth(
-                      child: Container(
-                        height: 31,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: _type == type.$1
-                              ? EsokColors.ink
-                              : EsokColors.soft,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          type.$2,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _type == type.$1
-                                ? EsokColors.canvas
-                                : EsokColors.inkSoft,
+              if (!widget.lockType) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: [
+                    for (final type in types)
+                      GestureDetector(
+                        onTap: () => setState(() => _type = type.$1),
+                        child: IntrinsicWidth(
+                          child: Container(
+                            height: 31,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: _type == type.$1
+                                  ? EsokColors.ink
+                                  : EsokColors.soft,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              type.$2,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _type == type.$1
+                                    ? EsokColors.canvas
+                                    : EsokColors.inkSoft,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                  ],
+                ),
               ],
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Batal'),
+              const SizedBox(height: 4),
+              MoneyIconField(
+                iconSet: MoneyIconSet.wallet,
+                value: _iconKey,
+                automatic: walletIconSpec(_type, null),
+                onChanged: (value) => setState(() => _iconKey = value),
               ),
-              TextButton(
-                onPressed: _submit,
-                style: TextButton.styleFrom(foregroundColor: EsokColors.accent),
-                child: const Text('Simpan'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Batal'),
+                  ),
+                  TextButton(
+                    onPressed: _submit,
+                    style: TextButton.styleFrom(
+                      foregroundColor: EsokColors.accent,
+                    ),
+                    child: const Text('Simpan'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -759,7 +726,7 @@ class _AmountSheetState extends State<_AmountSheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
       child: SafeArea(

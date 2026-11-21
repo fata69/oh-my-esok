@@ -27,6 +27,11 @@ class Task {
     required this.createdAt,
     this.scheduledTime,
     this.notes,
+    this.repeatWeekdays = const [],
+    this.seriesId,
+    this.repeatUntil,
+    this.isSkipped = false,
+    this.isProjected = false,
   });
 
   final String id;
@@ -36,6 +41,44 @@ class Task {
   final String? notes;
   final bool isDone;
   final int createdAt;
+  final List<int> repeatWeekdays;
+
+  /// An exclusive end date for a stored rule segment.
+  final String? repeatUntil;
+  final String? seriesId;
+  final bool isSkipped;
+  final bool isProjected;
+
+  bool get isRecurring => repeatWeekdays.isNotEmpty || seriesId != null;
+  bool get isOccurrence => seriesId != null && id.startsWith('occ:');
+  bool get isRepeatRule => repeatWeekdays.isNotEmpty && !isOccurrence;
+  String get recurrenceId => seriesId ?? id;
+  String get occurrenceDay =>
+      isOccurrence ? id.substring(id.length - 10) : scheduledDate;
+
+  static String occurrenceId(String series, String day) => 'occ:$series:$day';
+
+  bool coversRepeatDate(String day) =>
+      isRepeatRule &&
+      day.compareTo(scheduledDate) >= 0 &&
+      (repeatUntil == null || day.compareTo(repeatUntil!) < 0);
+
+  bool repeatsOn(String day) =>
+      coversRepeatDate(day) &&
+      repeatWeekdays.contains(DateTime.parse(day).weekday);
+
+  Task occurrenceOn(String day) => Task(
+    id: occurrenceId(recurrenceId, day),
+    seriesId: recurrenceId,
+    title: title,
+    scheduledDate: day,
+    scheduledTime: scheduledTime,
+    notes: notes,
+    createdAt: createdAt,
+    isDone: false,
+    repeatWeekdays: repeatWeekdays,
+    isProjected: true,
+  );
 
   DateTime get date => DateTime.parse(scheduledDate);
 
@@ -68,6 +111,7 @@ class Task {
     String? notes,
     bool clearNotes = false,
     bool? isDone,
+    List<int>? repeatWeekdays,
   }) {
     return Task(
       id: id,
@@ -77,6 +121,11 @@ class Task {
       notes: clearNotes ? null : (notes ?? this.notes),
       isDone: isDone ?? this.isDone,
       createdAt: createdAt,
+      repeatWeekdays: repeatWeekdays ?? this.repeatWeekdays,
+      seriesId: seriesId,
+      repeatUntil: repeatUntil,
+      isSkipped: isSkipped,
+      isProjected: isProjected,
     );
   }
 
@@ -88,6 +137,10 @@ class Task {
     'notes': notes,
     'is_done': isDone ? 1 : 0,
     'created_at': createdAt,
+    if (isRecurring) 'repeat_weekdays': repeatWeekdays.join(','),
+    if (seriesId != null) 'series_id': seriesId,
+    if (repeatUntil != null) 'repeat_until': repeatUntil,
+    if (isSkipped) 'is_skipped': isProjected ? 2 : 1,
   };
 
   factory Task.fromMap(Map<String, Object?> map) => Task(
@@ -98,6 +151,15 @@ class Task {
     notes: map['notes'] as String?,
     isDone: (map['is_done'] as int? ?? 0) == 1,
     createdAt: map['created_at'] as int? ?? 0,
+    repeatWeekdays: (map['repeat_weekdays'] as String? ?? '')
+        .split(',')
+        .where((day) => day.isNotEmpty)
+        .map(int.parse)
+        .toList(growable: false),
+    seriesId: map['series_id'] as String?,
+    repeatUntil: map['repeat_until'] as String?,
+    isSkipped: map['is_skipped'] == 1 || map['is_skipped'] == 2,
+    isProjected: map['is_skipped'] == 2,
   );
 
   Map<String, Object?> toWidgetJson() => {

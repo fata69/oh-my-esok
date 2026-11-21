@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'motion.dart';
 import 'theme.dart';
 
 Future<void> showPatchNotes(
@@ -9,9 +10,10 @@ Future<void> showPatchNotes(
 }) {
   return showModalBottomSheet<void>(
     context: context,
+    sheetAnimationStyle: EsokMotion.presentation(context),
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: const Color(0x5214120E),
+    barrierColor: EsokColors.scrim,
     builder: (context) =>
         PatchNotesSheet(version: version, buildNumber: buildNumber),
   );
@@ -28,6 +30,113 @@ class PatchNotesSheet extends StatelessWidget {
   final String buildNumber;
 
   static const _releases = [
+    (
+      version: '0.1.0-preview.15',
+      date: '20 Nov 2026',
+      notes: [
+        'Bilah navigasi atas dirapikan menjadi satu baris ringkas bergaya iOS 26: pil tanggal/bulan Liquid Glass mungil di kiri, tombol Tutup hari atau aksi cepat di kanan, dan judul besar (Large Title) yang bersih di bawahnya.',
+        'Tab Uang kini memiliki tombol kaca melingkar untuk pencarian cepat dan tombol sembunyikan/tampilkan nominal langsung di bilah atas.',
+        'Judul besar Hari Ini, Catatan, Laporan, dan Setelan kini konsisten di seluruh tab tanpa header ganda yang memakan layar.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.14',
+      date: '20 Nov 2026',
+      notes: [
+        'Tampilan diperbarui mengikuti panduan Apple HIG / iOS 26 Liquid Glass dengan permukaan Inset Grouped, ikon SF Symbols monokrom bersih, dan kaca transparan bertepi spekular di mode Terang maupun AMOLED.',
+        'Konten mengalir langsung di balik navbar kaca mengambang dengan animasi spring yang lebih luwes dan transisi layar Cupertino.',
+        'Buat dompet baru kini bisa langsung dilakukan dari layar Catat transaksi tanpa perlu keluar ke Setelan, dan langsung terpilih otomatis.',
+        'Rencana Sampai Gajian, Kelola Dompet, Laporan, dan Setelan diperbarui memakai kartu grup dan kontrol segmen yang seragam.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.13',
+      date: '19 Nov 2026',
+      notes: [
+        'Grafik Laporan menampilkan selisih arus kas per hari atau bulan. Ketuk atau geser untuk melihat nominal pemasukan dan pengeluaran.',
+        'Sampai Gajian punya satu tombol Tambah tagihan di bawah. Tagihan di luar perkiraan bisa dibuka dari halaman yang sama.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.12',
+      date: '19 Nov 2026',
+      notes: [
+        'Navbar, tombol tambah, menu, dan aksi editor kini memakai kaca netral yang senada di Terang dan AMOLED.',
+        'Uang memisahkan saldo dompet dan arus kas bulan. Laporan punya grafik 6 bulan dan harian dengan nominal pilihan di atas grafik.',
+        'Filter transaksi memakai kalender Hari. Daftar dompet dan panel Setelan lebih mudah dipakai pada layar pendek atau teks besar.',
+        'Widget Agenda menyesuaikan isi dengan ukuran. Widget Uang menandai ringkasan yang perlu diperbarui.',
+        'Agenda yang sudah dicentang dari aplikasi atau widget berhenti mengirim pengingat. Jadwal berikutnya tetap aktif.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.11',
+      date: '18 Nov 2026',
+      notes: [
+        'Hari dibuka ke Agenda. Catatan punya tampilan kotak atau daftar dan pilihan urutan.',
+        'Jadwalkan catatan untuk memindahkannya ke Agenda dengan pengingat opsional.',
+        'Sampai Gajian di Uang memperkirakan sisa saldo setelah tagihan dari jadwal yang kamu atur.',
+        'Riwayat transaksi bisa difilter berdasarkan tanggal melalui kalender.',
+        'Foto struk yang dibagikan ke Oh My Esok masuk sebagai draf dan bisa dibuka dari Tutup hari.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.9',
+      date: '18 Nov 2026',
+      notes: [
+        'Ketuk pengingat hari ini di widget Agenda untuk mencentang atau membatalkan centang.',
+        'Tugas selesai tetap terlihat dan judulnya dicoret. Jadwal berikutnya ditampilkan terpisah.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.8',
+      date: '18 Nov 2026',
+      notes: [
+        'Agenda bisa diulang setiap hari, Senin–Jumat, mingguan, atau pada hari pilihan.',
+        'Widget Agenda menampilkan progres hari ini, pintasan tambah, dan jadwal berikutnya.',
+        'Cari transaksi dari semua bulan lewat catatan, kategori, atau nama dompet.',
+        'Edit catatan transaksi lama mempertahankan dompet, kategori, jam, dan tanda nominal.',
+        'Pembaruan berikutnya bisa memilih paket yang sesuai perangkat untuk unduhan lebih kecil.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.7',
+      date: '17 Nov 2026',
+      notes: [
+        'Ikon navbar monokrom, dengan garis sedikit lebih tebal pada tab aktif.',
+        'Pilih ikon saat membuat kategori atau ubah ikon kategori langsung dari Catat.',
+        'Catat menampilkan dua baris kategori dan sebagian baris berikutnya saat pilihan masih bisa digulir.',
+        'Keypad angka kembali dari bawah setelah keyboard teks menutup, tanpa melepas draf catatan atau kategori.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.6',
+      date: '17 Nov 2026',
+      notes: [
+        'Menahan tab tidak lagi menampilkan lapisan abu-abu. Penanda navbar meluncur dengan awal yang lebih lembut.',
+        'Tanggal dan bulan sejajar di tengah pada Hari, Uang, dan Laporan, dengan satu panah di setiap sisi.',
+        'Ketuk tanggal untuk membuka kalender, atau ketuk bulan untuk memilih bulan dan tahun pada Uang dan Laporan.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.5',
+      date: '17 Nov 2026',
+      notes: [
+        'Penanda tab meluncur di dalam navbar dan tetap mulus saat arah ketukan berubah.',
+        'Tab Uang memisahkan saldo, dompet, dan riwayat. Filter jenis dan urutan hanya mengubah riwayat.',
+        'Dompet dan kategori punya pilihan ikon yang tersimpan, termasuk saat cadangan dipulihkan.',
+        'Hari menampilkan progres agenda, Setelan dikelompokkan, dan warna aksen mengikuti garis ikon.',
+      ],
+    ),
+    (
+      version: '0.1.0-preview.4',
+      date: '17 Nov 2026',
+      notes: [
+        'Tema Gelap memakai latar AMOLED hitam dan kontrol abu netral.',
+        'Tombol tambah muncul dari sisi navbar tanpa mengubah ukuran dan posisi dock.',
+        'Cari dan pilih model pindai dari daftar Google di Setelan.',
+        'Riwayat lebih mudah dipindai, dan ekspor membedakan tabel CSV dari cadangan JSON.',
+      ],
+    ),
     (
       version: '0.1.0-preview.3',
       date: '17 Nov 2026',
@@ -186,7 +295,7 @@ class PatchNotesSheet extends StatelessWidget {
       constraints: BoxConstraints(maxHeight: maxHeight),
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       child: SafeArea(
         top: false,
@@ -259,12 +368,6 @@ class PatchNotesSheet extends StatelessWidget {
                   isLatest: i == 0,
                 ),
               ],
-              const SizedBox(height: 24),
-              Text(
-                'Dikembangkan dari Esok oleh notSeraphimXD.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
-              ),
             ],
           ),
         ),
@@ -291,9 +394,10 @@ class _ReleaseBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               version,
@@ -303,8 +407,7 @@ class _ReleaseBlock extends StatelessWidget {
                 color: EsokColors.ink,
               ),
             ),
-            if (isLatest) ...[
-              const SizedBox(width: 8),
+            if (isLatest)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
@@ -320,16 +423,9 @@ class _ReleaseBlock extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                date,
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
-              ),
+            Text(
+              date,
+              style: TextStyle(fontSize: 11.5, color: EsokColors.muted),
             ),
           ],
         ),

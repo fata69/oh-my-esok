@@ -5,7 +5,7 @@ import 'category.dart';
 class CategoryDao {
   CategoryDao(this._db);
 
-  final Database _db;
+  final DatabaseExecutor _db;
 
   Future<List<MoneyCategory>> all() async {
     final rows = await _db.query(

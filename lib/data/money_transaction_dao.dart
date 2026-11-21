@@ -5,7 +5,7 @@ import 'money_transaction.dart';
 class MoneyTransactionDao {
   MoneyTransactionDao(this._db);
 
-  final Database _db;
+  final DatabaseExecutor _db;
 
   Future<List<MoneyTransaction>> between(String start, String end) async {
     final rows = await _db.query(

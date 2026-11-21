@@ -49,7 +49,10 @@ void main() {
         home: const Scaffold(
           body: Align(
             alignment: Alignment.bottomCenter,
-            child: PatchNotesSheet(version: '1.9.4', buildNumber: '15'),
+            child: PatchNotesSheet(
+              version: '0.1.0-preview.11',
+              buildNumber: '26',
+            ),
           ),
         ),
       ),
@@ -57,11 +60,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Catatan rilis'), findsOneWidget);
-    expect(find.text('Versi 1.9.4 (15)'), findsOneWidget);
+    expect(find.text('Versi 0.1.0-preview.11 (26)'), findsOneWidget);
     expect(find.text('Terbaru'), findsOneWidget);
     expect(
       find.text(
-        'Widget tugas bisa di-scroll, jadi semua catatan bisa dilihat dan dicentang tanpa membuka aplikasi.',
+        'Hari dibuka ke Agenda. Catatan punya tampilan kotak atau daftar dan pilihan urutan.',
       ),
       findsOneWidget,
     );

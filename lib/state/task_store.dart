@@ -1,12 +1,17 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/day_note.dart';
+import '../data/note_dao.dart';
 import '../data/task.dart';
 import '../data/task_dao.dart';
 
 class TaskStore extends ChangeNotifier {
-  TaskStore(this._dao);
+  TaskStore(this._dao, {this._noteDao});
 
   final TaskDao _dao;
+  final NoteDao? _noteDao;
+  List<DayNote> _notes = const [];
+  int _noteReadVersion = 0;
 
   DateTime _selectedDate = today();
   List<Task> _tasks = const [];
@@ -22,6 +27,7 @@ class TaskStore extends ChangeNotifier {
   DateTime get selectedDate => _selectedDate;
   List<Task> get tasks => _tasks;
   List<Task> get nextDayTasks => _nextDayTasks;
+  List<DayNote> get notes => _notes;
   Map<String, int> get monthCounts => _monthCounts;
   bool get isLoaded => _loaded;
   bool get isToday => _selectedDate == today();
@@ -49,13 +55,14 @@ class TaskStore extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool includeNotes = true}) async {
     final day = dateKey(_selectedDate);
     final next = dateKey(_selectedDate.add(const Duration(days: 1)));
     final results = await Future.wait([
       _dao.forDate(day),
       _dao.forDate(next),
       _dao.earliestDate(),
+      if (includeNotes) _reloadNotes(),
     ]);
     _tasks = results[0] as List<Task>;
     _nextDayTasks = results[1] as List<Task>;
@@ -71,7 +78,7 @@ class TaskStore extends ChangeNotifier {
     final normalized = dateOnly(date);
     if (normalized == _selectedDate) return;
     _selectedDate = normalized;
-    await refresh();
+    await refresh(includeNotes: false);
     await ensureMonthLoaded(normalized);
   }
 
@@ -101,6 +108,73 @@ class TaskStore extends ChangeNotifier {
 
   Future<Task?> taskById(String id) => _dao.byId(id);
 
+  NoteDao get _noteStorage =>
+      _noteDao ?? (throw StateError('Penyimpanan catatan belum tersedia.'));
+
+  Future<void> _reloadNotes() async {
+    final dao = _noteDao;
+    if (dao == null) return;
+    final version = ++_noteReadVersion;
+    final notes = await dao.all();
+    if (version == _noteReadVersion) _notes = List.unmodifiable(notes);
+  }
+
+  Future<void> saveNote(DayNote note, {bool creating = false}) async {
+    await _noteStorage.save(note, creating: creating);
+    await _refreshAfterNoteCommit(note.id, note);
+  }
+
+  Future<void> deleteNote(String id) async {
+    await _noteStorage.delete(id);
+    await _refreshAfterNoteCommit(id, null);
+  }
+
+  Future<Task?> scheduleNote(
+    DayNote note, {
+    required DateTime date,
+    String? time,
+  }) async {
+    final task = await _noteStorage.schedule(note, date, time);
+    if (task != null) {
+      await _refreshAfterNoteCommit(note.id, null, agendaChanged: true);
+    }
+    return task;
+  }
+
+  Future<DayNote?> unscheduleTask(Task draft) async {
+    final note = await _noteStorage.unschedule(draft);
+    if (note != null) {
+      await _refreshAfterNoteCommit(note.id, note, agendaChanged: true);
+    }
+    return note;
+  }
+
+  Future<void> _refreshAfterNoteCommit(
+    String id,
+    DayNote? note, {
+    bool agendaChanged = false,
+  }) async {
+    // Keep the committed result visible even if a subsequent IO read fails.
+    _noteReadVersion++;
+    _notes = List.unmodifiable([
+      ?note,
+      ..._notes.where((existing) => existing.id != id),
+    ]);
+    try {
+      if (agendaChanged) {
+        await refresh();
+        await loadMonth(_selectedDate);
+      } else {
+        await _reloadNotes();
+        notifyListeners();
+      }
+    } catch (error, stack) {
+      debugPrint('Note committed, cache refresh failed: $error\n$stack');
+      if (agendaChanged) _revision++;
+      notifyListeners();
+    }
+  }
+
   Future<void> add(Task task) async {
     await _dao.insert(task);
     await refresh();
@@ -110,6 +184,28 @@ class TaskStore extends ChangeNotifier {
   Future<void> update(Task task) async {
     await _dao.update(task);
     _selectedDate = dateOnly(task.date);
+    await refresh();
+    await loadMonth(_selectedDate);
+  }
+
+  Future<void> updateOccurrence(
+    Task original,
+    Task updated, {
+    required bool following,
+  }) async {
+    if (original.isOccurrence) {
+      await _dao.updateOccurrence(original, updated, following: following);
+      await refresh();
+      await loadMonth(_selectedDate);
+    } else {
+      await update(updated);
+    }
+  }
+
+  Future<void> skipOccurrence(Task task) => delete(task.id);
+
+  Future<void> undoSkipOccurrence(Task task) async {
+    await _dao.undoSkipOccurrence(task);
     await refresh();
     await loadMonth(_selectedDate);
   }
@@ -136,10 +232,22 @@ class TaskStore extends ChangeNotifier {
     await loadMonth(_selectedDate);
   }
 
-  Future<Task> toggle(Task task) async {
-    final updated = task.copyWith(isDone: !task.isDone);
-    await _dao.setDone(task.id, updated.isDone);
-    await refresh();
+  Future<Task?> setCompletion(Task task, bool done) async {
+    final current = await _dao.byId(task.id);
+    if (current == null ||
+        current.scheduledDate != task.scheduledDate ||
+        current.isDone == done) {
+      return null;
+    }
+    final updated = current.copyWith(isDone: done);
+    await _dao.setDone(updated.id, done);
+    try {
+      await refresh();
+    } catch (error, stack) {
+      debugPrint('Agenda completion committed, refresh failed: $error\n$stack');
+      _revision++;
+      notifyListeners();
+    }
     return updated;
   }
 

@@ -3,8 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../data/category.dart';
 import '../state/money_store.dart';
+import 'action_sheet.dart';
 import 'category_icon.dart';
 import 'chevron.dart';
+import 'glass_controls.dart';
+import 'money_icon_catalog.dart';
+import 'money_icon_picker.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class ManageCategoriesPage extends StatefulWidget {
@@ -27,41 +32,51 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
   }
 
   Future<void> _add() async {
-    final name = await showModalBottomSheet<String>(
+    final kind = _kind;
+    final draft = await showModalBottomSheet<_CategoryDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (_) => _NameSheet(
-        title: _kind == 'income'
-            ? 'Kategori pemasukan'
-            : 'Kategori pengeluaran',
-        hint: 'Nama kategori',
+      barrierColor: EsokColors.scrim,
+      builder: (_) => _CategorySheet(
+        title: kind == 'income' ? 'Kategori pemasukan' : 'Kategori pengeluaran',
+        kind: kind,
       ),
     );
-    if (name == null || !mounted) return;
+    if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().addCategory(name, _kind);
+      await context.read<MoneyStore>().addCategory(
+        draft.name,
+        kind,
+        iconId: draft.iconId,
+      );
     } on NameConflictException {
       _message('Kategori itu sudah ada.');
     }
   }
 
-  Future<void> _rename(MoneyCategory category) async {
-    final name = await showModalBottomSheet<String>(
+  Future<void> _edit(MoneyCategory category) async {
+    final draft = await showModalBottomSheet<_CategoryDraft>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (_) => _NameSheet(
-        title: 'Ubah nama kategori',
-        hint: 'Nama kategori',
-        initial: category.name,
+      barrierColor: EsokColors.scrim,
+      builder: (_) => _CategorySheet(
+        title: 'Ubah kategori',
+        kind: category.kind,
+        initial: category,
       ),
     );
-    if (name == null || !mounted) return;
+    if (draft == null || !mounted) return;
     try {
-      await context.read<MoneyStore>().renameCategory(category.id, name);
+      await context.read<MoneyStore>().renameCategory(
+        category.id,
+        draft.name,
+        iconId: draft.iconId,
+        clearIcon: draft.iconId == null && category.iconId != null,
+      );
     } on NameConflictException {
       _message('Kategori itu sudah ada.');
     }
@@ -78,6 +93,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: EsokMotion.presentation(context),
       builder: (context) => AlertDialog(
         backgroundColor: EsokColors.canvas,
         title: const Text('Hapus kategori?'),
@@ -106,63 +122,33 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
     final store = context.read<MoneyStore>();
     final count = await store.categoryTransactionCount(category.id);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    final action = await showEsokActionSheet<Future<void> Function()>(
+      context,
+      title: category.name,
+      actions: [
+        EsokSheetAction(
+          () => _edit(category),
+          'Ubah nama atau ikon',
+          Icons.edit_outlined,
         ),
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _Handle(),
-              _ActionRow(
-                label: 'Ubah nama',
-                onTap: () {
-                  Navigator.pop(context);
-                  _rename(category);
-                },
-              ),
-              _ActionRow(
-                label: category.archived ? 'Aktifkan lagi' : 'Arsipkan',
-                onTap: () {
-                  Navigator.pop(context);
-                  store.setCategoryArchived(category.id, !category.archived);
-                },
-              ),
-              _ActionRow(
-                label: 'Hapus',
-                danger: true,
-                onTap: count > 0
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        _delete(category);
-                      },
-              ),
-              if (count > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
-                  child: Text(
-                    'Punya $count transaksi — arsipkan saja agar riwayat tetap punya label.',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.5,
-                      color: EsokColors.muted,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        EsokSheetAction(
+          () => store.setCategoryArchived(category.id, !category.archived),
+          category.archived ? 'Aktifkan lagi' : 'Arsipkan',
+          category.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
         ),
-      ),
+        EsokSheetAction(
+          () => _delete(category),
+          'Hapus',
+          Icons.delete_outline_rounded,
+          destructive: true,
+          enabled: count == 0,
+        ),
+      ],
+      footer: count > 0
+          ? 'Punya $count transaksi. Arsipkan agar nama kategori tetap terlihat di riwayat.'
+          : null,
     );
+    if (action != null && mounted) await action();
   }
 
   Future<void> _showArchived() async {
@@ -171,50 +157,39 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
         .where((category) => category.kind == _kind)
         .toList();
     if (archived.isEmpty) return;
-    await showModalBottomSheet<void>(
+    final selected = await showModalBottomSheet<MoneyCategory>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: EsokColors.canvas,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      barrierColor: EsokColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => EsokSheetPanel(
+        title: 'Kategori diarsipkan',
+        body: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 0, 16, 12),
+          shrinkWrap: true,
+          itemCount: archived.length,
+          separatorBuilder: (_, _) => const Divider(),
+          itemBuilder: (context, index) => Row(
             children: [
-              const Center(child: _Handle()),
-              const SizedBox(height: 8),
-              Text(
-                'Kategori diarsipkan',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: EsokColors.ink,
+              Expanded(child: Text(archived[index].name)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, archived[index]),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Aktifkan'),
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final category in archived)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(category.name),
-                  trailing: TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      store.setCategoryArchived(category.id, false);
-                    },
-                    child: const Text('Aktifkan'),
-                  ),
-                ),
             ],
           ),
         ),
       ),
     );
+    if (selected != null && mounted) {
+      await store.setCategoryArchived(selected.id, false);
+    }
   }
 
   Future<void> _reorder(
@@ -300,27 +275,21 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: EsokColors.track,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    _KindTab(
-                      label: 'Pengeluaran',
-                      selected: _kind == 'expense',
-                      onTap: () => setState(() => _kind = 'expense'),
-                    ),
-                    _KindTab(
-                      label: 'Pemasukan',
-                      selected: _kind == 'income',
-                      onTap: () => setState(() => _kind = 'income'),
-                    ),
-                  ],
-                ),
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 4),
+              child: Text(
+                'Kelompokkan transaksi, misalnya Makanan atau Gaji.',
+                style: TextStyle(fontSize: 13, color: EsokColors.muted),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
+              child: EsokSegmentedControl<String>(
+                value: _kind,
+                onChanged: (value) => setState(() => _kind = value),
+                segments: const [
+                  ('expense', 'Pengeluaran'),
+                  ('income', 'Pemasukan'),
+                ],
               ),
             ),
             Expanded(
@@ -359,62 +328,12 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage> {
                     alignment: Alignment.center,
                     child: Text(
                       'Lihat $archivedCount kategori diarsipkan',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: EsokColors.muted,
-                      ),
+                      style: TextStyle(fontSize: 12, color: EsokColors.muted),
                     ),
                   ),
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _KindTab extends StatelessWidget {
-  const _KindTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? EsokColors.canvas : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: selected
-                ? const [
-                    BoxShadow(
-                      color: Color(0x1414120E),
-                      blurRadius: 2,
-                      offset: Offset(0, 1),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: selected ? EsokColors.ink : EsokColors.muted,
-            ),
-          ),
         ),
       ),
     );
@@ -463,10 +382,7 @@ class _CategoryRow extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: CategoryIconView(
-              category: category,
-              size: 16,
-            ),
+            child: CategoryIconView(category: category, size: 16),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -478,10 +394,7 @@ class _CategoryRow extends StatelessWidget {
                   Expanded(
                     child: Text(
                       category.name,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        color: EsokColors.ink,
-                      ),
+                      style: TextStyle(fontSize: 14.5, color: EsokColors.ink),
                     ),
                   ),
                   FutureBuilder<int>(
@@ -511,39 +424,6 @@ class _CategoryRow extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        alignment: Alignment.centerLeft,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: onTap == null
-                ? EsokColors.chevron
-                : (danger ? EsokColors.lateInk : EsokColors.ink),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _Handle extends StatelessWidget {
   const _Handle();
 
@@ -561,25 +441,29 @@ class _Handle extends StatelessWidget {
   }
 }
 
-class _NameSheet extends StatefulWidget {
-  const _NameSheet({required this.title, required this.hint, this.initial});
+typedef _CategoryDraft = ({String name, String? iconId});
+
+class _CategorySheet extends StatefulWidget {
+  const _CategorySheet({required this.title, required this.kind, this.initial});
 
   final String title;
-  final String hint;
-  final String? initial;
+  final String kind;
+  final MoneyCategory? initial;
 
   @override
-  State<_NameSheet> createState() => _NameSheetState();
+  State<_CategorySheet> createState() => _CategorySheetState();
 }
 
-class _NameSheetState extends State<_NameSheet> {
+class _CategorySheetState extends State<_CategorySheet> {
   late final TextEditingController _controller;
+  String? _iconId;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initial ?? '');
+    _controller = TextEditingController(text: widget.initial?.name ?? '');
+    _iconId = widget.initial?.iconId;
   }
 
   @override
@@ -594,7 +478,7 @@ class _NameSheetState extends State<_NameSheet> {
       setState(() => _error = 'Nama tidak boleh kosong.');
       return;
     }
-    Navigator.of(context).pop(name);
+    Navigator.of(context).pop<_CategoryDraft>((name: name, iconId: _iconId));
   }
 
   @override
@@ -603,64 +487,81 @@ class _NameSheetState extends State<_NameSheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
-      padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Center(child: _Handle()),
-          Text(
-            widget.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: EsokColors.ink,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            onSubmitted: (_) => _submit(),
-            style: TextStyle(fontSize: 15, color: EsokColors.ink),
-            decoration: InputDecoration(
-              hintText: widget.hint,
-              errorText: _error,
-              filled: true,
-              fillColor: EsokColors.soft,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(22, 10, 22, 20 + bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Batal'),
+              const Center(child: _Handle()),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: EsokColors.ink,
+                ),
               ),
-              TextButton(
-                onPressed: _submit,
-                style: TextButton.styleFrom(foregroundColor: EsokColors.accent),
-                child: const Text('Simpan'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                onSubmitted: (_) => _submit(),
+                style: TextStyle(fontSize: 15, color: EsokColors.ink),
+                decoration: InputDecoration(
+                  hintText: 'Nama kategori',
+                  errorText: _error,
+                  filled: true,
+                  fillColor: EsokColors.soft,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: EsokColors.ink, width: 1.2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              MoneyIconField(
+                iconSet: MoneyIconSet.category,
+                categoryKind: widget.kind,
+                value: _iconId,
+                automatic: categoryIconSpec(
+                  null,
+                  categoryId: widget.initial?.id,
+                ),
+                onChanged: (value) => setState(() => _iconId = value),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Batal'),
+                  ),
+                  TextButton(
+                    onPressed: _submit,
+                    style: TextButton.styleFrom(
+                      foregroundColor: EsokColors.accent,
+                    ),
+                    child: const Text('Simpan'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -3,7 +3,18 @@ import 'dart:convert';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../ai/gemini_model_catalog.dart';
 import '../util/sound_library.dart';
+
+enum NoteSort {
+  edited('Terakhir diedit'),
+  newest('Terbaru dibuat'),
+  oldest('Terlama dibuat'),
+  title('Judul A–Z');
+
+  const NoteSort(this.label);
+  final String label;
+}
 
 class SettingsStore extends ChangeNotifier {
   static const _themeKey = 'theme_mode';
@@ -21,6 +32,8 @@ class SettingsStore extends ChangeNotifier {
   static const _soundImportsKey = 'sound_imports';
   static const _aiApiKey = 'ai_api_key';
   static const _aiModelKey = 'ai_model';
+  static const _notesGridKey = 'notes_grid';
+  static const _noteSortKey = 'note_sort';
 
   /// Alias model yang tidak ikut mati saat Google mempensiunkan versi tertentu.
   static const defaultAiModel = 'gemini-3.5-flash';
@@ -39,12 +52,16 @@ class SettingsStore extends ChangeNotifier {
   List<SoundOption> _importedSounds = const [];
   String _aiKey = '';
   String _aiModel = defaultAiModel;
+  bool _notesGrid = true;
+  NoteSort _noteSort = NoteSort.edited;
 
   ThemeMode get themeMode => _themeMode;
   bool get leadEnabled => _leadEnabled;
   int get leadMinutes => _leadMinutes;
   bool get hideAmounts => _hideAmounts;
   bool get soundEnabled => _soundEnabled;
+  bool get notesGrid => _notesGrid;
+  NoteSort get noteSort => _noteSort;
 
   List<SoundOption> get allSounds => [
     ...SoundLibrary.builtIn,
@@ -112,17 +129,36 @@ class SettingsStore extends ChangeNotifier {
         prefs.getString(_soundCheckKey) ??
         prefs.getString(_soundDoneLegacyKey) ??
         _soundCheckId;
-    _soundUncheckId =
-        prefs.getString(_soundUncheckKey) ?? _soundUncheckId;
-    _soundCompleteId =
-        prefs.getString(_soundCompleteKey) ?? _soundCompleteId;
+    _soundUncheckId = prefs.getString(_soundUncheckKey) ?? _soundUncheckId;
+    _soundCompleteId = prefs.getString(_soundCompleteKey) ?? _soundCompleteId;
     _importedSounds = _decodeImports(prefs.getString(_soundImportsKey));
     _aiKey = prefs.getString(_aiApiKey) ?? '';
-    final storedModel = prefs.getString(_aiModelKey);
-    _aiModel = (storedModel == null || storedModel == 'gemini-2.5-flash')
-        ? defaultAiModel
-        : storedModel;
+    _notesGrid = prefs.getBool(_notesGridKey) ?? true;
+    final savedSort = prefs.getString(_noteSortKey);
+    _noteSort = NoteSort.values.firstWhere(
+      (sort) => sort.name == savedSort,
+      orElse: () => NoteSort.edited,
+    );
+    _aiModel =
+        GeminiModelCatalog.canonicalId(prefs.getString(_aiModelKey) ?? '') ??
+        defaultAiModel;
     notifyListeners();
+  }
+
+  Future<void> setNotesGrid(bool value) async {
+    if (_notesGrid == value) return;
+    _notesGrid = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_notesGridKey, value);
+  }
+
+  Future<void> setNoteSort(NoteSort value) async {
+    if (_noteSort == value) return;
+    _noteSort = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_noteSortKey, value.name);
   }
 
   Future<void> setAiKey(String value) async {
@@ -134,12 +170,20 @@ class SettingsStore extends ChangeNotifier {
   }
 
   Future<void> setAiModel(String value) async {
-    final model = value.trim().isEmpty ? defaultAiModel : value.trim();
+    final model = value.trim().isEmpty
+        ? defaultAiModel
+        : GeminiModelCatalog.canonicalId(value);
+    if (model == null) {
+      throw const GeminiModelCatalogException('ID model Gemini tidak valid.');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString(_aiModelKey) != model &&
+        !await prefs.setString(_aiModelKey, model)) {
+      throw const GeminiModelCatalogException('Model Gemini gagal disimpan.');
+    }
     if (_aiModel == model) return;
     _aiModel = model;
     notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_aiModelKey, model);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

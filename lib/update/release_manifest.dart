@@ -8,10 +8,16 @@ class ReleaseManifest {
     required this.sizeBytes,
     required this.sha256,
     required this.preview,
+    this.assetName = apkName,
   });
 
   static const applicationId = 'io.github.fata69.ohmyesok';
   static const apkName = 'oh-my-esok-universal.apk';
+  static const _apkNamesByAbi = {
+    'arm64-v8a': 'oh-my-esok-arm64-v8a.apk',
+    'armeabi-v7a': 'oh-my-esok-armeabi-v7a.apk',
+    'x86_64': 'oh-my-esok-x86_64.apk',
+  };
   static const maximumApkBytes = 300 * 1024 * 1024;
   final String tag;
   final String versionName;
@@ -20,12 +26,15 @@ class ReleaseManifest {
   final int sizeBytes;
   final String sha256;
   final bool preview;
+  final String assetName;
 
   factory ReleaseManifest.parse(
     Object? value, {
     required String releaseTag,
     required bool prerelease,
     required bool allowPreview,
+    List<String> supportedAbis = const [],
+    bool Function(String name, int size, String sha256)? isPublished,
   }) {
     if (value is! Map<String, dynamic> ||
         value['schema'] != 1 ||
@@ -40,7 +49,7 @@ class ReleaseManifest {
         (preview && !allowPreview)) {
       throw const FormatException('Saluran pembaruan tidak sesuai.');
     }
-    final apk = value['apk'];
+    final universal = _readApk(value['apk'], apkName);
     final versionCode = value['versionCode'];
     final minSdk = value['minSdk'];
     final versionName = value['versionName'];
@@ -51,26 +60,55 @@ class ReleaseManifest {
         versionName is! String ||
         versionName.trim().isEmpty ||
         versionName.length > 80 ||
-        apk is! Map<String, dynamic> ||
-        apk['name'] != apkName ||
-        apk['sizeBytes'] is! int ||
-        (apk['sizeBytes'] as int) < 1 ||
-        (apk['sizeBytes'] as int) > maximumApkBytes ||
-        apk['sha256'] is! String ||
-        !RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(apk['sha256'] as String)) {
+        universal == null) {
       throw const FormatException(
         'Metadata APK tidak lengkap atau tidak valid.',
       );
+    }
+    if (isPublished != null &&
+        !isPublished(apkName, universal.size, universal.sha256)) {
+      throw const FormatException('Ukuran atau checksum rilis tidak sesuai.');
+    }
+    var selected = universal;
+    final variants = value['apkByAbi'];
+    if (isPublished != null && variants is Map<String, dynamic>) {
+      for (final abi in supportedAbis) {
+        final name = _apkNamesByAbi[abi];
+        if (name == null) continue;
+        final apk = _readApk(variants[abi], name);
+        if (apk != null && isPublished(name, apk.size, apk.sha256)) {
+          selected = apk;
+          break;
+        }
+      }
     }
     return ReleaseManifest(
       tag: releaseTag,
       versionName: versionName,
       versionCode: versionCode,
       minSdk: minSdk,
-      sizeBytes: apk['sizeBytes'] as int,
-      sha256: (apk['sha256'] as String).toLowerCase(),
+      sizeBytes: selected.size,
+      sha256: selected.sha256,
       preview: preview,
+      assetName: selected.name,
     );
+  }
+
+  static ({String name, int size, String sha256})? _readApk(
+    Object? value,
+    String name,
+  ) {
+    if (value is! Map<String, dynamic> || value['name'] != name) return null;
+    final size = value['sizeBytes'];
+    final hash = value['sha256'];
+    if (size is! int ||
+        size < 1 ||
+        size > maximumApkBytes ||
+        hash is! String ||
+        !RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(hash)) {
+      return null;
+    }
+    return (name: name, size: size, sha256: hash.toLowerCase());
   }
 
   bool newerThan(int installedCode) => versionCode > installedCode;
@@ -91,7 +129,11 @@ class ReleaseManifest {
       uri.pathSegments[2] == 'releases' &&
       uri.pathSegments[3] == 'download' &&
       RegExp(r'^[A-Za-z0-9._+-]{1,100}$').hasMatch(uri.pathSegments[4]) &&
-      {'ota-android.json', apkName}.contains(uri.pathSegments[5]) &&
+      {
+        'ota-android.json',
+        apkName,
+        ..._apkNamesByAbi.values,
+      }.contains(uri.pathSegments[5]) &&
       !uri.hasQuery &&
       !uri.hasFragment;
 

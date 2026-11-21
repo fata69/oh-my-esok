@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../data/category.dart';
+import 'gemini_model_catalog.dart';
 
 class ScanItem {
   const ScanItem({required this.asli, this.qty, this.harga});
@@ -208,9 +209,11 @@ Hanya isi bentuk skema yang diberikan. Semua hasil akan diperiksa manusia.
         'API key belum diisi. Buka Setelan → Pindai struk.',
       );
     }
-    final selectedModel = model.trim();
-    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]*$').hasMatch(selectedModel)) {
-      throw const ReceiptScanException('Nama model tidak valid. Periksa Setelan.');
+    final selectedModel = GeminiModelCatalog.canonicalId(model);
+    if (selectedModel == null) {
+      throw const ReceiptScanException(
+        'Nama model tidak valid. Periksa Setelan.',
+      );
     }
     final categoryData = {
       'pengeluaran': expenseCategories
@@ -220,35 +223,64 @@ Hanya isi bentuk skema yang diberikan. Semua hasil akan diperiksa manusia.
           .where((category) => !category.archived && category.kind == 'income')
           .map((category) => category.name).toList(),
     };
-    final body = jsonEncode({
-      'systemInstruction': {
-        'parts': [{'text': _instructions}],
-      },
-      'contents': [{
+    final contents = [
+      {
         'role': 'user',
         'parts': [
-          {'text': 'Daftar kategori untuk saran (data): ${jsonEncode(categoryData)}'},
-          {'inlineData': {'mimeType': _mimeOf(bytes), 'data': base64Encode(bytes)}},
+          {
+            'text': 'Daftar kategori untuk saran (data): ${jsonEncode(categoryData)}',
+          },
+          {
+            'inlineData': {'mimeType': _mimeOf(bytes), 'data': base64Encode(bytes)},
+          },
         ],
-      }],
-      'generationConfig': {
-        'maxOutputTokens': 8192,
-        'responseFormat': {
-          'text': {'mimeType': 'APPLICATION_JSON', 'schema': _schema},
-        },
       },
-    });
+    ];
     final transport = client ?? http.Client();
-    late http.Response response;
-    try {
-      response = await transport.post(
-        Uri.parse('$_endpoint/$selectedModel:generateContent'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey.trim(),
+    Future<http.Response> send({required bool structured}) {
+      final body = jsonEncode({
+        'systemInstruction': {
+          'parts': [
+            {
+              'text': structured
+                  ? _instructions
+                  : '$_instructions\nKembalikan tepat satu objek JSON valid tanpa Markdown. '
+                        'Ikuti skema ini: ${jsonEncode(_schema)}',
+            },
+          ],
         },
-        body: body,
-      ).timeout(const Duration(seconds: 30));
+        'contents': contents,
+        'generationConfig': {
+          'maxOutputTokens': 8192,
+          if (structured)
+            'responseFormat': {
+              'text': {'mimeType': 'APPLICATION_JSON', 'schema': _schema},
+            },
+        },
+      });
+      final request = http.Request(
+        'POST',
+        Uri.parse('$_endpoint/$selectedModel:generateContent'),
+      )
+        ..followRedirects = false
+        ..headers['Content-Type'] = 'application/json'
+        ..headers['x-goog-api-key'] = apiKey.trim()
+        ..body = body;
+      return transport.send(request).then(http.Response.fromStream);
+    }
+
+    late http.Response response;
+    var plainJson = false;
+    try {
+      const timeLimit = Duration(seconds: 30);
+      final elapsed = Stopwatch()..start();
+      response = await send(structured: true).timeout(timeLimit);
+      if (_rejectsStructuredOutput(response)) {
+        final remaining = timeLimit - elapsed.elapsed;
+        if (remaining <= Duration.zero) throw TimeoutException('');
+        plainJson = true;
+        response = await send(structured: false).timeout(remaining);
+      }
     } on SocketException {
       throw const ReceiptScanException('Tidak ada koneksi internet.');
     } on TimeoutException {
@@ -283,7 +315,7 @@ Hanya isi bentuk skema yang diberikan. Semua hasil akan diperiksa manusia.
 
     final Object? decoded;
     try {
-      decoded = jsonDecode(response.body);
+      decoded = jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
       throw const ReceiptScanException('Balasan AI tidak terbaca.');
     }
@@ -313,10 +345,56 @@ Hanya isi bentuk skema yang diberikan. Semua hasil akan diperiksa manusia.
         .whereType<String>()
         .join();
     return parseResponse(
-      text,
+      plainJson ? _unwrapJsonFence(text) : text,
       expenseCategories: expenseCategories,
       incomeCategories: incomeCategories,
     );
+  }
+
+  static bool _rejectsStructuredOutput(http.Response response) {
+    if (response.statusCode != 400) return false;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    } on FormatException {
+      return false;
+    }
+    final error = decoded is Map ? decoded['error'] : null;
+    if (error is! Map || error['message'] is! String) return false;
+    final status = error['status'];
+    if (status != null &&
+        status != 'INVALID_ARGUMENT' &&
+        status != 'FAILED_PRECONDITION') {
+      return false;
+    }
+    final message = (error['message'] as String).toLowerCase();
+    final fields = RegExp(
+      r'\b(?:response[\s_]*(?:format|mime[\s_]*type|(?:json[\s_]*)?schema)'
+      r'|structured[\s_-]+(?:outputs?|responses?)'
+      r'|json[\s_-]+(?:mode|outputs?|schema)|application[/_]json)\b',
+    );
+    final diagnostic = message.replaceAll(fields, 'structuredoption');
+    // Only explicit rejection of a structured setting qualifies. A validation
+    // failure within a supported schema, an image error, or an unrelated 400
+    // must not cause another generation attempt.
+    return RegExp(
+      r'''unknown name ["'`]structuredoption["'`] at ["'`]generation[_ ]?config["'`]''',
+    ).hasMatch(diagnostic) ||
+        RegExp(
+          r'''structuredoption["'`]?(?:\s*[:=]?\s*["'`]?structuredoption["'`]?)?\s+(?:(?:is|are)\s+)?(?:not supported|unsupported|not implemented)\b''',
+        ).hasMatch(diagnostic) ||
+        RegExp(
+          r'''\b(?:does not support|doesn't support|unsupported)[\s:]+(?:(?:the|requested|mime type)\s*[:=]?\s+)*["'`]?structuredoption\b''',
+        ).hasMatch(diagnostic);
+  }
+
+  static String _unwrapJsonFence(String text) {
+    final trimmed = text.trim();
+    final match = RegExp(
+      r'^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    return match?.group(1) ?? trimmed;
   }
 
   static ScanResult parseResponse(
