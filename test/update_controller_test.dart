@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jadwal/update/update_availability.dart';
 import 'package:jadwal/update/update_controller.dart';
 
 class _Headers extends Fake implements HttpHeaders {
@@ -144,6 +146,104 @@ void main() {
       'sha256': List.filled(64, 'a').join(),
     },
   };
+
+  test(
+    'automatic availability uses validation and is cached for six hours',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      var now = DateTime.utc(2026, 11, 18);
+      final client = _Client([
+        _Response(200, release()),
+        _Response(200, metadata()),
+      ]);
+      final first = UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => client),
+        now: () => now,
+      );
+      addTearDown(first.dispose);
+      await Future.wait([
+        first.checkAutomatically(),
+        first.checkAutomatically(),
+      ]);
+      expect(first.available, isTrue);
+      expect(client.requested, hasLength(2));
+
+      final failure = _Client([_Response(403, {})]);
+      final restored = UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => failure),
+        now: () => now,
+      );
+      addTearDown(restored.dispose);
+      now = now.add(const Duration(hours: 5));
+      await restored.checkAutomatically();
+      expect(restored.available, isTrue);
+      expect(failure.requested, isEmpty);
+      now = now.add(const Duration(hours: 1));
+      var changes = 0;
+      restored.addListener(() => changes++);
+      await restored.checkAutomatically();
+      await restored.checkAutomatically();
+      expect(failure.requested, hasLength(1));
+      expect(restored.available, isTrue);
+      expect(changes, 0);
+    },
+  );
+
+  test(
+    'first failed automatic check stays invisible and persists attempt',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final client = _Client([_Response(403, {})]);
+      UpdateAvailability state() => UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => client),
+        now: () => DateTime.utc(2026, 11, 18),
+      );
+      final first = state();
+      final restarted = state();
+      addTearDown(first.dispose);
+      addTearDown(restarted.dispose);
+      await first.checkAutomatically();
+      await restarted.checkAutomatically();
+      expect(first.available, isFalse);
+      expect(restarted.available, isFalse);
+      expect(client.requested, hasLength(1));
+    },
+  );
+
+  test(
+    'preview opt-in survives restart and opt-out clears the preview hint',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preview = release()..['prerelease'] = true;
+      final manifest = metadata()..['channel'] = 'preview';
+      final client = _Client([
+        _Response(200, [preview]),
+        _Response(200, manifest),
+      ]);
+      UpdateAvailability state() => UpdateAvailability(
+        controllerFactory: () => UpdateController.withClient(() => client),
+        now: () => DateTime.utc(2026, 11, 18),
+      );
+      final first = state();
+      final restarted = state();
+      final optedOut = state();
+      for (final availability in [first, restarted, optedOut]) {
+        addTearDown(availability.dispose);
+      }
+      await first.load();
+      expect(first.allowPreview, isFalse);
+      await first.setAllowPreview(true);
+      await restarted.checkAutomatically();
+      expect(restarted.allowPreview, isTrue);
+      expect(client.requested.first.queryParameters, {'per_page': '20'});
+      expect(restarted.available, isTrue);
+      await restarted.setAllowPreview(false);
+      await optedOut.load();
+      expect(restarted.available, isFalse);
+      expect(optedOut.allowPreview, isFalse);
+      expect(optedOut.available, isFalse);
+    },
+  );
   test(
     'new validated release becomes available with its release notes',
     () async {
@@ -170,6 +270,87 @@ void main() {
     expect(controller.phase, UpdatePhase.upToDate);
     expect(controller.release, isNull);
   });
+
+  test('selects and downloads a compatible standalone APK', () async {
+    const name = 'oh-my-esok-arm64-v8a.apk';
+    final bytes = [1, 2, 3];
+    final hash = sha256.convert(bytes).toString();
+    final info = metadata()
+      ..['apkByAbi'] = {
+        'arm64-v8a': {'name': name, 'sizeBytes': bytes.length, 'sha256': hash},
+      };
+    final tag = info['tag'];
+    final url =
+        'https://github.com/fata69/oh-my-esok/releases/download/$tag/$name';
+    final releaseData = release();
+    (releaseData['assets']! as List).add({
+      'name': name,
+      'size': bytes.length,
+      'digest': 'sha256:$hash',
+      'browser_download_url': url,
+    });
+    final client = _Client([
+      _Response(200, releaseData),
+      _Response(200, info),
+      _Response.bytes(200, bytes),
+    ]);
+    final cache = await Directory.systemTemp.createTemp('oh-my-esok-abi-test');
+    addTearDown(() => cache.delete(recursive: true));
+    const bridge = MethodChannel('ohmyesok/update');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(bridge, (call) async {
+      expect(call.method, 'checkApk');
+      expect(call.arguments['versionCode'], 21);
+      expect(call.arguments['sha256'], hash);
+      expect(call.arguments['sizeBytes'], bytes.length);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(bridge, null));
+    final controller = UpdateController.withClient(
+      () => client,
+      supportedAbis: () async => ['arm64-v8a', 'armeabi-v7a'],
+      temporaryDirectory: () async => cache,
+    );
+    addTearDown(controller.dispose);
+    await controller.check();
+    expect(controller.release?.assetName, name);
+    await controller.download();
+    expect(client.requested.last.toString(), url);
+    expect(controller.phase, UpdatePhase.ready);
+  });
+
+  test(
+    'falls back to universal if a compatible asset is absent or invalid',
+    () async {
+      const name = 'oh-my-esok-arm64-v8a.apk';
+      final info = metadata()
+        ..['apkByAbi'] = {
+          'arm64-v8a': {'name': name, 'sizeBytes': 3, 'sha256': 'b' * 64},
+        };
+      for (final invalidAsset in [
+        null,
+        {
+          'name': name,
+          'size': 3,
+          'browser_download_url': 'https://example.org/$name',
+        },
+      ]) {
+        final releaseData = release();
+        if (invalidAsset != null) {
+          (releaseData['assets']! as List).add(invalidAsset);
+        }
+        final controller = UpdateController.withClient(
+          () => _Client([_Response(200, releaseData), _Response(200, info)]),
+          supportedAbis: () async => ['arm64-v8a'],
+        );
+        addTearDown(controller.dispose);
+        await controller.check();
+        expect(controller.phase, UpdatePhase.available);
+        expect(controller.release?.assetName, 'oh-my-esok-universal.apk');
+      }
+    },
+  );
   test('metadata identity mismatch fails without offering the APK', () async {
     final info = metadata()..['applicationId'] = 'com.habib.jadwal';
     final controller = UpdateController.withClient(

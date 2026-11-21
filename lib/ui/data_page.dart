@@ -17,6 +17,7 @@ import '../state/money_store.dart';
 import '../state/task_store.dart';
 import '../widget/widget_sync.dart';
 import 'chevron.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class DataPage extends StatefulWidget {
@@ -69,9 +70,10 @@ class _DataPageState extends State<DataPage> {
     if (!mounted) return;
     final message = await showModalBottomSheet<String>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x5214120E),
+      barrierColor: EsokColors.scrim,
       builder: (_) => _ExportSheet(data: data),
     );
     if (message != null) _message(message);
@@ -96,29 +98,32 @@ class _DataPageState extends State<DataPage> {
 
       final confirmed = await showModalBottomSheet<bool>(
         context: context,
+        sheetAnimationStyle: EsokMotion.presentation(context),
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        barrierColor: const Color(0x5214120E),
+        barrierColor: EsokColors.scrim,
         builder: (_) => _ImportSheet(fileName: picked.name, data: data),
       );
       if (confirmed != true || !mounted) return;
 
       setState(() => _busy = true);
-      await BackupService.replaceAll(data);
-      await AutoBackup.runIfChanged(force: true);
-      if (!mounted) return;
       final taskStore = context.read<TaskStore>();
       final moneyStore = context.read<MoneyStore>();
+      await BackupService.replaceAll(data);
+      await WidgetSync.drainPendingToggles(taskStore);
+      await AutoBackup.runIfChanged(force: true);
+      if (!mounted) return;
       await taskStore.refresh();
+      await taskStore.loadMonth(taskStore.selectedDate);
       await moneyStore.refresh();
-      final db = await AppDatabase.open();
-      await TaskNotifier.instance.rescheduleAll(await TaskDao(db).all());
+      await TaskNotifier.instance.syncFromDatabase();
       await WidgetSync.push();
       await _loadStats();
       if (!mounted) return;
       setState(() => _busy = false);
       _message(
-        '${data.tasks.length} tugas, ${data.transactions.length} transaksi dimuat.',
+        '${data.tasks.length} agenda, ${data.notes.length} catatan, '
+        '${data.transactions.length} transaksi dimuat.',
       );
     } on FormatException catch (error) {
       if (mounted) _message(error.message);
@@ -132,11 +137,13 @@ class _DataPageState extends State<DataPage> {
   Future<void> _clearAll() async {
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: EsokMotion.presentation(context),
       builder: (context) => AlertDialog(
         backgroundColor: EsokColors.of(context).canvas,
         title: const Text('Hapus semua data?'),
         content: const Text(
-          'Semua tugas dan transaksi akan dihapus. Tindakan ini tidak bisa dibatalkan.',
+          'Seluruh agenda, catatan, dan data uang akan dihapus. '
+          'Tindakan ini tidak bisa dibatalkan.',
         ),
         actions: [
           TextButton(
@@ -314,9 +321,7 @@ class _StatCell extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
         decoration: BoxDecoration(
-          border: last
-              ? null
-              : Border(right: BorderSide(color: colors.line)),
+          border: last ? null : Border(right: BorderSide(color: colors.line)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,10 +428,7 @@ class _DataRow extends StatelessWidget {
                   if (detail != null)
                     Text(
                       detail!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colors.muted,
-                      ),
+                      style: TextStyle(fontSize: 11, color: colors.muted),
                     ),
                 ],
               ),
@@ -457,15 +459,11 @@ class _InfoBox extends StatelessWidget {
       ),
       child: Text.rich(
         TextSpan(
-          style: TextStyle(
-            fontSize: 11.5,
-            height: 1.7,
-            color: colors.muted,
-          ),
+          style: TextStyle(fontSize: 11.5, height: 1.7, color: colors.muted),
           children: [
             TextSpan(text: 'Berkas cadangan berisi '),
             TextSpan(
-              text: 'semua tugas, transaksi, kategori, dan sumber dana',
+              text: 'agenda, catatan, transaksi, kategori, dompet, dan Sampai Gajian',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: colors.inkSoft,
@@ -506,7 +504,10 @@ class _ExportSheetState extends State<_ExportSheet> {
     try {
       final file = await _file();
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], subject: 'Cadangan Esok'),
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: _format == 'csv' ? 'Transaksi Esok' : 'Cadangan Esok',
+        ),
       );
       if (mounted) Navigator.of(context).pop('Berkas siap dibagikan.');
     } catch (error) {
@@ -527,12 +528,15 @@ class _ExportSheetState extends State<_ExportSheet> {
         fileName: p.basename(file.path),
         bytes: await file.readAsBytes(),
         mimeType: _format == 'csv' ? 'text/csv' : 'application/json',
-        dialogTitle: 'Simpan cadangan Esok',
+        dialogTitle: _format == 'csv'
+            ? 'Simpan transaksi CSV'
+            : 'Simpan cadangan Esok',
       );
       if (!mounted) return;
       setState(() => _busy = false);
       if (uri != null) {
-        Navigator.of(context).pop('Cadangan disimpan.');
+        Navigator.of(context)
+            .pop(_format == 'csv' ? 'CSV disimpan.' : 'Cadangan disimpan.');
       }
     } catch (error) {
       if (mounted) {
@@ -546,10 +550,11 @@ class _ExportSheetState extends State<_ExportSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
+    final csv = _format == 'csv';
     return Container(
       decoration: BoxDecoration(
         color: colors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
       child: SafeArea(
@@ -579,10 +584,13 @@ class _ExportSheetState extends State<_ExportSheet> {
             ),
             const SizedBox(height: 5),
             Text(
-              '${widget.data.tasks.length} tugas · '
-              '${widget.data.transactions.length} transaksi · '
-              '${widget.data.categories.length} kategori · '
-              '${widget.data.accounts.length} sumber dana',
+              csv
+                  ? '${widget.data.transactions.length} transaksi'
+                  : '${widget.data.tasks.length} agenda · '
+                        '${widget.data.notes.length} catatan · '
+                        '${widget.data.transactions.length} transaksi · '
+                        '${widget.data.categories.length} kategori · '
+                        '${widget.data.accounts.length} dompet',
               style: TextStyle(fontSize: 11.5, color: colors.muted),
             ),
             const SizedBox(height: 18),
@@ -621,7 +629,9 @@ class _ExportSheetState extends State<_ExportSheet> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                'JSON bisa dibuka di editor teks dan berisi catatan uangmu dalam bentuk terbaca. Jangan simpan di folder yang dibagikan.',
+                csv
+                    ? 'CSV berisi tabel transaksi untuk Excel. Untuk memulihkan data di Oh My Esok, pilih cadangan JSON.'
+                    : 'JSON adalah cadangan lengkap yang bisa diimpor kembali ke Oh My Esok. Simpan di folder pribadi.',
                 style: TextStyle(
                   fontSize: 11.5,
                   height: 1.65,
@@ -727,15 +737,13 @@ class _ImportSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    final onlyCategoriesAndAccounts =
-        data.tasks.isEmpty && data.transactions.isEmpty;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.7,
       ),
       decoration: BoxDecoration(
         color: colors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
       child: SafeArea(
@@ -790,10 +798,12 @@ class _ImportSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${data.tasks.length} tugas · '
+                      '${data.tasks.length} agenda · '
+                      '${data.notes.length} catatan · '
                       '${data.transactions.length} transaksi · '
                       '${data.categories.length} kategori · '
-                      '${data.accounts.length} sumber dana',
+                      '${data.accounts.length} dompet'
+                      '${data.paydayPlan.isEmpty ? '' : ' · Sampai Gajian'}',
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.55,
@@ -811,12 +821,8 @@ class _ImportSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  onlyCategoriesAndAccounts
-                      ? 'Cadangan ini tidak berisi tugas atau transaksi. '
-                            'Tugas dan transaksi yang ada akan dihapus. '
-                            'Kategori dan sumber dana akan diganti.'
-                      : 'Data sekarang akan diganti seluruhnya. Setelah impor, '
-                            'notifikasi dijadwalkan ulang dan widget diperbarui.',
+                  'Data sekarang akan diganti seluruhnya. Setelah impor, '
+                  'notifikasi dijadwalkan ulang dan widget diperbarui.',
                   style: TextStyle(
                     fontSize: 11.5,
                     height: 1.65,
@@ -836,12 +842,7 @@ class _ImportSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(11),
                     ),
                   ),
-                  child: Text(
-                    onlyCategoriesAndAccounts
-                        ? 'Ganti data yang ada'
-                        : 'Ganti ${data.tasks.length} tugas & '
-                              '${data.transactions.length} transaksi',
-                  ),
+                  child: const Text('Ganti dengan cadangan'),
                 ),
               ),
             ],

@@ -1,12 +1,20 @@
-import 'dart:ui' as ui;
+import 'dart:async';
+import 'dart:io';
 
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../update/update_availability.dart';
+import 'agenda_loading.dart';
+import 'glass_controls.dart';
 import 'home_page.dart';
 import 'money_page.dart';
+import 'motion.dart';
 import 'reports_page.dart';
 import 'settings_page.dart';
+import 'tab_layout.dart';
 import 'theme.dart';
 
 class EsokShell extends StatefulWidget {
@@ -16,9 +24,32 @@ class EsokShell extends StatefulWidget {
   State<EsokShell> createState() => _EsokShellState();
 }
 
-class _EsokShellState extends State<EsokShell> {
+class _EsokShellState extends State<EsokShell> with WidgetsBindingObserver {
   final _home = GlobalKey<HomePageState>();
+  final _showNotes = ValueNotifier(false);
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!Platform.isAndroid) return;
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(UpdateAvailability.instance.checkAutomatically());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(UpdateAvailability.instance.checkAutomatically());
+    }
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isAndroid) WidgetsBinding.instance.removeObserver(this);
+    _showNotes.dispose();
+    super.dispose();
+  }
 
   void _selectTab(int index) {
     if (_index != index) setState(() => _index = index);
@@ -26,56 +57,43 @@ class _EsokShellState extends State<EsokShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    EsokColors.useDark(isDark);
+    EsokColors.useDark(Theme.of(context).brightness == Brightness.dark);
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     final routeIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
-    final overlay = SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarContrastEnforced: true,
-      systemNavigationBarIconBrightness: isDark
-          ? Brightness.light
-          : Brightness.dark,
-    );
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: overlay,
-      child: Scaffold(
-        backgroundColor: EsokColors.of(context).canvas,
-        // The extended body exposes the measured height of the chrome and
-        // the system inset. Bound the tabs with a persistent creation action.
-        extendBody: true,
-        body: IndexedStack(
-          index: _index,
-          children: [
-            _AboveDock(
-              child: HomePage(key: _home, onOpenMoney: () => _selectTab(1)),
+    return _ShellFrame(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _TabPane(
+            active: _index == 0,
+            child: HomePage(
+              key: _home,
+              onOpenMoney: () => _selectTab(1),
+              onNotesChanged: (notes) => _showNotes.value = notes,
             ),
-            const _AboveDock(child: MoneyPage()),
-            const _AboveDock(child: ReportsPage()),
-            const SettingsPage(),
-          ],
-        ),
-        bottomNavigationBar: keyboardVisible
-            ? null
-            : Visibility(
-                visible: routeIsCurrent,
-                // A modal route owns the controls while it is open. Keep
-                // the measured spacer so the underlying list doesn't jump.
-                maintainState: true,
-                maintainAnimation: true,
-                maintainSize: true,
-                child: _FloatingTabBar(
+          ),
+          _TabPane(active: _index == 1, child: const MoneyPage()),
+          _TabPane(active: _index == 2, child: const ReportsPage()),
+          _TabPane(active: _index == 3, child: const SettingsPage()),
+        ],
+      ),
+      dock: keyboardVisible
+          ? null
+          : Visibility(
+              visible: routeIsCurrent,
+              // Preserve the measured space while a modal owns the controls.
+              maintainState: true,
+              maintainAnimation: true,
+              maintainSize: true,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _showNotes,
+                builder: (context, notes, _) => _FloatingTabBar(
                   index: _index,
                   onChanged: _selectTab,
                   action: switch (_index) {
                     0 => (
-                      'Tambah catatan',
-                      () => _home.currentState?.createNote(),
+                      notes ? 'Tambah catatan' : 'Tambah agenda',
+                      () => _home.currentState?.createEntry(),
                     ),
                     1 => (
                       'Catat transaksi',
@@ -85,193 +103,461 @@ class _EsokShellState extends State<EsokShell> {
                   },
                 ),
               ),
-      ),
+            ),
     );
   }
 }
 
-class _AboveDock extends StatelessWidget {
-  const _AboveDock({required this.child});
+class EsokLoadingShell extends StatelessWidget {
+  const EsokLoadingShell({super.key, this.onRetry});
 
-  final Widget child;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
-      child: MediaQuery.removePadding(
-        context: context,
-        removeBottom: true,
-        child: child,
+    final loading = onRetry == null;
+    return _ShellFrame(
+      body: EsokTabLayout(
+        toolbarLeading: loading
+            ? const ExcludeSemantics(child: EsokPeriodHeader.loading())
+            : null,
+        headerAction: loading
+            ? ExcludeSemantics(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    EsokGlass(
+                      radius: const BorderRadius.all(Radius.circular(20)),
+                      shadow: false,
+                      child: SizedBox.square(
+                        dimension: 38,
+                        child: Icon(
+                          CupertinoIcons.ellipsis,
+                          size: 18,
+                          color: EsokColors.of(context).muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : null,
+        eyebrow: loading ? 'Oh My Esok' : null,
+        largeTitle: loading ? 'Hari Ini' : null,
+        belowHeader: loading
+            ? const ExcludeSemantics(child: DaySectionSwitch())
+            : null,
+        child: loading
+            ? const AgendaLoading(label: 'Membuka Oh My Esok')
+            : ListView(
+                padding: const EdgeInsets.all(EsokTabLayout.gutter),
+                children: [
+                  const Text('Aplikasi belum bisa dibuka.'),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      onPressed: onRetry,
+                      child: const Text('Coba lagi'),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+      dock: loading
+          ? IgnorePointer(
+              child: ExcludeFocus(
+                child: ExcludeSemantics(
+                  child: _FloatingTabBar(
+                    index: 0,
+                    onChanged: (_) {},
+                    action: ('Tambah agenda', () {}),
+                  ),
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+class _ShellFrame extends StatelessWidget {
+  const _ShellFrame({required this.body, required this.dock});
+
+  final Widget body;
+  final Widget? dock;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final overlay = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarContrastEnforced: false,
+      systemNavigationBarIconBrightness: isDark
+          ? Brightness.light
+          : Brightness.dark,
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlay,
+      child: Scaffold(
+        backgroundColor: EsokColors.of(context).canvas,
+        // Let content flow cleanly underneath the floating Liquid Glass dock.
+        extendBody: true,
+        body: body,
+        bottomNavigationBar: dock,
       ),
     );
   }
 }
 
-class _FloatingTabBar extends StatelessWidget {
+class _TabPane extends StatefulWidget {
+  const _TabPane({required this.active, required this.child});
+  final bool active;
+  final Widget child;
+  @override
+  State<_TabPane> createState() => _TabPaneState();
+}
+
+class _TabPaneState extends State<_TabPane> {
+  late bool _visible = widget.active;
+
+  @override
+  void didUpdateWidget(_TabPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active) _visible = true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = EsokMotion.reduced(context);
+    return Offstage(
+      offstage: !widget.active && (reduced || !_visible),
+      child: TickerMode(
+        enabled: widget.active || _visible,
+        child: ExcludeSemantics(
+          excluding: !widget.active,
+          child: IgnorePointer(
+            ignoring: !widget.active,
+            child: AnimatedOpacity(
+              opacity: widget.active ? 1 : 0,
+              duration: reduced
+                  ? Duration.zero
+                  : widget.active
+                  ? EsokMotion.enter
+                  : EsokMotion.exit,
+              curve: EsokMotion.settle,
+              onEnd: () {
+                if (widget.active || !_visible) return;
+                // A zero-duration change can finish while the child builds.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && !widget.active && _visible) {
+                    setState(() => _visible = false);
+                  }
+                });
+              },
+              child: AnimatedScale(
+                scale: reduced || widget.active ? 1.0 : 0.988,
+                duration: reduced ? Duration.zero : EsokMotion.enter,
+                curve: EsokMotion.settle,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FloatingTabBar extends StatefulWidget {
   const _FloatingTabBar({
     required this.index,
     required this.onChanged,
     this.action,
   });
 
-  static const _forceSolid = bool.fromEnvironment('ESOK_SOLID_NAV');
-  static const _radius = BorderRadius.all(Radius.circular(40));
-  static final _blur = ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10);
-  static const _tabs = [
-    ('Hari', Icons.event_note_outlined),
-    ('Uang', Icons.account_balance_wallet_outlined),
-    ('Laporan', Icons.bar_chart_outlined),
-    ('Setelan', Icons.settings_outlined),
-  ];
-
   final int index;
   final ValueChanged<int> onChanged;
   final (String, VoidCallback)? action;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final highContrast = MediaQuery.highContrastOf(context);
+  State<_FloatingTabBar> createState() => _FloatingTabBarState();
+}
+
+class _FloatingTabBarState extends State<_FloatingTabBar>
+    with TickerProviderStateMixin {
+  static const _forceSolid = bool.fromEnvironment('ESOK_SOLID_NAV');
+  static const _radius = BorderRadius.all(Radius.circular(40));
+  static const _tabs = [
+    ('Hari', CupertinoIcons.calendar, CupertinoIcons.calendar_today),
+    ('Uang', CupertinoIcons.creditcard, CupertinoIcons.creditcard_fill),
+    ('Laporan', CupertinoIcons.chart_bar, CupertinoIcons.chart_bar_fill),
+    ('Setelan', CupertinoIcons.gear_alt, CupertinoIcons.gear_alt_fill),
+  ];
+
+  static const _addSize = 52.0;
+  static const _gap = 8.0;
+  static const _revealDistance = 26.0;
+  static const _enter = SpringDescription(mass: 1, stiffness: 760, damping: 42);
+  static const _exit = SpringDescription(mass: 1, stiffness: 760, damping: 54);
+  // Retargetable Apple spring for the floating liquid selection lens.
+  static const _glide = SpringDescription(mass: 1, stiffness: 400, damping: 32);
+  late final _reveal = AnimationController.unbounded(
+    vsync: this,
+    value: _target,
+  );
+  late final _indicator = AnimationController.unbounded(
+    vsync: this,
+    value: widget.index.toDouble(),
+  );
+
+  bool _solid = false;
+  double get _target => widget.action == null ? 0 : 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final solid =
         _forceSolid ||
-        highContrast ||
-        MediaQuery.accessibleNavigationOf(context) ||
-        MediaQuery.disableAnimationsOf(context);
-    final tint = colors.surfaceContainerLow;
-    // A bright list item behind the dark bar needs a stronger scrim.
-    final tintOpacity = colors.brightness == Brightness.dark ? 0.96 : 0.92;
-    Widget glass({
-      Key? key,
-      required BorderRadius radius,
-      required Color surface,
-      required Widget child,
-    }) {
-      final layer = DecoratedBox(
-        decoration: BoxDecoration(
-          color: solid ? surface : surface.withValues(alpha: tintOpacity),
-          borderRadius: radius,
-          border: Border.all(
-            color: highContrast ? colors.outline : colors.outlineVariant,
-          ),
-        ),
-        child: child,
-      );
-      return ClipRRect(
-        key: key,
-        borderRadius: radius,
-        child: solid ? layer : BackdropFilter(filter: _blur, child: layer),
-      );
+        MediaQuery.highContrastOf(context) ||
+        EsokMotion.reduced(context);
+    if (solid && !_solid) {
+      _reveal.value = _target;
+      _indicator.value = widget.index.toDouble();
     }
+    _solid = solid;
+  }
 
-    final navigation = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 360),
-      child: glass(
-        key: const ValueKey('floating-navigation'),
-        radius: _radius,
-        surface: tint,
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            children: [
-              for (var i = 0; i < _tabs.length; i++)
-                Expanded(
-                  child: _NavItem(
-                    label: _tabs[i].$1,
-                    icon: _tabs[i].$2,
-                    selected: index == i,
-                    highContrast: highContrast,
-                    onTap: () => onChanged(i),
-                  ),
-                ),
-            ],
+  @override
+  void didUpdateWidget(covariant _FloatingTabBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.index != oldWidget.index) {
+      final destination = widget.index.toDouble();
+      if (_solid) {
+        _indicator.value = destination;
+      } else {
+        // Carry the velocity forward when a tap interrupts the glide.
+        _indicator.animateWith(
+          SpringSimulation(
+            _glide,
+            _indicator.value,
+            destination,
+            _indicator.velocity,
+            tolerance: const Tolerance(distance: .006, velocity: .2),
+            snapToEnd: true,
           ),
-        ),
+        );
+      }
+    }
+    if ((oldWidget.action == null) == (widget.action == null)) return;
+    if (_solid) {
+      _reveal.value = _target;
+      return;
+    }
+    _reveal.animateWith(
+      SpringSimulation(
+        _target == 1 ? _enter : _exit,
+        _reveal.value,
+        _target,
+        _reveal.velocity,
+        tolerance: const Tolerance(distance: .005, velocity: .08),
+        snapToEnd: true,
       ),
     );
-    final primary = action;
-    final ink = highContrast ? colors.onSurface : _dockInk(colors.brightness);
-    final button = primary == null
-        ? null
-        : SizedBox.square(
-            key: const ValueKey('bottom-create'),
-            dimension: 52,
-            child: glass(
-              radius: BorderRadius.circular(26),
-              surface: Color.alphaBlend(
-                ink.withValues(alpha: highContrast ? 0 : .09),
-                tint,
-              ),
-              child: Material(
-                type: MaterialType.transparency,
-                child: IconButton(
-                  tooltip: primary.$1,
-                  onPressed: primary.$2,
-                  icon: const Icon(Icons.add_rounded, size: 25),
-                  style: IconButton.styleFrom(
-                    foregroundColor: ink,
-                    shape: const CircleBorder(),
+  }
+
+  @override
+  void dispose() {
+    _indicator.dispose();
+    _reveal.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final dark = brightness == Brightness.dark;
+    final colors = EsokColors.of(context);
+    final highContrast = MediaQuery.highContrastOf(context);
+    final primary = widget.action;
+
+    // Organic translucent glass selection lens (no stiff sticker border).
+    final lensColor = highContrast
+        ? colors.ink
+        : dark
+        ? Colors.white.withValues(alpha: 0.13)
+        : Colors.black.withValues(alpha: 0.065);
+
+    final capsule = EsokGlass(
+      key: const ValueKey('floating-navigation'),
+      radius: _radius,
+      forceSolid: _solid,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: 1 / _tabs.length,
+                  heightFactor: 1,
+                  child: AnimatedBuilder(
+                    animation: _indicator,
+                    builder: (context, pill) {
+                      final velocityStretch = _solid
+                          ? 0.0
+                          : (_indicator.velocity.abs() * 0.011).clamp(
+                              0.0,
+                              0.14,
+                            );
+                      return FractionalTranslation(
+                        translation: Offset(
+                          _indicator.value.clamp(0.0, _tabs.length - 1.0),
+                          0,
+                        ),
+                        child: Transform.scale(
+                          scaleX: 1.0 + velocityStretch,
+                          scaleY: 1.0 - velocityStretch * 0.25,
+                          child: pill,
+                        ),
+                      );
+                    },
+                    child: DecoratedBox(
+                      key: const ValueKey('dock-selection'),
+                      decoration: BoxDecoration(
+                        color: lensColor,
+                        borderRadius: _radius,
+                        boxShadow: highContrast || dark
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: Colors.white.withValues(alpha: 0.55),
+                                  blurRadius: 0.5,
+                                  offset: const Offset(0, -0.5),
+                                ),
+                              ],
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          );
+            Row(
+              children: [
+                for (var i = 0; i < _tabs.length; i++)
+                  Expanded(
+                    child: _NavItem(
+                      label: _tabs[i].$1,
+                      icon: _tabs[i].$2,
+                      activeIcon: _tabs[i].$3,
+                      selected: widget.index == i,
+                      highContrast: highContrast,
+                      onTap: () => widget.onChanged(i),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final button = ApplePressable(
+      scale: 0.93,
+      child: EsokGlass(
+        radius: _radius,
+        forceSolid: _solid,
+        child: SizedBox.square(
+          key: primary == null ? null : const ValueKey('bottom-create'),
+          dimension: _addSize,
+          child: Material(
+            type: MaterialType.transparency,
+            child: IconButton(
+              tooltip: primary?.$1 ?? 'Tambah',
+              onPressed: primary?.$2,
+              icon: const Icon(CupertinoIcons.add, size: 25),
+              style: IconButton.styleFrom(
+                foregroundColor: colors.ink,
+                disabledForegroundColor: colors.muted,
+                shape: const CircleBorder(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
 
     return SafeArea(
       top: false,
-      // The OS navigation bar inset already protects both system modes.
-      // The larger gesture-detection zone would lift this tap-only control.
       maintainBottomViewPadding: true,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(12, button == null ? 0 : 8, 12, 6),
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
         child: Align(
           alignment: Alignment.bottomCenter,
           heightFactor: 1,
-          child: button == null
-              ? navigation
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth >= 424) {
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(child: navigation),
-                          const SizedBox(width: 12),
-                          button,
-                        ],
-                      );
-                    }
-                    return ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 360),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Align(
-                            alignment: AlignmentDirectional.centerEnd,
-                            child: button,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 368),
+            child: AnimatedBuilder(
+              animation: _reveal,
+              child: capsule,
+              builder: (context, nav) {
+                final progress = _reveal.value.clamp(0.0, 1.0);
+                final offset = (_revealDistance * (_reveal.value - 1)).clamp(
+                  -_revealDistance,
+                  2.0,
+                );
+                final hidden = primary == null || progress <= .001;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.centerRight,
+                  children: [
+                    Positioned(
+                      right: 0,
+                      child: ExcludeSemantics(
+                        excluding: hidden,
+                        child: IgnorePointer(
+                          ignoring: hidden,
+                          child: Opacity(
+                            opacity: progress,
+                            child: Transform.translate(
+                              offset: Offset(offset, 0),
+                              child: button,
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          navigation,
-                        ],
+                        ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(child: nav!),
+                        SizedBox(
+                          key: const ValueKey('create-accessory-slot'),
+                          width: (_addSize + _gap) * progress,
+                          height: _addSize,
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-Color _dockInk(Brightness brightness) => brightness == Brightness.dark
-    ? const Color(0xFF9DBDFF)
-    : const Color(0xFF1558D4);
-
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
     required this.icon,
+    required this.activeIcon,
     required this.selected,
     required this.highContrast,
     required this.onTap,
@@ -279,29 +565,25 @@ class _NavItem extends StatelessWidget {
 
   final String label;
   final IconData icon;
+  final IconData activeIcon;
   final bool selected;
   final bool highContrast;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final dark = colors.brightness == Brightness.dark;
-    final selectedInk = _dockInk(colors.brightness);
-    final selectedTint = dark
-        ? const Color(0xFF242D40)
-        : const Color(0xFFEAF0FA);
+    final colors = EsokColors.of(context);
     final inverted = selected && highContrast;
     final foreground = inverted
-        ? colors.surface
+        ? colors.canvas
         : selected
-        ? selectedInk
+        ? colors.tint
         : highContrast
-        ? colors.onSurface
-        : colors.onSurfaceVariant;
-    final interactionColor = selected
-        ? foreground.withValues(alpha: 0.08)
-        : colors.surfaceContainerHigh;
+        ? colors.ink
+        : colors.muted;
+    final keyboardFocusColor = selected
+        ? foreground.withValues(alpha: 0.10)
+        : colors.control;
     const radius = BorderRadius.all(Radius.circular(32));
     return Semantics(
       container: true,
@@ -312,20 +594,16 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
-        color: inverted
-            ? colors.onSurface
-            : selected
-            ? selectedTint
-            : Colors.transparent,
+        type: MaterialType.transparency,
         shape: const RoundedRectangleBorder(borderRadius: radius),
         animationDuration: Duration.zero,
         child: InkWell(
           onTap: onTap,
           borderRadius: radius,
           splashFactory: NoSplash.splashFactory,
-          focusColor: interactionColor,
-          hoverColor: interactionColor,
-          highlightColor: interactionColor,
+          focusColor: keyboardFocusColor,
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48),
             child: Padding(
@@ -334,7 +612,7 @@ class _NavItem extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 20, color: foreground),
+                  Icon(selected ? activeIcon : icon, size: 21, color: foreground),
                   const SizedBox(height: 2),
                   FittedBox(
                     fit: BoxFit.scaleDown,
@@ -342,9 +620,9 @@ class _NavItem extends StatelessWidget {
                       label,
                       maxLines: 1,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         height: 1.15,
-                        letterSpacing: 0,
+                        letterSpacing: -0.1,
                         color: foreground,
                         fontWeight: selected
                             ? FontWeight.w600

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,35 +19,17 @@ class WidgetSync {
 
   // Kotlin classes keep their upstream namespace; the installed app ID differs.
   static const androidProvider = 'com.habib.jadwal.TaskWidgetProvider';
+  static const _androidReminders = MethodChannel('esok/agenda-reminders');
+  static Future<void> _pendingDrain = Future<void>.value();
 
   static Future<void> push({bool reportErrors = false}) async {
     try {
       final db = await AppDatabase.open();
-      final dao = TaskDao(db);
-      final start = today();
-      final taskDays = <String, Object?>{};
-      for (var offset = 0; offset < 14; offset++) {
-        final date = start.add(Duration(days: offset));
-        final tasks = await dao.forDate(dateKey(date));
-        taskDays[dateKey(date)] = {
-          'total': tasks.length,
-          'done': tasks.where((task) => task.isDone).length,
-          'label': offset == 0
-              ? 'Hari ini'
-              : offset == 1
-              ? 'Besok'
-              : shortDayDate(date),
-          'tasks': tasks.map((task) => task.toWidgetJson()).toList(),
-        };
-      }
-
-      await _saveTaskSnapshot(
-        jsonEncode(taskDays),
-        reportErrors: reportErrors,
-      );
+      final now = today();
+      final taskDays = _agendaSnapshot(await TaskDao(db).all(), now);
+      await _saveTaskSnapshot(jsonEncode(taskDays), reportErrors: reportErrors);
       await HomeWidget.updateWidget(qualifiedAndroidName: androidProvider);
 
-      final now = today();
       final moneyDao = MoneyTransactionDao(db);
       final todayTransactions = await moneyDao.forDate(dateKey(now));
       final monthTransactions = await moneyDao.between(
@@ -68,6 +52,7 @@ class WidgetSync {
         'money_summary_json',
         jsonEncode({
           'today': todayOut,
+          'date': dateKey(now),
           'month': monthOut,
           'monthIn': monthIn,
           'masked': masked,
@@ -136,6 +121,55 @@ class WidgetSync {
     }
   }
 
+  static Map<String, Object?> _agendaSnapshot(List<Task> rows, DateTime now) {
+    final first = dateKey(DateTime(now.year, now.month, now.day - 1));
+    final last = dateKey(DateTime(now.year, now.month, now.day + 27));
+    final currentDay = dateKey(now);
+    final tasks = TaskDao.expandTasks(rows, first, last);
+    if (!tasks.any(
+      (task) => !task.isDone && task.scheduledDate.compareTo(currentDay) > 0,
+    )) {
+      // A one-time task or a series starting after the widget's regular window
+      // can still be the nearest appointment. A full week reaches each
+      // possible start weekday after its anchor date.
+      final laterDates =
+          rows
+              .where(
+                (task) =>
+                    !task.isDone &&
+                    !task.isSkipped &&
+                    task.scheduledDate.compareTo(last) > 0,
+              )
+              .map((task) => task.scheduledDate)
+              .toSet()
+              .toList()
+            ..sort();
+      for (final firstDate in laterDates) {
+        final date = DateTime.parse(firstDate);
+        final lastDate = dateKey(DateTime(date.year, date.month, date.day + 6));
+        final later = TaskDao.expandTasks(rows, firstDate, lastDate);
+        if (later.any((task) => !task.isDone)) {
+          tasks.addAll(later);
+          break;
+        }
+      }
+    }
+
+    final byDay = <String, List<Task>>{};
+    for (final task in tasks) {
+      byDay.putIfAbsent(task.scheduledDate, () => []).add(task);
+    }
+    return {
+      for (final entry in byDay.entries)
+        entry.key: {
+          'total': entry.value.length,
+          'done': entry.value.where((task) => task.isDone).length,
+          'label': shortDayDate(DateTime.parse(entry.key)),
+          'tasks': entry.value.map((task) => task.toWidgetJson()).toList(),
+        },
+    };
+  }
+
   static Future<void> _saveTaskSnapshot(
     String json, {
     required bool reportErrors,
@@ -149,8 +183,38 @@ class WidgetSync {
   static Future<bool> drainPendingToggles(
     TaskStore store, {
     bool reportErrors = false,
+  }) {
+    final drain = _pendingDrain.then(
+      (_) => _drainPendingToggles(store, reportErrors: reportErrors),
+    );
+    _pendingDrain = drain.then<void>((_) {}, onError: (Object _) {});
+    return drain;
+  }
+
+  static Future<bool> _drainPendingToggles(
+    TaskStore store, {
+    required bool reportErrors,
   }) async {
     try {
+      if (Platform.isAndroid) {
+        var changed = false;
+        for (var attempt = 0; attempt < 5; attempt++) {
+          final queued = await _androidReminders
+              .invokeMapMethod<String, Object?>('readWidgetToggles');
+          if (queued == null || queued.isEmpty) break;
+          for (final entry in queued.entries) {
+            final toggle = entry.value as Map<Object?, Object?>;
+            await store.setDone(entry.key, toggle['done'] as bool);
+          }
+          // A widget toggle can arrive while the SQLite write is awaiting IO.
+          await _androidReminders.invokeMethod<void>(
+            'ackWidgetToggles',
+            queued,
+          );
+          changed = true;
+        }
+        return changed;
+      }
       final raw = await HomeWidget.getWidgetData<String>('pending_toggles');
       if (raw == null || raw.isEmpty) return false;
 

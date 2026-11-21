@@ -1,22 +1,28 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../ai/gemini_model_catalog.dart';
 import '../backup/auto_backup.dart';
 import '../data/database.dart';
 import '../data/task_dao.dart';
 import '../notify/notifier.dart';
-import '../state/money_store.dart';
 import '../state/settings_store.dart';
 import '../widget/widget_sync.dart';
 import '../update/update_page.dart';
+import '../update/update_availability.dart';
+import 'ai_model_picker.dart';
+import 'chevron.dart';
 import 'data_page.dart';
+import 'glass_controls.dart';
 import 'manage_accounts.dart';
 import 'manage_categories.dart';
 import 'sound_page.dart';
 import 'tab_layout.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -31,6 +37,12 @@ class _SettingsPageState extends State<SettingsPage> {
   String _version = '—';
   DateTime? _lastBackup;
   bool _backupBusy = false;
+  static const _leadOptions = {
+    30: '30 menit sebelum tenggat',
+    60: '1 jam sebelum tenggat',
+    180: '3 jam sebelum tenggat',
+    1440: '1 hari sebelum tenggat',
+  };
 
   @override
   void initState() {
@@ -65,9 +77,8 @@ class _SettingsPageState extends State<SettingsPage> {
         content: Text(message),
         action: SnackBarAction(
           label: 'Simpan manual',
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const DataPage()),
-          ),
+          onPressed: () => Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: (_) => const DataPage())),
         ),
       ),
     );
@@ -76,7 +87,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String get _backupLabel {
     if (_backupBusy) return 'Menyimpan…';
     final at = _lastBackup;
-    if (at == null) return 'Belum ada · ketuk untuk membuat';
+    if (at == null) return 'Belum ada cadangan';
     final stamp = DateFormat('d MMM, HH.mm', 'id_ID').format(at);
     return 'Terakhir $stamp · Download/Oh My Esok';
   }
@@ -85,50 +96,56 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = context.read<SettingsStore>();
     final value = await showModalBottomSheet<int>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
-      builder: (_) => _Sheet(
-        title: 'Pengingat awal',
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final option in const [
-              (30, '30 menit sebelum tenggat'),
-              (60, '1 jam sebelum tenggat'),
-              (180, '3 jam sebelum tenggat'),
-              (1440, '1 hari sebelum tenggat'),
-            ])
-              _SheetChoice(
-                label: option.$2,
-                selected: settings.leadMinutes == option.$1,
-                onTap: () => Navigator.of(context).pop(option.$1),
-              ),
-          ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => _Sheet(
+        title: 'Jarak pengingat',
+        child: RadioGroup<int>(
+          groupValue: settings.leadMinutes,
+          onChanged: (minutes) => Navigator.pop(sheetContext, minutes),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final option in _leadOptions.entries)
+                RadioListTile<int>(
+                  contentPadding: EdgeInsets.zero,
+                  value: option.key,
+                  title: Text(option.value),
+                ),
+            ],
+          ),
         ),
       ),
     );
     if (value == null || !mounted) return;
-    await context.read<SettingsStore>().setLeadMinutes(value);
-    await _reschedule();
+    await settings.setLeadMinutes(value);
+    await _reschedule(settings);
   }
 
-  Future<void> _reschedule() async {
-    final settings = context.read<SettingsStore>();
-    final db = await AppDatabase.open();
-    final tasks = await TaskDao(db).all();
-    TaskNotifier.instance.configureLead(
-      enabled: settings.leadEnabled,
-      minutes: settings.leadMinutes,
-    );
-    await TaskNotifier.instance.configureSound(
-      settings.soundReminder.raw ?? 'coin',
-    );
-    await TaskNotifier.instance.rescheduleAll(tasks);
+  Future<void> _reschedule(SettingsStore settings) async {
+    try {
+      final db = await AppDatabase.open();
+      final tasks = await TaskDao(db).all();
+      TaskNotifier.instance.configureLead(
+        enabled: settings.leadEnabled,
+        minutes: settings.leadMinutes,
+      );
+      await TaskNotifier.instance.configureSound(
+        settings.soundReminder.raw ?? 'coin',
+      );
+      await TaskNotifier.instance.rescheduleAll(tasks);
+    } catch (_) {
+      _message('Pengingat belum diperbarui. Coba lagi.');
+    }
   }
 
   Future<void> _toggleLead(bool value) async {
-    await context.read<SettingsStore>().setLeadEnabled(value);
-    await _reschedule();
+    final settings = context.read<SettingsStore>();
+    await settings.setLeadEnabled(value);
+    await _reschedule(settings);
   }
 
   Future<void> _toggleHideAmounts(bool value) async {
@@ -150,11 +167,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _editAiKey() async {
     final settings = context.read<SettingsStore>();
-    final value = await _promptText(
-      title: 'API key Gemini',
-      hint: 'Tempel API key dari Google AI Studio',
-      initial: settings.aiKey,
-      obscure: true,
+    final value = await showModalBottomSheet<String>(
+      context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
+      backgroundColor: Colors.transparent,
+      barrierColor: EsokColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _AiKeySheet(initial: settings.aiKey),
     );
     if (value == null) return;
     await settings.setAiKey(value.trim());
@@ -169,112 +189,25 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _editAiModel() async {
     final settings = context.read<SettingsStore>();
-    final value = await _promptText(
-      title: 'Model Gemini',
-      hint: 'gemini-3.5-flash',
-      initial: settings.aiModel,
-      obscure: false,
+    final apiKey = settings.aiKey.trim();
+    final modelId = await showAiModelPicker(
+      context,
+      currentModel: settings.aiModel,
+      loadModels: apiKey.isEmpty ? null : () => GeminiModelCatalog.list(apiKey),
+      onEditKey: _editAiKey,
     );
-    if (value == null) return;
-    await settings.setAiModel(value);
-  }
-
-  Future<String?> _promptText({
-    required String title,
-    required String hint,
-    required String initial,
-    required bool obscure,
-  }) {
-    final controller = TextEditingController(text: initial);
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: EsokColors.scrim,
-      isScrollControlled: true,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: EsokColors.of(sheetContext).canvas,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 34,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 14),
-                    decoration: BoxDecoration(
-                      color: EsokColors.of(sheetContext).handle,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: EsokColors.of(sheetContext).ink,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  obscureText: obscure,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  style: TextStyle(fontSize: 14, color: EsokColors.of(sheetContext).ink),
-                  decoration: InputDecoration(
-                    hintText: hint,
-                    hintStyle: TextStyle(fontSize: 13, color: EsokColors.of(sheetContext).muted),
-                    filled: true,
-                    fillColor: EsokColors.of(sheetContext).soft,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 14,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 44,
-                  child: FilledButton(
-                    onPressed: () =>
-                        Navigator.of(sheetContext).pop(controller.text),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: EsokColors.of(sheetContext).accent,
-                      foregroundColor: EsokColors.of(sheetContext).onAccent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                    ),
-                    child: const Text('Simpan'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ).whenComplete(controller.dispose);
+    if (!mounted || modelId == null) return;
+    if (settings.aiKey.trim() != apiKey) {
+      _message('API key berubah. Buka lagi daftar model.');
+      return;
+    }
+    try {
+      await settings.setAiModel(modelId);
+    } on GeminiModelCatalogException catch (error) {
+      if (mounted) _message(error.message);
+    } catch (_) {
+      if (mounted) _message('Model Gemini gagal disimpan.');
+    }
   }
 
   Future<void> _openBattery() async {
@@ -288,8 +221,11 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _showFontLicense() async {
     await showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: EsokMotion.presentation(context),
       backgroundColor: Colors.transparent,
       barrierColor: EsokColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (context) => _Sheet(
         title: 'Lisensi font',
         child: Text(
@@ -311,128 +247,111 @@ class _SettingsPageState extends State<SettingsPage> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String get _leadLabel {
-    final settings = context.watch<SettingsStore>();
-    if (!settings.leadEnabled) return 'Nonaktif';
-    switch (settings.leadMinutes) {
-      case 30:
-        return '30 menit sebelum tenggat';
-      case 180:
-        return '3 jam sebelum tenggat';
-      case 1440:
-        return '1 hari sebelum tenggat';
-      default:
-        return '1 jam sebelum tenggat';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
     final settings = context.watch<SettingsStore>();
-    final store = context.watch<MoneyStore>();
-    final expenseCount = store.expenseCategories.length;
-    final incomeCount = store.incomeCategories.length;
-    final accountCount = store.activeAccounts.length;
-
-    return EsokTabLayout(
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
-          EsokTabLayout.gutter,
-          0,
-          EsokTabLayout.gutter,
-          EsokTabLayout.scrollBottomOf(context),
-        ),
+    final groups = [
+      _SettingsGroup(
+        label: 'Tampilan',
+        divided: false,
         children: [
-          const _SectionLabel('Tampilan'),
-          const SizedBox(height: 2),
-          Text(
-            'Tema',
-            style: TextStyle(
-              fontSize: 14.5,
-              color: colors.ink,
+          const _SettingsRow(title: 'Tema', icon: CupertinoIcons.brightness),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+            child: _ThemeSelector(
+              value: settings.themeMode,
+              onChanged: (mode) =>
+                  context.read<SettingsStore>().setThemeMode(mode),
             ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            'Ikuti setelan Android secara default',
-            style: TextStyle(fontSize: 11, color: colors.muted),
-          ),
-          const SizedBox(height: 12),
-          _ThemeSelector(
-            value: settings.themeMode,
-            onChanged: (mode) => context
-                .read<SettingsStore>()
-                .setThemeMode(mode),
-          ),
-          const _SectionLabel('Notifikasi'),
-          _SettingsRow(
+        ],
+      ),
+      _SettingsGroup(
+        label: 'Pengingat',
+        children: [
+          _SettingsRow.toggle(
             title: 'Pengingat awal',
-            subtitle: _leadLabel,
-            onTap: settings.leadEnabled ? _openLeadDuration : null,
-            trailing: _Toggle(
-              value: settings.leadEnabled,
-              onChanged: _toggleLead,
-            ),
+            icon: CupertinoIcons.bell,
+            subtitle: 'Tambahan sebelum tenggat',
+            value: settings.leadEnabled,
+            onToggle: _toggleLead,
+          ),
+          _SettingsRow(
+            title: 'Jarak pengingat',
+            icon: CupertinoIcons.clock,
+            subtitle: _leadOptions[settings.leadMinutes] ?? _leadOptions[60],
+            onTap: _openLeadDuration,
           ),
           _SettingsRow(
             title: 'Alarm presisi',
-            subtitle: 'Diperlukan agar notifikasi tepat waktu',
-            trailing: _Trailing('Atur ›'),
+            icon: CupertinoIcons.alarm,
+            subtitle: 'Izin Android untuk alarm tepat waktu',
             onTap: _openExactAlarm,
           ),
           _SettingsRow(
             title: 'Optimasi baterai',
-            subtitle: 'Agar One UI tidak menahan pengingat',
-            trailing: _Trailing('Atur ›'),
+            icon: CupertinoIcons.battery_75_percent,
+            subtitle: 'Jaga pengingat saat layar mati',
             onTap: _openBattery,
           ),
-          const _SectionLabel('Suara'),
-          _SettingsRow(
+        ],
+      ),
+      _SettingsGroup(
+        label: 'Suara',
+        children: [
+          _SettingsRow.toggle(
             title: 'Efek suara',
+            icon: CupertinoIcons.speaker_2,
             subtitle: 'Bunyi saat saldo berubah',
-            trailing: _Toggle(
-              value: settings.soundEnabled,
-              onChanged: _toggleSoundEnabled,
-            ),
+            value: settings.soundEnabled,
+            onToggle: _toggleSoundEnabled,
           ),
           _SettingsRow(
-            title: 'Suara & Notifikasi',
-            subtitle: 'Nada pengingat, apresiasi, dan saldo',
-            trailing: const _Trailing('›'),
+            title: 'Pilihan suara',
+            icon: CupertinoIcons.waveform,
+            subtitle: 'Nada agenda, pengingat, dan saldo',
+            onTap: () => Navigator.of(
+              context,
+            ).push(EsokMotion.route<void>((_) => const SoundPage())),
+          ),
+        ],
+      ),
+      _SettingsGroup(
+        label: 'Keuangan',
+        children: [
+          _SettingsRow(
+            title: 'Dompet',
+            icon: CupertinoIcons.creditcard,
+            subtitle: 'Saldo tunai, rekening, dan dompet digital',
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const SoundPage()),
+              EsokMotion.route<void>((_) => const ManageAccountsPage()),
             ),
           ),
-          const _SectionLabel('Data'),
           _SettingsRow(
             title: 'Kategori',
-            trailing: _Trailing('$expenseCount · $incomeCount ›'),
+            icon: CupertinoIcons.square_grid_2x2,
+            subtitle: 'Kelompok pemasukan dan pengeluaran',
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) =>
-                    const ManageCategoriesPage(initialKind: 'expense'),
+              EsokMotion.route<void>(
+                (_) => const ManageCategoriesPage(initialKind: 'expense'),
               ),
             ),
           ),
-          _SettingsRow(
-            title: 'Sumber dana',
-            trailing: _Trailing('$accountCount ›'),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const ManageAccountsPage(),
-              ),
-            ),
-          ),
+        ],
+      ),
+      _SettingsGroup(
+        label: 'Data',
+        children: [
           _SettingsRow(
             title: 'Ekspor & impor',
-            trailing: _Trailing('›'),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const DataPage()),
-            ),
+            icon: CupertinoIcons.arrow_up_arrow_down,
+            onTap: () => Navigator.of(
+              context,
+            ).push(EsokMotion.route<void>((_) => const DataPage())),
           ),
           _SettingsRow(
-            title: 'Cadangan otomatis',
+            title: 'Cadangkan sekarang',
+            icon: CupertinoIcons.cloud_upload,
             subtitle: _backupLabel,
             trailing: _backupBusy
                 ? const SizedBox(
@@ -440,53 +359,151 @@ class _SettingsPageState extends State<SettingsPage> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const _Trailing('Sekarang ›'),
-            onTap: _backupNow,
+                : null,
+            onTap: _backupBusy ? null : _backupNow,
           ),
-          const _SectionLabel('Pindai struk'),
+        ],
+      ),
+      _SettingsGroup(
+        label: 'Pindai struk',
+        children: [
           _SettingsRow(
             title: 'API key Gemini',
+            icon: CupertinoIcons.lock,
             subtitle: settings.aiReady
                 ? 'Tersimpan di perangkat ini'
                 : 'Belum diisi · pakai API key milikmu sendiri',
-            trailing: const _Trailing('Atur ›'),
             onTap: _editAiKey,
           ),
           _SettingsRow(
-            title: 'Model',
+            title: 'Model Gemini',
+            icon: CupertinoIcons.sparkles,
             subtitle: settings.aiModel,
-            trailing: const _Trailing('Atur ›'),
             onTap: _editAiModel,
           ),
-          const _SectionLabel('Privasi'),
-          _SettingsRow(
+        ],
+      ),
+      _SettingsGroup(
+        label: 'Privasi',
+        children: [
+          _SettingsRow.toggle(
             title: 'Sembunyikan nominal',
+            icon: CupertinoIcons.eye_slash,
             subtitle: 'Berlaku di widget uang dan Laporan',
-            trailing: _Toggle(
-              value: settings.hideAmounts,
-              onChanged: _toggleHideAmounts,
-            ),
+            value: settings.hideAmounts,
+            onToggle: _toggleHideAmounts,
           ),
-          const _SectionLabel('Tentang'),
-          _SettingsRow(
-            title: 'Pembaruan aplikasi',
-            subtitle: 'Versi $_version',
-            trailing: const _Trailing('Periksa ›'),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
-            ),
-          ),
+        ],
+      ),
+      _SettingsGroup(
+        label: 'Tentang',
+        children: [
           const _SettingsRow(
             title: 'Oh My Esok',
-            subtitle: 'Dikembangkan dari Esok oleh notSeraphimXD',
+            icon: CupertinoIcons.info,
+            subtitle: 'Dikembangkan dan dikelola oleh Fata (@fata69)',
+          ),
+          ListenableBuilder(
+            listenable: UpdateAvailability.instance,
+            builder: (context, _) {
+              final available = UpdateAvailability.instance.available;
+              return _SettingsRow(
+                title: 'Pembaruan aplikasi',
+                icon: CupertinoIcons.arrow_down_circle,
+                subtitle: available ? 'Pembaruan tersedia' : 'Versi $_version',
+                onTap: () => Navigator.of(context).push(
+                  EsokMotion.route<void>((_) => const UpdatePage()),
+                ),
+              );
+            },
           ),
           _SettingsRow(
             title: 'Lisensi font',
-            trailing: const _Trailing('OFL 1.1 ›'),
+            icon: CupertinoIcons.doc_text,
+            subtitle: 'SIL Open Font License 1.1',
             onTap: _showFontLicense,
           ),
         ],
       ),
+    ];
+
+    return EsokTabLayout(
+      eyebrow: 'Oh My Esok',
+      largeTitle: 'Setelan',
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              EsokTabLayout.gutter,
+              0,
+              EsokTabLayout.gutter,
+              EsokTabLayout.scrollBottomOf(context),
+            ),
+            children: groups,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsGroup extends StatelessWidget {
+  const _SettingsGroup({
+    required this.label,
+    required this.children,
+    this.divided = true,
+  });
+
+  final String label;
+  final List<Widget> children;
+  final bool divided;
+
+  @override
+  Widget build(BuildContext context) {
+    final highContrast = MediaQuery.highContrastOf(context);
+    final colors = EsokColors.of(context);
+    final separator = highContrast
+        ? colors.outline
+        : EsokColors.hairline(Theme.of(context).brightness);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionLabel(label),
+        Material(
+          color: colors.surface,
+          borderRadius: EsokColors.cardRadius,
+          clipBehavior: Clip.antiAlias,
+          child: ListTileTheme(
+            data: const ListTileThemeData(
+              contentPadding: EdgeInsets.symmetric(horizontal: 14),
+              minTileHeight: 50,
+              minVerticalPadding: 8,
+              horizontalTitleGap: 12,
+              minLeadingWidth: 22,
+              titleAlignment: ListTileTitleAlignment.center,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final (index, child) in children.indexed) ...[
+                  if (divided && index > 0)
+                    Divider(
+                      height: 1,
+                      thickness: 0.6,
+                      color: separator,
+                      indent: 48,
+                      endIndent: 0,
+                    ),
+                  child,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -499,123 +516,14 @@ class _ThemeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
-    const modes = [
-      (ThemeMode.light, 'Terang'),
-      (ThemeMode.system, 'Ikut sistem'),
-      (ThemeMode.dark, 'Gelap'),
-    ];
-    const radius = BorderRadius.all(Radius.circular(8));
-
-    return Material(
-      color: colors.soft,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            for (final (mode, label) in modes)
-              Expanded(
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  selected: mode == value,
-                  inMutuallyExclusiveGroup: true,
-                  label: label,
-                  onTap: () => onChanged(mode),
-                  excludeSemantics: true,
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      color: mode == value
-                          ? colors.accentContainer
-                          : Colors.transparent,
-                      borderRadius: radius,
-                    ),
-                    child: InkWell(
-                      onTap: () => onChanged(mode),
-                      borderRadius: radius,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 8,
-                          ),
-                          child: Center(
-                            heightFactor: 1,
-                            child: Text(
-                              label,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                letterSpacing: 0,
-                                fontWeight: FontWeight.w600,
-                                color: mode == value
-                                    ? colors.action
-                                    : colors.muted,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Toggle extends StatelessWidget {
-  const _Toggle({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
-    final disabled = MediaQuery.of(context).disableAnimations;
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: disabled
-            ? Duration.zero
-            : const Duration(milliseconds: 180),
-        curve: Curves.easeOutQuint,
-        width: 40,
-        height: 23,
-        decoration: BoxDecoration(
-          color: value ? colors.action : colors.line,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: AnimatedAlign(
-          duration: disabled
-              ? Duration.zero
-              : const Duration(milliseconds: 180),
-          curve: Curves.easeOutQuint,
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 18,
-            height: 18,
-            margin: const EdgeInsets.symmetric(horizontal: 2.5),
-            decoration: BoxDecoration(
-              color: value ? colors.onAction : colors.surface,
-              shape: BoxShape.circle,
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 2,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return EsokSegmentedControl<ThemeMode>(
+      value: value,
+      onChanged: onChanged,
+      segments: const [
+        (ThemeMode.light, 'Terang'),
+        (ThemeMode.system, 'Ikut sistem'),
+        (ThemeMode.dark, 'Gelap'),
+      ],
     );
   }
 }
@@ -623,70 +531,68 @@ class _Toggle extends StatelessWidget {
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({
     required this.title,
+    required this.icon,
     this.subtitle,
     this.trailing,
     this.onTap,
-  });
+  }) : value = null,
+       onToggle = null;
+
+  const _SettingsRow.toggle({
+    required this.title,
+    required this.icon,
+    required this.value,
+    required this.onToggle,
+    this.subtitle,
+  }) : trailing = null,
+       onTap = null;
 
   final String title;
+  final IconData icon;
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final bool? value;
+  final ValueChanged<bool>? onToggle;
 
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 58),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: colors.line)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(fontSize: 14.5, color: colors.ink),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.4,
-                        color: colors.muted,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            ?trailing,
-          ],
-        ),
-      ),
+    final text = Theme.of(context).textTheme;
+    final label = Text(
+      title,
+      style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
     );
-  }
-}
-
-class _Trailing extends StatelessWidget {
-  const _Trailing(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
-    return Text(
-      text,
-      style: TextStyle(fontSize: 11.5, color: colors.muted),
+    final detail = subtitle == null
+        ? null
+        : Text(subtitle!, style: text.bodyMedium);
+    final leading = Icon(icon, size: 20, color: colors.muted);
+    if (value case final checked?) {
+      return SwitchListTile(
+        value: checked,
+        onChanged: onToggle,
+        secondary: leading,
+        title: label,
+        subtitle: detail,
+      );
+    }
+    return Semantics(
+      container: true,
+      child: ListTile(
+        onTap: onTap,
+        leading: leading,
+        title: label,
+        subtitle: detail,
+        trailing:
+            trailing ??
+            (onTap == null
+                ? null
+                : EsokChevron(
+                    left: Directionality.of(context) == TextDirection.rtl,
+                    color: colors.muted,
+                    size: 16,
+                  )),
+      ),
     );
   }
 }
@@ -700,14 +606,14 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 24, bottom: 8),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.09,
-          color: colors.muted,
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 16, 12, 7),
+      child: Semantics(
+        container: true,
+        header: true,
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w700, color: colors.muted),
         ),
       ),
     );
@@ -723,85 +629,106 @@ class _Sheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EsokColors.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.canvas,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.fromLTRB(22, 10, 22, 22),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 34,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 14),
-                decoration: BoxDecoration(
-                  color: colors.handle,
-                  borderRadius: BorderRadius.circular(2),
+    final text = Theme.of(context).textTheme;
+    return Material(
+      color: colors.canvas,
+      borderRadius: EsokColors.sheetRadius,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 34,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.handle,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-              ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          title,
+                          style: text.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Tutup',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                child,
+              ],
             ),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: colors.ink,
-              ),
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SheetChoice extends StatelessWidget {
-  const _SheetChoice({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+class _AiKeySheet extends StatefulWidget {
+  const _AiKeySheet({required this.initial});
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final String initial;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = EsokColors.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Row(
-          children: [
-            Icon(
-              selected
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
-              size: 18,
-              color: selected ? colors.accent : colors.muted,
-            ),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                color: selected ? colors.ink : colors.inkSoft,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  State<_AiKeySheet> createState() => _AiKeySheetState();
+}
+
+class _AiKeySheetState extends State<_AiKeySheet> {
+  late final _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
+
+  @override
+  Widget build(BuildContext context) => _Sheet(
+    title: 'API key Gemini',
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          obscureText: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: InputDecoration(
+            labelText: 'API key dari Google AI Studio',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('Simpan'),
+        ),
+      ],
+    ),
+  );
 }

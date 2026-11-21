@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'motion.dart';
 import 'theme.dart';
 
 Future<TimeOfDay?> showTimePickerSheet(
@@ -9,9 +10,10 @@ Future<TimeOfDay?> showTimePickerSheet(
 }) {
   return showModalBottomSheet<TimeOfDay>(
     context: context,
+    sheetAnimationStyle: EsokMotion.presentation(context),
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: const Color(0x5214120E),
+    barrierColor: EsokColors.scrim,
     builder: (context) => TimePickerSheet(initial: initial),
   );
 }
@@ -66,15 +68,20 @@ class _TimePickerSheetState extends State<TimePickerSheet> {
       _hour = now.hour;
       _minute = now.minute;
     });
+    if (EsokMotion.reduced(context)) {
+      _hourController.jumpToItem(now.hour);
+      _minuteController.jumpToItem(now.minute);
+      return;
+    }
     _hourController.animateToItem(
       now.hour,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+      duration: EsokMotion.enter,
+      curve: EsokMotion.settle,
     );
     _minuteController.animateToItem(
       now.minute,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+      duration: EsokMotion.enter,
+      curve: EsokMotion.settle,
     );
   }
 
@@ -86,7 +93,7 @@ class _TimePickerSheetState extends State<TimePickerSheet> {
     return Container(
       decoration: BoxDecoration(
         color: EsokColors.canvas,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: EsokColors.sheetRadius,
       ),
       child: SafeArea(
         top: false,

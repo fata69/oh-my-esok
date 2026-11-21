@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show MethodCall, MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jadwal/backup/backup_service.dart';
+import 'package:jadwal/data/day_note.dart';
 import 'package:jadwal/data/money_transaction.dart';
+import 'package:jadwal/data/payday_dao.dart';
+import 'package:sqflite/sqflite.dart';
 
 const _detail = '[{"name":"Beras","qty":2,"price":15000}]';
 const _account = <String, Object?>{
@@ -85,6 +89,124 @@ Future<BackupData> _parse(Map<String, Object?> json) =>
     _parseText(jsonEncode(json));
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'v5 backups retain selected icons and accept missing or null keys',
+    () async {
+      final data = await _parse(
+        _backup(
+          categories: [_category],
+          accounts: [
+            _account,
+            {..._otherAccount, 'iconKey': 'bank-building'},
+          ],
+          transactions: [_transaction('purchase', detail: _detail)],
+        ),
+      );
+
+      final json = BackupService.toJsonMap(data);
+      expect(json['schemaVersion'], 5);
+      final accounts = json['accounts'] as List<Map<String, Object?>>;
+      expect(accounts.first.containsKey('iconKey'), isFalse);
+      expect(accounts.last['iconKey'], 'bank-building');
+
+      accounts.first['iconKey'] = null;
+      final restored = await _parse(json);
+      expect(restored.accounts.map((account) => account.iconKey), [
+        null,
+        'bank-building',
+      ]);
+      expect(restored.accounts.last.archived, isTrue);
+      expect(restored.accounts.last.openingBalance, 50000);
+      expect(restored.categories.single.iconId, 'makan');
+      expect(restored.transactions.single.detail, _detail);
+    },
+  );
+
+  test('v5 backup with a non-string account icon is rejected', () async {
+    await expectLater(
+      _parse(
+        _backup(
+          accounts: [
+            {..._account, 'iconKey': 42},
+          ],
+        ),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test(
+    'v5 upgrade and category-only restore preserve a cleared icon',
+    () async {
+      databaseFactory = databaseFactorySqflitePlugin;
+      addTearDown(() => databaseFactory = null);
+      const channel = MethodChannel('com.tekartik.sqflite');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final writes = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        switch (call.method) {
+          case 'getDatabasesPath':
+            return 'synthetic-ledger';
+          case 'openDatabase':
+            return 1;
+          case 'query':
+            return [
+              {'user_version': 5},
+            ];
+          case 'execute':
+          case 'batch':
+            writes.add(call);
+            return null;
+          case 'insert':
+          case 'update':
+            writes.add(call);
+            return 1;
+          default:
+            throw StateError('Unexpected SQLite method: ${call.method}');
+        }
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final backup = await _parse(
+        _backup(
+          categories: [
+            {..._category, 'iconId': null},
+          ],
+        ),
+      );
+      await BackupService.replaceAll(backup);
+
+      final migration = writes.where((call) => call.method == 'execute');
+      final sql = migration.map((call) => call.arguments['sql']);
+      expect(sql.where((s) => s.toString().startsWith('ALTER TABLE')), [
+        'ALTER TABLE accounts ADD COLUMN icon_key TEXT',
+        'ALTER TABLE tasks ADD COLUMN repeat_weekdays TEXT',
+        'ALTER TABLE tasks ADD COLUMN series_id TEXT',
+        'ALTER TABLE tasks ADD COLUMN repeat_until TEXT',
+        'ALTER TABLE tasks ADD COLUMN is_skipped INTEGER NOT NULL DEFAULT 0',
+      ]);
+      expect(sql, contains('PRAGMA user_version = 8'));
+      expect(
+        sql.any((s) => s.toString().contains('CREATE TABLE day_notes')),
+        isTrue,
+      );
+      expect(
+        sql.any((s) => s.toString().contains('CREATE TABLE planned_bills')),
+        isTrue,
+      );
+      final category = writes.singleWhere((call) => call.method == 'insert');
+      expect(category.arguments['sql'], contains('icon_id) VALUES'));
+      expect(category.arguments['sql'], endsWith('NULL)'));
+      final seed = writes.singleWhere((call) => call.method == 'batch');
+      final operations = seed.arguments['operations'] as List<Object?>;
+      expect(operations, hasLength(1));
+      expect(operations.single.toString(), contains('INTO accounts'));
+    },
+  );
+
   test('Esok v5 preserves optional transaction detail', () async {
     final data = await _parse(
       _backup(
@@ -151,6 +273,91 @@ void main() {
     expect(data.isEmpty, isFalse);
     expect(data.accounts.single.id, 'acc-tunai');
     expect(data.categories.single.id, 'cat-exp-makan');
+  });
+
+  test('v7 backup preserves undated notes and their edit timestamps', () async {
+    const note = DayNote(
+      id: 'note-1',
+      title: '',
+      body: 'Ambil paket\nBawa identitas.',
+      createdAt: 1000,
+      updatedAt: 2000,
+    );
+    final json = BackupService.toJsonMap(
+      const BackupData(
+        tasks: [],
+        categories: [],
+        accounts: [],
+        transactions: [],
+        notes: [note],
+      ),
+    );
+    expect(json['schemaVersion'], 7);
+    final restored = await _parse(json);
+    expect(restored.isEmpty, isFalse);
+    expect(restored.notes.single.toMap(), note.toMap());
+    expect(restored.tasks, isEmpty);
+    expect(restored.notes.single.displayTitle, 'Ambil paket');
+
+    await expectLater(
+      _parse({
+        ...json,
+        'tasks': [
+          {..._task, 'id': note.id},
+        ],
+        'counts': {},
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('v7 backup round trips a bill with the matching payment', () async {
+    final data = await _parse(
+      _backup(
+        accounts: [_account],
+        transactions: [_transaction('payment')..['categoryId'] = null],
+      ),
+    );
+    const plan = PaydayPlan(
+      schedule: PaydaySchedule(
+        accountId: 'acc-tunai',
+        date: '2026-11-23',
+        monthly: true,
+      ),
+      bills: [
+        PlannedBill(
+          id: 'bill',
+          name: 'Internet',
+          amount: 30000,
+          accountId: 'acc-tunai',
+          date: '2026-11-16',
+          monthly: true,
+        ),
+      ],
+      payments: [
+        BillPayment(
+          billId: 'bill',
+          dueDate: '2026-11-16',
+          transactionId: 'payment',
+        ),
+      ],
+    );
+    final json = BackupService.toJsonMap(
+      BackupData(
+        tasks: data.tasks,
+        categories: data.categories,
+        accounts: data.accounts,
+        transactions: data.transactions,
+        paydayPlan: plan,
+      ),
+    );
+    expect(json['schemaVersion'], 7);
+    expect((await _parse(json)).paydayPlan.toJson(), plan.toJson());
+
+    await expectLater(
+      _parse({...json, 'transactions': [], 'counts': {}}),
+      throwsFormatException,
+    );
   });
 
   test('impossible task dates and times fail before overwrite', () async {

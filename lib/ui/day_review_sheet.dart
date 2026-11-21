@@ -1,30 +1,53 @@
-import 'package:material_ui/material_ui.dart';
+import 'dart:io';
 
+import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+
+import '../receipt/receipt_inbox.dart';
 import '../data/task.dart';
 import '../state/day_review.dart';
+import '../state/money_store.dart';
+import '../state/payday_projection.dart';
 import '../util/format.dart';
+import 'motion.dart';
 
 Future<void> showDayReviewSheet(
   BuildContext context, {
   required DateTime date,
   required DayReviewService service,
+  Future<void> Function(File)? reviewReceipts,
+  Future<void> Function()? onOpenPayday,
 }) {
   return showModalBottomSheet<void>(
     context: context,
+    sheetAnimationStyle: EsokMotion.presentation(context),
     isScrollControlled: true,
     isDismissible: false,
     enableDrag: false,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => DayReviewSheet(date: dateOnly(date), service: service),
+    builder: (_) => DayReviewSheet(
+      date: dateOnly(date),
+      service: service,
+      reviewReceipts: reviewReceipts,
+      onOpenPayday: onOpenPayday,
+    ),
   );
 }
 
 class DayReviewSheet extends StatefulWidget {
-  const DayReviewSheet({super.key, required this.date, required this.service});
+  const DayReviewSheet({
+    super.key,
+    required this.date,
+    required this.service,
+    this.reviewReceipts,
+    this.onOpenPayday,
+  });
 
   final DateTime date;
   final DayReviewService service;
+  final Future<void> Function(File)? reviewReceipts;
+  final Future<void> Function()? onOpenPayday;
 
   @override
   State<DayReviewSheet> createState() => _DayReviewSheetState();
@@ -33,6 +56,7 @@ class DayReviewSheet extends StatefulWidget {
 class _DayReviewSheetState extends State<DayReviewSheet>
     with WidgetsBindingObserver {
   late Future<DayReview> _future;
+  Future<List<File>>? _receiptDrafts;
   bool _busy = false;
   bool _prompting = false;
   bool _reloadOnReturn = false;
@@ -47,6 +71,54 @@ class _DayReviewSheetState extends State<DayReviewSheet>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _future = widget.service.load(widget.date);
+    _loadReceiptDrafts();
+  }
+
+  void _loadReceiptDrafts() {
+    if (widget.reviewReceipts != null && widget.date == today()) {
+      _receiptDrafts = ReceiptInbox.pendingImages();
+    }
+  }
+
+  Future<void> _reviewReceipt(File file) async {
+    setState(() => _prompting = true);
+    try {
+      await widget.reviewReceipts?.call(file);
+      if (!mounted) return;
+      setState(_loadReceiptDrafts);
+      _reload();
+    } finally {
+      _finishAction();
+    }
+  }
+
+  Future<void> _discardReceipt(File file) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Buang draf struk?'),
+        content: const Text(
+          'Salinan yang dibagikan ke Oh My Esok akan dihapus.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Buang'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted || _locked) return;
+    try {
+      await ReceiptInbox.discard(file);
+      if (mounted) setState(_loadReceiptDrafts);
+    } catch (_) {
+      if (mounted) setState(() => _notice = 'Draf belum bisa dibuang.');
+    }
   }
 
   @override
@@ -114,6 +186,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
           preview.scheduledDateTime?.isBefore(DateTime.now()) ?? false;
       final confirmed = await showDialog<bool>(
         context: context,
+        animationStyle: EsokMotion.presentation(context),
         builder: (dialogContext) => AlertDialog(
           title: const Text('Pindahkan catatan?'),
           content: SingleChildScrollView(
@@ -200,6 +273,7 @@ class _DayReviewSheetState extends State<DayReviewSheet>
 
   Widget _buildReview(DayReview review) {
     final incomplete = review.incompleteTasks;
+    final typography = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -252,8 +326,44 @@ class _DayReviewSheetState extends State<DayReviewSheet>
           ),
           const Divider(height: 1),
         ],
-        const SizedBox(height: 16),
-        const Text('Pindahkan satu per satu, atau selesai tanpa perubahan.'),
+        if (_receiptDrafts case final drafts?)
+          FutureBuilder<List<File>>(
+            future: drafts,
+            builder: (context, snapshot) {
+              final files = snapshot.data ?? const [];
+              if (files.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 24),
+                  Text('Draf struk', style: typography.titleMedium),
+                  for (final file in files)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: SizedBox.square(
+                        dimension: 40,
+                        child: Image.file(
+                          file,
+                          cacheWidth: 96,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) =>
+                              const Icon(Icons.receipt_long_outlined),
+                        ),
+                      ),
+                      title: const Text('Periksa struk'),
+                      onTap: _locked ? null : () => _reviewReceipt(file),
+                      trailing: IconButton(
+                        tooltip: 'Buang draf struk',
+                        onPressed: _locked ? null : () => _discardReceipt(file),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        if (widget.onOpenPayday != null && widget.date == today())
+          _UpcomingBills(locked: _locked, onOpenPayday: widget.onOpenPayday!),
       ],
     );
   }
@@ -395,6 +505,48 @@ class _DayReviewSheetState extends State<DayReviewSheet>
           ),
         ),
       ),
+    );
+  }
+}
+
+class _UpcomingBills extends StatelessWidget {
+  const _UpcomingBills({required this.locked, required this.onOpenPayday});
+
+  final bool locked;
+  final Future<void> Function() onOpenPayday;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<MoneyStore>();
+    final plan = store.paydayPlan;
+    final schedule = plan?.schedule;
+    if (plan == null || schedule == null) return const SizedBox.shrink();
+    final bills = PaydayProjection.build(
+      plan,
+      today: dateKey(today()),
+      balance: store.balanceForAccount(schedule.accountId),
+    ).items.where((item) => item.payment == null).take(2).toList();
+    if (bills.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(
+          'Tagihan sebelum gajian',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        for (final item in bills)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(item.bill.name),
+            subtitle: Text(
+              '${dateTitle(DateTime.parse(item.dueDate))} · '
+              '${rupiahText(item.bill.amount)}',
+            ),
+            onTap: locked ? null : onOpenPayday,
+            trailing: const Icon(Icons.chevron_right_rounded),
+          ),
+      ],
     );
   }
 }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/task_item"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
@@ -7,7 +8,7 @@
     <LinearLayout
         android:id="@+id/task_row"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="48dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -16,19 +17,41 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
+            android:paddingStart="4dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/task_title"
+            <ViewFlipper
+                android:id="@+id/task_titles"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif"
-                android:maxLines="1"
-                android:textColor="@color/widget_ink"
-                android:textSize="16sp" />
+                android:animateFirstView="false"
+                android:inAnimation="@anim/agenda_widget_mark_in"
+                android:outAnimation="@anim/agenda_widget_mark_out">
+
+                <TextView
+                    android:id="@+id/task_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="@color/agenda_widget_ink"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/task_done_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="@color/agenda_widget_muted"
+                    android:textSize="14sp" />
+            </ViewFlipper>
 
             <TextView
                 android:id="@+id/task_time"
@@ -37,22 +60,23 @@
                 android:layout_marginStart="8dp"
                 android:fontFamily="sans-serif"
                 android:fontFeatureSettings="tnum"
-                android:textColor="@color/widget_muted"
-                android:textSize="12.5sp" />
+                android:textColor="@color/agenda_widget_muted"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <ImageView
             android:id="@+id/task_check"
             android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:contentDescription="@string/widget_toggle"
-            android:padding="10dp"
+            android:layout_height="48dp"
+            android:padding="11dp"
             android:src="@drawable/widget_check_off" />
     </LinearLayout>
 
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/widget_line"
-        android:contentDescription="@null" />
+        android:layout_marginEnd="4dp"
+        android:background="@color/agenda_widget_line"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no" />
 </LinearLayout>

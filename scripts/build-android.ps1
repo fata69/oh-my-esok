@@ -10,7 +10,7 @@ unsigned; passwords go into the environment of the apksigner child only.
 This script never publishes or posts a QA status.
 #>
 [CmdletBinding()]
-param()
+param([string]$OutputDirectory = 'dist')
 
 $ErrorActionPreference = 'Stop'
 
@@ -60,7 +60,6 @@ function Sign-Apk {
         foreach ($name in $passwordVariables) {
             [void]$start.Environment.Remove($name)
         }
-        $signing.Clear()
     }
     try {
         $signer.WaitForExit()
@@ -110,48 +109,71 @@ try {
     Invoke-Checked flutter @('pub', 'get', '--enforce-lockfile')
     Invoke-Checked flutter @('analyze', '--no-pub')
     Invoke-Checked flutter @('test', '--no-pub', '--reporter', 'expanded')
-    $unsignedApk = Join-Path $repoRoot 'build/app/outputs/flutter-apk/app-release.apk'
-    if (Test-Path -LiteralPath $unsignedApk -PathType Leaf) {
-        Remove-Item -LiteralPath $unsignedApk
+    $flutterApkDirectory = Join-Path $repoRoot 'build/app/outputs/flutter-apk'
+    $artifacts = [ordered]@{
+        universal = 'app-release.apk'
+        'arm64-v8a' = 'app-arm64-v8a-release.apk'
+        'armeabi-v7a' = 'app-armeabi-v7a-release.apk'
+        x86_64 = 'app-x86_64-release.apk'
     }
-    Invoke-Checked flutter @(
+    foreach ($file in $artifacts.Values) {
+        $previous = Join-Path $flutterApkDirectory $file
+        if (Test-Path -LiteralPath $previous -PathType Leaf) {
+            Remove-Item -LiteralPath $previous
+        }
+    }
+    $buildArguments = @(
         'build', 'apk', '--release', '--no-pub',
         '--target-platform', 'android-arm,android-arm64,android-x64'
     )
+    $staging = Join-Path $repoRoot ('build/local-signing/' + [guid]::NewGuid())
+    New-Item -Path $staging -ItemType Directory -Force | Out-Null
+    Invoke-Checked flutter $buildArguments
+    $unsignedUniversal = Join-Path $staging $artifacts['universal']
+    Copy-Item -LiteralPath (Join-Path $flutterApkDirectory $artifacts['universal']) -Destination $unsignedUniversal
+    Invoke-Checked flutter ($buildArguments + @(
+        '--split-per-abi', '--android-project-arg', 'force-version-code-ignoring-abi=true'
+    ))
     if ((Invoke-Checked git @('rev-parse', 'HEAD')).Trim() -ne $sourceCommit -or
         (Invoke-Checked git @('status', '--porcelain'))) {
         throw 'The checkout changed while building. Resolve it and rebuild.'
     }
 
-    if (-not (Test-Path -LiteralPath $unsignedApk -PathType Leaf)) {
-        throw 'The unsigned universal APK is missing from the Flutter build output.'
-    }
-    # A valid existing signature means this artifact did not come from unsigned mode.
     $PSNativeCommandUseErrorActionPreference = $false
-    & $java -jar $apksigner verify $unsignedApk *> $null
-    if ($LASTEXITCODE -eq 0) {
-        throw 'Unsigned compilation produced a signed APK. Refusing to replace or trust its signature.'
-    }
-    Invoke-Checked $zipalign @('-c', '-P', '16', '4', $unsignedApk)
-    $staging = Join-Path $repoRoot ('build/local-signing/' + [guid]::NewGuid())
-    New-Item -Path $staging -ItemType Directory -Force | Out-Null
-    $signedApk = Join-Path $staging 'app-release-signed.apk'
-
     # No Flutter/Gradle/dependency code runs after this point. Run the official
     # jar directly so the keystore path and alias are not parsed by cmd.exe.
-    Sign-Apk -Java $java -Arguments @(
-        '-jar', $apksigner, 'sign',
-        '--ks', $keyPath, '--ks-key-alias', $signing['OH_MY_ESOK_KEY_ALIAS'],
-        '--ks-pass', 'env:OH_MY_ESOK_SIGN_STORE_PASSWORD',
-        '--key-pass', 'env:OH_MY_ESOK_SIGN_KEY_PASSWORD',
-        '--out', $signedApk, $unsignedApk
-    )
-    Invoke-Checked $zipalign @('-c', '-P', '16', '4', $signedApk)
-    Invoke-Checked python @(
-        'scripts/release_metadata.py', '--apk', $signedApk,
-        '--output', 'dist', '--aapt', $aapt, '--apksigner', $apksigner, '--java', $java,
+    $metadataArguments = @(
+        'scripts/release_metadata.py', '--output', $OutputDirectory,
+        '--aapt', $aapt, '--apksigner', $apksigner, '--java', $java,
         '--source-commit', $sourceCommit
     )
+    foreach ($variant in $artifacts.Keys) {
+        $unsignedApk = if ($variant -eq 'universal') { $unsignedUniversal } else {
+            Join-Path $flutterApkDirectory $artifacts[$variant]
+        }
+        if (-not (Test-Path -LiteralPath $unsignedApk -PathType Leaf)) {
+            throw "The unsigned APK for $variant is missing."
+        }
+        & $java -jar $apksigner verify $unsignedApk *> $null
+        if ($LASTEXITCODE -eq 0) {
+            throw "Unsigned compilation produced a signed APK for $variant."
+        }
+        Invoke-Checked $zipalign @('-c', '-P', '16', '4', $unsignedApk)
+        $signedApk = Join-Path $staging "$variant-signed.apk"
+        Sign-Apk -Java $java -Arguments @(
+            '-jar', $apksigner, 'sign',
+            '--ks', $keyPath, '--ks-key-alias', $signing['OH_MY_ESOK_KEY_ALIAS'],
+            '--ks-pass', 'env:OH_MY_ESOK_SIGN_STORE_PASSWORD',
+            '--key-pass', 'env:OH_MY_ESOK_SIGN_KEY_PASSWORD',
+            '--out', $signedApk, $unsignedApk
+        )
+        Invoke-Checked $zipalign @('-c', '-P', '16', '4', $signedApk)
+        $metadataArguments += if ($variant -eq 'universal') { @('--apk', $signedApk) } else {
+            @('--abi-apk', $variant, $signedApk)
+        }
+    }
+    $signing.Clear()
+    Invoke-Checked python $metadataArguments
 } finally {
     foreach ($name in ($signingNames + $passwordVariables)) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue

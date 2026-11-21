@@ -3,10 +3,11 @@
     android:id="@+id/money_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg"
+    android:background="@drawable/agenda_widget_bg"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="14dp">
+    android:paddingStart="14dp"
+    android:paddingEnd="8dp">
 
     <LinearLayout
         android:layout_width="0dp"
@@ -15,67 +16,86 @@
         android:orientation="vertical">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/money_today_label"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif"
-            android:letterSpacing="0.09"
-            android:text="HARI INI"
-            android:textColor="@color/widget_muted"
-            android:textSize="9sp"
-            android:textStyle="bold" />
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:importantForAccessibility="no"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/widget_money_today"
+            android:textColor="@color/agenda_widget_muted"
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/money_today"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:layout_height="21dp"
             android:layout_marginTop="1dp"
-            android:fontFamily="sans-serif"
+            android:autoSizeMaxTextSize="18sp"
+            android:autoSizeMinTextSize="10sp"
+            android:autoSizeStepGranularity="1sp"
+            android:autoSizeTextType="uniform"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
-            android:text="Rp 0"
+            android:gravity="center_vertical"
+            android:importantForAccessibility="no"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/widget_money_placeholder"
             android:textColor="@color/widget_negative"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textSize="14sp" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="10dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif"
-            android:letterSpacing="0.09"
-            android:text="BULAN INI"
-            android:textColor="@color/widget_muted"
-            android:textSize="9sp"
-            android:textStyle="bold" />
+            android:ellipsize="end"
+            android:importantForAccessibility="no"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/widget_money_month_short"
+            android:textColor="@color/agenda_widget_muted"
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/money_month"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:layout_height="21dp"
             android:layout_marginTop="1dp"
-            android:fontFamily="sans-serif"
+            android:autoSizeMaxTextSize="14sp"
+            android:autoSizeMinTextSize="10sp"
+            android:autoSizeStepGranularity="1sp"
+            android:autoSizeTextType="uniform"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
-            android:text="Rp 0"
-            android:textColor="@color/widget_negative"
-            android:textSize="12sp" />
+            android:gravity="center_vertical"
+            android:importantForAccessibility="no"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/widget_money_placeholder"
+            android:textColor="@color/agenda_widget_ink"
+            android:textSize="14sp" />
     </LinearLayout>
 
-    <TextView
+    <ImageView
         android:id="@+id/money_plus"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_marginStart="8dp"
         android:background="@drawable/widget_plus_bg"
-        android:contentDescription="@string/widget_open"
-        android:fontFamily="sans-serif"
-        android:gravity="center"
-        android:text="+"
-        android:textColor="@color/widget_ink"
-        android:textSize="18sp" />
+        android:contentDescription="@string/widget_add_transaction"
+        android:padding="12dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/agenda_widget_add" />
 </LinearLayout>

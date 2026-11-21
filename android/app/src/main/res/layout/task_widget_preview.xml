@@ -2,121 +2,94 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg"
+    android:background="@drawable/agenda_widget_bg"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingStart="12dp"
+    android:paddingTop="5dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="5dp">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:paddingStart="4dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:text="@string/widget_today"
+                android:textColor="@color/agenda_widget_ink"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:includeFontPadding="false"
+                android:text="Rab, 18 Nov · 1/3 selesai"
+                android:textColor="@color/agenda_widget_muted"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/widget_plus_bg"
+            android:contentDescription="@string/widget_add_task"
+            android:padding="12dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/agenda_widget_add" />
+    </LinearLayout>
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginEnd="4dp"
+        android:background="@color/agenda_widget_line"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:fontFamily="sans-serif"
-            android:letterSpacing="0.09"
-            android:text="BESOK · Jum 14 Nov"
-            android:textColor="#6B6862"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:text="Kirim laporan"
+            android:textColor="@color/agenda_widget_ink"
+            android:textSize="14sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif"
-            android:fontFeatureSettings="tnum"
-            android:text="1/3"
-            android:textColor="#6B6862"
-            android:textSize="13sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:orientation="vertical">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif"
-                android:maxLines="1"
-                android:text="Beli telur"
-                android:textColor="#1A1917"
-                android:textSize="16sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:fontFamily="sans-serif"
-                android:fontFeatureSettings="tnum"
-                android:text="16.00"
-                android:textColor="#6B6862"
-                android:textSize="12.5sp" />
-
-            <ImageView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:padding="10dp"
-                android:src="@drawable/widget_check_on" />
-        </LinearLayout>
+            android:text="11.30"
+            android:textColor="@color/agenda_widget_muted"
+            android:textSize="12sp" />
 
         <ImageView
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#E5E2DC"
-            android:contentDescription="@null" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif"
-                android:maxLines="1"
-                android:text="Rapat kantor"
-                android:textColor="#1A1917"
-                android:textSize="16sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:fontFamily="sans-serif"
-                android:fontFeatureSettings="tnum"
-                android:text="09.00"
-                android:textColor="#6B6862"
-                android:textSize="12.5sp" />
-
-            <ImageView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:padding="10dp"
-                android:src="@drawable/widget_check_off" />
-        </LinearLayout>
-
-        <ImageView
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#E5E2DC"
-            android:contentDescription="@null" />
+            android:layout_width="44dp"
+            android:layout_height="48dp"
+            android:contentDescription="@null"
+            android:padding="11dp"
+            android:src="@drawable/widget_check_off" />
     </LinearLayout>
 </LinearLayout>

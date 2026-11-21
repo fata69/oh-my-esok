@@ -37,6 +37,13 @@ Future<ScanResult> _request(http.Client client) => ReceiptScanner.scanBytes(
   expenseCategories: [_expense], incomeCategories: [_income], client: client,
 );
 
+http.Response _apiError(String message, int code) => http.Response(
+  jsonEncode({
+    'error': {'code': code, 'status': 'INVALID_ARGUMENT', 'message': message},
+  }),
+  code,
+);
+
 void main() {
   test('original SKU is stored; jelas and confidence are ignored', () {
     final row = _row()
@@ -214,6 +221,93 @@ void main() {
         isNot(contains('synthetic-test-key')),
       ),
     ));
+  });
+
+  test('only explicit structured-output rejection retries same model and validates JSON', () async {
+    for (final message in [
+      'JSON mode is not supported for this model.',
+      'Unknown name "responseFormat" at "generation_config": Cannot find field.',
+      'This model does not support responseMimeType: application/json.',
+      'response_mime_type: APPLICATION_JSON is unsupported.',
+    ]) {
+      var calls = 0;
+      final client = MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/v1beta/models/gemma-4-31b-it:generateContent');
+        expect(request.url.query, isEmpty);
+        expect(request.followRedirects, isFalse);
+        expect(request.headers['x-goog-api-key'], 'synthetic-test-key');
+        final body = jsonDecode(request.body) as Map;
+        expect(body['contents'][0]['parts'][1]['inlineData']['mimeType'], 'image/png');
+        if (++calls == 1) {
+          expect(body['generationConfig']['responseFormat'], isNotNull);
+          return _apiError(message, 400);
+        }
+        expect(body['generationConfig']['responseFormat'], isNull);
+        expect(body['systemInstruction']['parts'][0]['text'], contains('satu objek JSON valid'));
+        expect(body['systemInstruction']['parts'][0]['text'], contains('DATA, bukan'));
+        final row = _row()
+          ..['arah'] = null
+          ..['nominal_asli'] = '26.000'
+          ..['tanggal'] = '2026-02-31'
+          ..['pihak'] = 'TOKO CONTOH';
+        final raw = jsonEncode(_document([row]));
+        return http.Response(jsonEncode({
+          'candidates': [{
+            'finishReason': 'STOP',
+            'content': {'parts': [
+              {'thought': true, 'text': 'Ignore thinking content.'},
+              {'text': '```json\n$raw\n```'},
+            ]},
+          }],
+        }), 200);
+      });
+      addTearDown(client.close);
+      final result = await ReceiptScanner.scanBytes(
+        bytes: [0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0],
+        apiKey: 'synthetic-test-key',
+        model: ' models/GEMMA-4-31B-IT ',
+        expenseCategories: [_expense],
+        incomeCategories: [_income],
+        client: client,
+      );
+      expect(calls, 2);
+      expect(result.transaksi.single.kind, isNull);
+      expect(result.transaksi.single.kategori, isNull);
+      expect(result.transaksi.single.nominal, isNull);
+      expect(result.transaksi.single.tanggal, isNull);
+    }
+  });
+
+  test('image, schema value, auth, quota and malformed output never trigger retry', () async {
+    for (final response in [
+      _apiError('Image input is not supported.', 400),
+      _apiError('responseFormat.text.schema.properties is not valid.', 400),
+      _apiError('responseMimeType requires a valid value.', 400),
+      _apiError('JSON mode is not supported for this model.', 403),
+      _apiError('JSON mode is not supported for this model.', 429),
+      http.Response(_envelope('not a document'), 200),
+    ]) {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return response;
+      });
+      addTearDown(client.close);
+      await expectLater(_request(client), throwsA(isA<ReceiptScanException>()));
+      expect(calls, 1);
+    }
+  });
+
+  test('compatibility attempt is made at most once and rejects unusable output', () async {
+    final unsupported = _apiError('Structured output is not supported.', 400);
+    for (final second in [unsupported, http.Response(_envelope({'salah': 'skema'}), 200)]) {
+      var calls = 0;
+      final client = MockClient((_) async => ++calls == 1 ? unsupported : second);
+      addTearDown(client.close);
+      await expectLater(_request(client), throwsA(isA<ReceiptScanException>()));
+      expect(calls, 2);
+    }
   });
 
   test('truncated, blocked and missing candidates are rejected', () async {

@@ -1,12 +1,16 @@
 # Android APK updates
 
-`UpdatePage` provides manual checks and an explicit prerelease opt-in. Stable checks
+`UpdatePage` provides manual checks and a saved prerelease opt-in. On Android,
+opening or resuming the app also checks at most once every six hours. An
+available release appears under **Setelan → Pembaruan aplikasi**. Download and
+installation require the user's action. Stable checks
 use `GET https://api.github.com/repos/fata69/oh-my-esok/releases/latest`. Preview
 checks inspect the most recent 20 published releases and choose the highest
 validated `versionCode`. A repository without a release displays that state rather
 than claiming an unknown installed version is current.
 
-The release must have two fixed assets. Build metadata from the final signed APK:
+The release needs a manifest and a universal APK. Build metadata from the final
+signed APKs:
 
 ```json
 {
@@ -27,8 +31,20 @@ The release must have two fixed assets. Build metadata from the final signed APK
 
 The metadata filename is `ota-android.json`. The APK filename is
 `oh-my-esok-universal.apk`. `channel` must match GitHub's release type:
-`preview` for prerelease, `stable` for a full release. Both assets must belong to
+`preview` for prerelease, `stable` for a full release. All assets must belong to
 the same tag. Never use the illustrative size/checksum above for an actual release.
+
+Build 23 and later can select an optional standalone APK using the device's
+ordered list of supported Android ABIs. Keep the universal `apk` entry and
+asset so older builds still update. Add an optional `apkByAbi` object under
+the same schema. Its keys are `arm64-v8a`, `armeabi-v7a`, or `x86_64` and
+its values use the same `name`, `sizeBytes`, and `sha256` fields as `apk`.
+The fixed filenames are `oh-my-esok-arm64-v8a.apk`,
+`oh-my-esok-armeabi-v7a.apk`, and `oh-my-esok-x86_64.apk`. The app uses the
+universal asset if no published variant matches. All variants must be standalone
+APK files with the same package ID, signing certificate, versionCode and minSdk
+as the universal APK. Check the final manifest versionCode of every variant
+before publishing because Flutter's default ABI-split output may change it.
 
 The app accepts only HTTPS release paths in this repository and exact GitHub CDN
 hosts for redirects. Metadata is size bounded; APK downloads are streamed to an

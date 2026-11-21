@@ -7,6 +7,6 @@
     <path
         android:pathData="M11,1.75a9.25,9.25 0 1,0 0,18.5a9.25,9.25 0 1,0 0,-18.5"
         android:fillColor="#00000000"
-        android:strokeColor="#6B6862"
+        android:strokeColor="@color/agenda_widget_muted"
         android:strokeWidth="1.5" />
 </vector>
