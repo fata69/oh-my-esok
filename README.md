@@ -65,4 +65,10 @@ Lihat [panduan rilis](docs/RELEASING.md) untuk APK bertanda tangan dan
 Oh My Esok dikembangkan dan dikelola oleh [Fata (@fata69)](https://github.com/fata69).
 Proyek ini adalah fork dari [Esok](https://github.com/notSeraphimXD/esok), karya
 **notSeraphimXD**, dengan riwayat Git proyek asal tetap dipertahankan.
-Plus Jakarta Sans disertakan dengan [SIL Open Font License](assets/fonts/plus-jakarta-sans/OFL.txt).
+
+## Lisensi
+
+Kode sumber Oh My Esok, termasuk kode yang diwarisi dari Esok, dilisensikan di
+bawah [MIT](LICENSE). Aset dan dependensi pihak ketiga mengikuti lisensi
+masing-masing. Plus Jakarta Sans disertakan dengan
+[SIL Open Font License 1.1](assets/fonts/plus-jakarta-sans/OFL.txt).
