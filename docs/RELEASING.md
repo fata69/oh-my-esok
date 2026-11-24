@@ -88,6 +88,9 @@ recurring agendas retain the upstream v5 format. Backups with recurring agendas
 use v6, which preserves the series and per-date changes. Backups with undated
 notes or a payday plan use v7. The fork imports all three formats. Fork
 automatic backups use a different folder and file so they cannot
-replace upstream backups. Do not add an app-wide
-license over inherited code without the rights holder's grant. Font licensing
-remains with the bundled font notices.
+replace upstream backups.
+
+Distribute the [MIT license and copyright notices](../LICENSE) with the source
+and APKs. Keep the bundled
+[Plus Jakarta Sans license](../assets/fonts/plus-jakarta-sans/OFL.txt) with the
+font files.

@@ -82,6 +82,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/fonts/plus-jakarta-sans/OFL.txt
     - assets/icons/categories/
     - assets/sound/
 
